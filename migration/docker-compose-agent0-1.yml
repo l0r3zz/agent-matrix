@@ -1,0 +1,50 @@
+# Agent0-1 on g2s - copy to /opt/agent-zero/agent0-1/docker-compose.yml
+# (version is obsolete in Compose V2 and ignored)
+services:
+  agent0-1:
+    image: agent0ai/agent-zero:latest
+    container_name: agent0-1
+    hostname: agent0-1
+    restart: unless-stopped
+    env_file: usr/.env
+    ports:
+      - "50001:80"
+      - "50022:22"
+    volumes:
+      - ./usr:/a0/usr
+    networks:
+      macvlan-172-23:
+        ipv4_address: 172.23.88.1
+      bridge-local:
+    mac_address: "02:42:AC:17:58:01"
+    extra_hosts:
+      - "agent0-1-mhs:172.23.89.1"
+
+  dendrite:
+    image: ghcr.io/element-hq/dendrite-monolith:v0.15.2
+    container_name: agent0-1-mhs
+    hostname: agent0-1-mhs
+    restart: unless-stopped
+    command:
+      - "--tls-cert"
+      - "/etc/dendrite/server.crt"
+      - "--tls-key"
+      - "/etc/dendrite/server.key"
+      - "--https-bind-address"
+      - ":8448"
+    volumes:
+      - ./mhs/dendrite.yaml:/etc/dendrite/dendrite.yaml:ro
+      - ./mhs/matrix_key.pem:/etc/dendrite/matrix_key.pem:ro
+      - ./mhs/server.crt:/etc/dendrite/server.crt:ro
+      - ./mhs/server.key:/etc/dendrite/server.key:ro
+      - ./mhs/data:/var/lib/dendrite
+    networks:
+      macvlan-172-23:
+        ipv4_address: 172.23.89.1
+    mac_address: "02:42:AC:17:59:01"
+
+networks:
+  macvlan-172-23:
+    external: true
+  bridge-local:
+    driver: bridge

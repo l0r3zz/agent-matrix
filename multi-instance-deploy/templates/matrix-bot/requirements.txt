@@ -1,0 +1,5 @@
+# Matrix Bot Sub-Agent Requirements
+matrix-nio>=0.25.0
+aiohttp>=3.9.0
+aiofiles>=23.0.0
+python-dotenv>=1.0.0

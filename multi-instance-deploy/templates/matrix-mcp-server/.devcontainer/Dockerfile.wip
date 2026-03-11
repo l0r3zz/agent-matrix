@@ -1,0 +1,33 @@
+FROM mcr.microsoft.com/devcontainers/typescript-node:22-bullseye
+
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+    && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    jq \
+    ca-certificates \
+    unzip \
+    bash-completion \
+    lsb-release \
+        && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI
+RUN mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | tee /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+RUN chown -R vscode:vscode /workspace
+
+USER vscode
+
+COPY package.json package-lock.json ./
+
+RUN npm install
+
+# Ensure the installed binary is on the `PATH`
+ENV PATH="/root/.local/bin/:$PATH"

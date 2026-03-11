@@ -1,0 +1,1432 @@
+Script started on 2026-02-15 20:06:26-08:00 [TERM="xterm-256color" TTY="/dev/pts/7" COLUMNS="131" LINES="54"]
+[?2004hl0r3zz@tarnover:[2026-02-15 20:06:26]-$(B[m## Going to debug CoreDNS issues
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 20:06:42]-$(B[m[7mkubectl get svc kube-dns -n kube-system -o yaml[27m
+[7mkubectl get pods -n kube-system -l k8s-app=kube-dns -o wide[27m
+[A[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl get svc kube-dns -n kube-system -o yaml
+kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
+[A
+[?2004lapiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    prometheus.io/port: "9153"
+    prometheus.io/scrape: "true"
+  creationTimestamp: "2026-02-14T03:28:17Z"
+  labels:
+    k8s-app: kube-dns
+    kubernetes.io/cluster-service: "true"
+    kubernetes.io/name: CoreDNS
+  name: kube-dns
+  namespace: kube-system
+  resourceVersion: "318"
+  uid: 4b7731f4-fcf8-4216-ae0a-1d265718dee9
+spec:
+  clusterIP: 10.96.0.10
+  clusterIPs:
+  - 10.96.0.10
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: dns
+    port: 53
+    protocol: UDP
+    targetPort: 53
+  - name: dns-tcp
+    port: 53
+    protocol: TCP
+    targetPort: 53
+  - name: metrics
+    port: 9153
+    protocol: TCP
+    targetPort: 9153
+  selector:
+    k8s-app: kube-dns
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+NAME                       READY   STATUS    RESTARTS   AGE   IP             NODE   NOMINATED NODE   READINESS GATES
+coredns-7d764666f9-qw944   1/1     Running   0          2d    10.200.0.175   k8-0   <none>           <none>
+coredns-7d764666f9-vdpsf   1/1     Running   0          2d    10.200.0.201   k8-0   <none>           <none>
+[?2004hl0r3zz@tarnover:[2026-02-15 20:07:16]-$(B[m[7miptables -t nat -L -n | grep 10.96.0.10 || iptables-legacy -t nat -L -n | grep 10.96.0.10[27m
+^C[?2004l[?2004h[?2004l
+[?2004hl0r3zz@tarnover:[2026-02-15 20:09:19]-$(B[mkubectl get pods -n kube-system -l k8s-app=kube-dns -o wide[12Psvc kube-dns -n kube-system -o yaml[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[15P## Going to debug CoreDNS issuesstty -F /dev/ttyACM0 1200; sleep 0.5; ls -la /dev/ttyACM* 2>&1[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cpio run -t upload --upload-port /dev/ttyACM0 -v 2>&1 | tail -30[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[10Pls -la /dev/ttyACM* 2>&1 && stty -F /dev/ttyACM0 2>&1[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cdmesg | tail -20[Kfuser /dev/ttyACM0 2>&1[14@ls -la /dev/ttyACM* /dev/ttyUSB*[C[C[C[C[Cdiff /home/l0r3zz/Dropbox/POWERTREE/powertree-repo/eth_rs485_gateway/eth_rs485_gateway.ino /home/l0r3zz/Dropbox/POWERTREE/powertree-repo/eth_rs485_gateway/src/main.cpp[A[10Pcd /home/l0r3zz/Dropbox/POWERTREE/powertree-repo/eth_rs485_gateway && pio run 2>&1
+[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C^C[?2004l[?2004h[?2004l
+[?2004hl0r3zz@tarnover:[2026-02-15 20:09:31]-$(B[m(reverse-i-search)`': [Ks': kubectl get pods -n kube-system -l k8s-app=kube-dn[7ms[27m -o wide[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[26Ps': ## Going to debug CoreDNS i[7mss[27mues[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[7Ph': [7mssh[27m root@k8-0.v-site.netl0r3zz@tarnover:[2026-02-15 20:09:31]-$(B[mssh root@k8-0.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 05:09:40 CET 2026
+
+  System load:           1.54
+  Usage of /:            3.2% of 192.69GB
+  Memory usage:          17%
+  Swap usage:            0%
+  Processes:             190
+  Users logged in:       0
+  IPv4 address for eth0: 144.126.131.105
+  IPv4 address for eth0: 147.93.135.115
+  IPv6 address for eth0: 2605:a140:2114:6820::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Sun Feb 15 20:13:05 2026 from 73.222.150.26
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7miptables -t nat -L -n | grep 10.96.0.10 || iptables-legacy -t nat -L -n | grep 10.96.0.10[27m
+[A[C[C[C[C[C[C[C[C[C[C[C[C[Ciptables -t nat -L -n | grep 10.96.0.10 || iptables-legacy -t nat -L -n | grep 10.96.0.10
+[A
+[?2004lKUBE-SVC-ERIFXISQEP7F7OF4  6    --  0.0.0.0/0            [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:dns-tcp cluster IP */ tcp dpt:53
+KUBE-SVC-JD5MR3NA4I4DYORP  6    --  0.0.0.0/0            [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:metrics cluster IP */ tcp dpt:9153
+KUBE-SVC-TCOU7JCQXEZGVUNU  17   --  0.0.0.0/0            [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:dns cluster IP */ udp dpt:53
+KUBE-MARK-MASQ  6    -- !10.200.0.0/16        [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:dns-tcp cluster IP */ tcp dpt:53
+KUBE-MARK-MASQ  6    -- !10.200.0.0/16        [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:metrics cluster IP */ tcp dpt:9153
+KUBE-MARK-MASQ  17   -- !10.200.0.0/16        [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:dns cluster IP */ udp dpt:53
+[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# [7mkubectl run -it --rm curl-test --image=curlimages/curl --restart=Never -- \[27m
+[7m  curl -sS http://10.101.75.74:5432 || echo "db service unreachable"[27m
+[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl run -it --rm curl-test --image=curlimages/curl --restart=Never -- \
+  curl -sS http://10.101.75.74:5432 || echo "db service unreachable"
+[A
+[?2004lcurl: (52) Empty reply from server
+pod "curl-test" deleted from default namespace
+pod default/curl-test terminated (Error)
+db service unreachable
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mkubectl run -it --rm db-test --image=busybox:1.36 --restart=Never -- \[27m
+[7m  sh -c 'nc -vz 10.101.75.74 5432 || echo "cannot reach postgres"'[27m
+[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl run -it --rm db-test --image=busybox:1.36 --restart=Never -- \
+  sh -c 'nc -vz 10.101.75.74 5432 || echo "cannot reach postgres"'
+[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[7mkubectl run -it --rm db-test --image=busybox:1.36 --restart=Never -- \[27m
+[7m  sh -c 'nc -vz 10.101.75.74 5432 || echo "cannot reach postgres"'[27m
+[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl run -it --rm db-test --image=busybox:1.36 --restart=Never -- \
+  sh -c 'nc -vz 10.101.75.74 5432 || echo "cannot reach postgres"'
+[A
+[?2004l10.101.75.74 (10.101.75.74:5432) open
+pod "db-test" deleted from default namespace
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7miptables -t nat -L -n | grep 10.96.0.10 || iptables-legacy -t nat -L -n | grep 10.96.0.10[27m
+[A[C[C[C[C[C[C[C[C[C[C[C[C[Ciptables -t nat -L -n | grep 10.96.0.10 || iptables-legacy -t nat -L -n | grep 10.96.0.10
+[A
+[?2004lKUBE-SVC-ERIFXISQEP7F7OF4  6    --  0.0.0.0/0            [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:dns-tcp cluster IP */ tcp dpt:53
+KUBE-SVC-JD5MR3NA4I4DYORP  6    --  0.0.0.0/0            [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:metrics cluster IP */ tcp dpt:9153
+KUBE-SVC-TCOU7JCQXEZGVUNU  17   --  0.0.0.0/0            [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:dns cluster IP */ udp dpt:53
+KUBE-MARK-MASQ  6    -- !10.200.0.0/16        [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:dns-tcp cluster IP */ tcp dpt:53
+KUBE-MARK-MASQ  6    -- !10.200.0.0/16        [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:metrics cluster IP */ tcp dpt:9153
+KUBE-MARK-MASQ  17   -- !10.200.0.0/16        [01;31m[K10.96.0.10[m[K           /* kube-system/kube-dns:dns cluster IP */ udp dpt:53
+[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# [7mkubectl run -it --rm dns-tcp --image=busybox:1.36 --restart=Never -- \[27m
+[7m  sh -c 'echo "testing" | nc -vz 10.96.0.10 53 || echo "tcp53-fail"'[27m
+
+[7mkubectl run -it --rm dns-udp --image=busybox:1.36 --restart=Never -- \[27m
+[7m  sh -c 'nc -vu 10.96.0.10 53 || echo "udp53-fail"'[27m
+[A[A[A[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl run -it --rm dns-tcp --image=busybox:1.36 --restart=Never -- \
+  sh -c 'echo "testing" | nc -vz 10.96.0.10 53 || echo "tcp53-fail"'
+
+kubectl run -it --rm dns-udp --image=busybox:1.36 --restart=Never -- \
+  sh -c 'nc -vu 10.96.0.10 53 || echo "udp53-fail"'
+[A
+[?2004lAll commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+
+^Cpunt!
+pod "dns-tcp" deleted from default namespace
+pod default/dns-tcp terminated (Error)
+
+
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+
+
+
+^Cpunt!
+pod "dns-udp" deleted from default namespace
+pod default/dns-udp terminated (Error)
+[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# [7mkubectl run -it --rm dns-tcp --image=busybox:1.36 --restart=Never -- \[27m
+[7m  sh -c 'echo "testing" | nc -vz 10.96.0.10 53 || echo "tcp53-fail"'[27m[A[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl run -it --rm dns-tcp --image=busybox:1.36 --restart=Never -- \
+  sh -c 'echo "testing" | nc -vz 10.96.0.10 53 || echo "tcp53-fail"'
+[?2004lAll commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+^Cpunt!
+pod "dns-tcp" deleted from default namespace
+pod default/dns-tcp terminated (Error)
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mubectl run -it --rm dns-udp --image=busybox:1.36 --restart=Never -- \[27m
+[7m  sh -c 'nc -vu 10.96.0.10 53 || echo "udp53-fail"'[27m[A[C[C[C[C[C[C[C[C[C[C[C[C[Cubectl run -it --rm dns-udp --image=busybox:1.36 --restart=Never -- \
+  sh -c 'nc -vu 10.96.0.10 53 || echo "udp53-fail"'
+[?2004lCommand 'ubectl' not found, did you mean:
+  command 'kubectl' from snap kubectl (1.34.3)
+See 'snap info <snapname>' for additional versions.
+[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# ubectl run -it --rm dns-udp --image=busybox:1.36 --restart=Never --   sh -c 'nc -vu 10.96.0.10 53 || echo "udp53-fail"'[A]0;root@k8-0: ~root@k8-0:~# kubectl run -it --rm dns-tcp --image=busybox:1.36 --restart=Never --   sh -c 'echo "testing" | nc -vz 10.96.0.10 53 || echo "tcp53-fail"'[Aubectl run -it --rm dns-udp --image=busybox:1.36 --restart=Never --   sh -c 'nc -vu 10.96.0.10 53 || echo "udp53-fail"'[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl run -it --rm dns-udp --image=busybox:1.36 --restart=Never --   sh -c 'nc -vu 10.96.0.10 53 || echo "udp53-fail"'[A]0;root@k8-0: ~root@k8-0:~# [C
+
+[?2004lAll commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+
+^Cpunt!
+pod "dns-udp" deleted from default namespace
+pod default/dns-udp terminated (Error)
+[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# [7mkubectl run -it --rm dns-kube --image=busybox:1.36 --restart=Never -- \[27m
+[7m  sh -c 'nslookup kube-dns.kube-system.svc.cluster.local || echo "nslookup-fail"'[27m
+[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl run -it --rm dns-kube --image=busybox:1.36 --restart=Never -- \
+  sh -c 'nslookup kube-dns.kube-system.svc.cluster.local || echo "nslookup-fail"'
+[A
+[?2004lAll commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+;; connection timed out; no servers could be reached
+
+nslookup-fail
+pod "dns-kube" deleted from default namespace
+[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# [7mkubectl -n kube-system exec -it $(kubectl -n kube-system get pod -l k8s-app=kube-dns -o jsonpath='{.items[0].metadata.[27m[7mn[27m[7mame}') -- \ [27m
+[7m  ss -ulpn | grep 53 || echo "no-udp-53"[27m
+[A[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl -n kube-system exec -it $(kubectl -n kube-system get pod -l k8s-app=kube-dns -o jsonpath='{.items[0].metadata.name}') -- \
+  ss -ulpn | grep 53 || echo "no-udp-53"
+[A
+[?2004lerror: Internal error occurred: Internal error occurred: error executing command in container: failed to exec in container: failed to start exec "acea1a9ad5fd6f5682b78cc21609df03f519050b268019c077a48de09f46189d": OCI runtime exec failed: exec failed: unable to start container process: exec: "ss": executable file not found in $PATH: unknown
+no-udp-53
+[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# [7mkubectl -n kube-system exec -it $(kubectl -n kube-system get pod -l k8s-app=kube-dns -o jsonpath='{.items[0].metadata.[27m[7mn[27m[7mame}') -- \ [27m
+[7m  ss -ulpn | grep 53 || echo "no-udp-53"[27m
+[A[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Ckubectl -n kube-system exec -it $(kubectl -n kube-system get pod -l k8s-app=kube-dns -o jsonpath='{.items[0].metadata.name}') -- \
+  ss -ulpn | grep 53 || echo "no-udp-53"
+[A
+[?2004lerror: Internal error occurred: Internal error occurred: error executing command in container: failed to exec in container: failed to start exec "06718d3e279b9fdc5f92f3f96436e7117d0359c5fc629bf0fc7544c2355abb32": OCI runtime exec failed: exec failed: unable to start container process: exec: "ss": executable file not found in $PATH: unknown
+no-udp-53
+[?2004h]0;root@k8-0: ~root@k8-0:~# exit
+[?2004llogout
+Connection to k8-0.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 20:32:05]-$(B[m## Going to install kubernetes-mcp-server to use claude code to f[Kdo follow-on deep debugging. [A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K.
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 20:32:59]-$(B[m[7m# test it first[27m
+[7mnpx kubernetes-mcp-server@latest --help[27m
+[A[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C# test it first
+npx kubernetes-mcp-server@latest --help
+[A
+[?2004l[1G[0K⠙[1G[0K⠹[1G[0K⠸[1G[0K⠼[1G[0K⠴[1G[0K⠦[1G[0K[1G[0JNeed to install the following packages:
+kubernetes-mcp-server@0.0.57
+Ok to proceed? (y) [20Gy
+
+[1G[0K⠙[1G[0K⠹[1G[0K⠸[1G[0K⠼[1G[0K⠴[1G[0K⠦[1G[0K⠧[1G[0K⠇[1G[0K⠏[1G[0K⠋[1G[0K⠙[1G[0K⠹[1G[0K⠸[1G[0K⠼[1G[0KKubernetes Model Context Protocol (MCP) server
+
+Usage:
+  kubernetes-mcp-server [command] [options] [flags]
+
+Examples:
+  # show this help
+  kubernetes-mcp-server -h
+  
+  # shows version information
+  kubernetes-mcp-server --version
+  
+  # start STDIO server
+  kubernetes-mcp-server
+  
+  # start a SSE server on port 8080
+  kubernetes-mcp-server --port 8080
+  
+  # start a SSE server on port 8443 with a public HTTPS host of example.com
+  kubernetes-mcp-server --port 8443 --sse-base-url https://example.com:8443
+  
+  # start a SSE server on port 8080 with multi-cluster tools disabled
+  kubernetes-mcp-server --port 8080 --disable-multi-cluster
+  
+  # start with explicit cluster provider strategy (kubeconfig, in-cluster, kcp, or disabled)
+  kubernetes-mcp-server --cluster-provider kubeconfig
+  
+  # start with kcp cluster provider for multi-workspace support
+  kubernetes-mcp-server --cluster-provider kcp
+
+Flags:
+      --cluster-provider string   Cluster provider strategy to use (one of: kubeconfig, in-cluster, kcp, disabled). If not set, the server will auto-detect based on the environment.
+      --config string             Path of the config file.
+      --config-dir string         Path to drop-in configuration directory (files loaded in lexical order). Defaults to conf.d relative to the config file if --config is set.
+      --disable-destructive       If true, tools annotated with destructiveHint=true are disabled
+      --disable-multi-cluster     Disable multi cluster tools. Optional. If true, all tools will be run against the default cluster/context.
+  -h, --help                      help for kubernetes-mcp-server
+      --kubeconfig string         Path to the kubeconfig file to use for authentication
+      --list-output string        Output format for resource list operations (one of: yaml, table). Defaults to table.
+      --log-level int             Set the log level (from 0 to 9)
+      --port string               Start a streamable HTTP and SSE HTTP server on the specified port (e.g. 8080)
+      --read-only                 If true, only tools annotated with readOnlyHint=true are exposed
+      --sse-base-url string       SSE public base URL to use when sending the endpoint message (e.g. https://example.com)
+      --stateless                 If true, run the MCP server in stateless mode (disables tool/prompt change notifications). Useful for container deployments and load balancing. Default is false (stateful mode)
+      --toolsets strings          Comma-separated list of MCP toolsets to use (available toolsets: config, core, helm, kcp, kiali, kubevirt). Defaults to core, config, helm.
+      --version                   Print version information and quit
+[1G[0K⠙[1G[0K[1mnpm[22m [96mnotice[39m
+[1mnpm[22m [96mnotice[39m New [33mminor[39m version of npm available! [33m11.4.2[39m -> [34m11.10.0[39m
+[1mnpm[22m [96mnotice[39m Changelog: [34mhttps://github.com/npm/cli/releases/tag/v11.10.0[39m
+[1mnpm[22m [96mnotice[39m To update run: [4mnpm install -g npm@11.10.0[24m
+[1mnpm[22m [96mnotice[39m
+[1G[0K⠙[1G[0K[?2004hl0r3zz@tarnover:[2026-02-15 20:33:36]-$(B[m[7mnpx kubernetes-mcp-server@latest \[27m
+[7m  --kubeconfig "$HOME/.kube/config" \[27m
+[7m  --read-only \[27m
+[7m  --disable-destructive[27m
+[A[A[A[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cnpx kubernetes-mcp-server@latest \
+  --kubeconfig "$HOME/.kube/config" \
+  --read-only \
+  --disable-destructive
+[A
+[?2004l[1G[0K⠙[1G[0K⠹[1G[0K⠸[1G[0K⠼[1G[0K{"jsonrpc":"2.0","method":"notifications/prompts/list_changed","params":{}}
+write: {"jsonrpc":"2.0","method":"notifications/prompts/list_changed","params":{}}
+{"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{}}
+write: {"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{}}
+
+^Z
+[1]+  Stopped                 npx kubernetes-mcp-server@latest --kubeconfig "$HOME/.kube/config" --read-only --disable-destructive
+[?2004hl0r3zz@tarnover:[2026-02-15 20:35:32]-$(B[mbg
+[?2004l[1]+ npx kubernetes-mcp-server@latest --kubeconfig "$HOME/.kube/config" --read-only --disable-destructive &
+[?2004hl0r3zz@tarnover:[2026-02-15 20:35:36]-$(B[m
+[?2004l
+[1]+  Stopped                 npx kubernetes-mcp-server@latest --kubeconfig "$HOME/.kube/config" --read-only --disable-destructive
+[?2004hl0r3zz@tarnover:[2026-02-15 20:35:38]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 20:35:38]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 20:35:45]-$(B[mjobs
+[?2004l[1]+  Stopped                 npx kubernetes-mcp-server@latest --kubeconfig "$HOME/.kube/config" --read-only --disable-destructive
+[?2004hl0r3zz@tarnover:[2026-02-15 20:35:49]-$(B[mkill %1
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 20:35:56]-$(B[mReceived SIGTERM, terminating child process...
+Child process terminated by signal: SIGTERM
+
+
+[?2004l[1]+  Terminated              npx kubernetes-mcp-server@latest --kubeconfig "$HOME/.kube/config" --read-only --disable-destructive
+[?2004hl0r3zz@tarnover:[2026-02-15 20:36:00]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 20:36:01]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 20:36:01]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 20:36:01]-$(B[mvi ~/.cu
+.cups/   .cursor/ 
+l0r3zz@tarnover:[2026-02-15 20:36:01]-$(B[mvi ~/.cu
+.cups/   .cursor/ 
+l0r3zz@tarnover:[2026-02-15 20:36:01]-$(B[mvi ~/.cursor/mcp.json 
+[?2004l[?1000h[?1049h[22;0;0t[>4;2m[?1h=[?2004h[?1004h[1;54r[?12h[?12l[22;2t[22;1t[27m[23m[29m[m[38;5;244m[48;5;234m[H[2J[?25l[54;1H"~/.cursor/mcp.json" 10L, 221B[?1000l[?2004l[>4;m[?2004h[>4;2m[?1000h[2;1H▽[6n[2;1H  [3;1HPzz\[0%m[6n[3;1H           [1;1H[>c]10;?]11;?[1;1H[38;5;17m[48;5;190m .c/mcp.json [m[38;5;244m[48;5;234m[38;5;190m[48;5;234m [m[38;5;244m[48;5;234m[38;5;85m[48;5;234m                                                                                                          [m[38;5;244m[48;5;234m[38;5;234m[48;5;234m<[m[38;5;244m[48;5;234m[38;5;214m[48;5;234m<[m[38;5;244m[48;5;234m[38;5;232m[48;5;214m buffers [m[38;5;244m[48;5;234m[2;1H[38;5;239m[48;5;235m  1 [m[38;5;244m[48;5;234m[1m[38;5;124m[48;5;239m{[m[38;5;244m[48;5;234m"[38;5;64mmcpServers[m[38;5;244m[48;5;234m": [38;5;124m{[m[38;5;244m[48;5;234m"[38;5;64mGitKraken[m[38;5;244m[48;5;234m": [38;5;124m{[m[38;5;244m[48;5;234m[2;35H[K[3;1H[38;5;239m[48;5;235m  2 [m[38;5;244m[48;5;234m    "[38;5;64margs[m[38;5;244m[48;5;234m": [38;5;124m[[m[38;5;244m[48;5;234m[3;18H[K[4;1H[38;5;239m[48;5;235m  3 [m[38;5;244m[48;5;234m[8C"[38;5;37mmcp[m[38;5;244m[48;5;234m",
+[38;5;239m[48;5;235m  4 [m[38;5;244m[48;5;234m[8C"[38;5;37m--host=cursor[m[38;5;244m[48;5;234m",
+[38;5;239m[48;5;235m  5 [m[38;5;244m[48;5;234m[8C"[38;5;37m--source=gitlens[m[38;5;244m[48;5;234m",
+[38;5;239m[48;5;235m  6 [m[38;5;244m[48;5;234m[8C"[38;5;37m--scheme=cursor[m[38;5;244m[48;5;234m"
+[38;5;239m[48;5;235m  7 [m[38;5;244m[48;5;234m    [38;5;124m][m[38;5;244m[48;5;234m,
+[38;5;239m[48;5;235m  8 [m[38;5;244m[48;5;234m    "[38;5;64mcommand[m[38;5;244m[48;5;234m": "[38;5;37m/home/l0r3zz/.config/Cursor/User/globalStorage/eamodio.gitlens/gk[m[38;5;244m[48;5;234m",
+[38;5;239m[48;5;235m  9 [m[38;5;244m[48;5;234m    "[38;5;64mtype[m[38;5;244m[48;5;234m":    "[38;5;37mstdio[m[38;5;244m[48;5;234m"
+[38;5;239m[48;5;235m 10 [m[38;5;244m[48;5;234m[38;5;124m}}[m[38;5;244m[48;5;234m[1m[38;5;124m[48;5;239m}[m[38;5;244m[48;5;234m
+[1m[38;5;240m~                                                                                                                                  [13;1H~                                                                                                                                  [14;1H~                                                                                                                                  [15;1H~                                                                                                                                  [16;1H~                                                                                                                                  [17;1H~                                                                                                                                  [18;1H~                                                                                                                                  [19;1H~                                                                                                                                  [20;1H~                                                                                                                                  [21;1H~                                                                                                                                  [22;1H~                                                                                                                                  [23;1H~                                                                                                                                  [24;1H~                                                                                                                                  [25;1H~                                                                                                                                  [26;1H~                                                                                                                                  [27;1H~                                                                                                                                  [28;1H~                                                                                                                                  [29;1H~                                                                                                                                  [30;1H~                                                                                                                                  [31;1H~                                                                                                                                  [32;1H~                                                                                                                                  [33;1H~                                                                                                                                  [34;1H~                                                                                                                                  [35;1H~                                                                                                                                  [36;1H~                                                                                                                                  [37;1H~                                                                                                                                  [38;1H~                                                                                                                                  [39;1H~                                                                                                                                  [40;1H~                                                                                                                                  [41;1H~                                                                                                                                  [42;1H~                                                                                                                                  [43;1H~                                                                                                                                  [44;1H~                                                                                                                                  [45;1H~                                                                                                                                  [46;1H~                                                                                                                                  [47;1H~                                                                                                                                  [48;1H~                                                                                                                                  [49;1H~                                                                                                                                  [50;1H~                                                                                                                                  [51;1H~                                                                                                                                  [52;1H~                                                                                                                                  [m[38;5;244m[48;5;234m[53;1H[38;5;17m[48;5;190m [m[38;5;244m[48;5;234m[1m[38;5;17m[48;5;190mNORMAL[m[38;5;244m[48;5;234m[38;5;17m[48;5;190m [m[38;5;244m[48;5;234m[38;5;190m[48;5;238m>[m[38;5;244m[48;5;234m[38;5;238m[48;5;234m>[m[38;5;244m[48;5;234m[38;5;85m[48;5;234m .cursor/mcp.json                                                            [m[38;5;244m[48;5;234m[38;5;234m[48;5;234m<[m[38;5;244m[48;5;234m[38;5;85m[48;5;234m json [m[38;5;244m[48;5;234m[38;5;238m[48;5;234m<[m[38;5;244m[48;5;234m[38;5;255m[48;5;238m utf-8[unix] [m[38;5;244m[48;5;234m[38;5;190m[48;5;238m<[m[38;5;244m[48;5;234m[38;5;17m[48;5;190m  10% [m[38;5;244m[48;5;234m[1m[38;5;17m[48;5;190m:   1/10[m[38;5;244m[48;5;234m[38;5;17m[48;5;190m :  1 [m[38;5;244m[48;5;234m[38;5;166m[48;5;190m<[m[38;5;244m[48;5;234m[38;5;160m[48;5;166m<[2;5H[?25h[?25l[?25hP+q436f\P+q6b75\P+q6b64\P+q6b72\P+q6b6c\P+q2332\P+q2334\P+q2569\P+q2a37\P+q6b31\[?1000l[?1006h[?1002h[?1006l[?1002l[?1006h[?1002hP$q q\[?12$p[?25l[m[38;5;244m[48;5;234m[54;121H0[2;5H[54;122H0[2;5H[54;123H0[2;5H[54;124H/[2;5H[54;125H0[2;5H[54;126H0[2;5H[54;127H0[2;5H[54;128H0[2;5H[54;129H/[2;5H[54;130H0[2;5H[?25h[?25l[54;121H          [2;5H[?25h[?25l[54;121H~@k[2;5H[54;121H   [3;8H[2;5H[38;5;124m{[m[38;5;244m[48;5;234m"[11;7H[38;5;124m}[m[38;5;244m[48;5;234m[53;112H[38;5;17m[48;5;190m2[m[38;5;244m[48;5;234m[7C[1m[38;5;17m[48;5;190m2/[m[38;5;244m[48;5;234m[6C[38;5;17m[48;5;190m4[3;8H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[3;8H[54;121H   [4;8H[53;112H[38;5;17m[48;5;190m3[m[38;5;244m[48;5;234m[7C[1m[38;5;17m[48;5;190m3/[4;8H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[4;8H[54;121H   [5;8H[53;112H[38;5;17m[48;5;190m4[m[38;5;244m[48;5;234m[7C[1m[38;5;17m[48;5;190m4/[5;8H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[5;8H[54;121H   [6;8H[53;112H[38;5;17m[48;5;190m5[m[38;5;244m[48;5;234m[7C[1m[38;5;17m[48;5;190m5/[6;8H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[6;8H[54;121H   [7;8H[53;112H[38;5;17m[48;5;190m6[m[38;5;244m[48;5;234m[7C[1m[38;5;17m[48;5;190m6/[7;8H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[7;8H[54;121H   [8;8H[53;112H[38;5;17m[48;5;190m7[m[38;5;244m[48;5;234m[7C[1m[38;5;17m[48;5;190m7/[8;8H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[8;8H[54;121H   [9;8H[53;112H[38;5;17m[48;5;190m8[m[38;5;244m[48;5;234m[7C[1m[38;5;17m[48;5;190m8/[9;8H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[9;8H[54;121H   [10;8H[53;112H[38;5;17m[48;5;190m9[m[38;5;244m[48;5;234m[7C[1m[38;5;17m[48;5;190m9/[10;8H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[10;8H[54;121H   [11;5H[2;34H[1m[38;5;124m[48;5;239m{[11;5H}[m[38;5;244m[48;5;234m[53;111H[38;5;17m[48;5;190m10[m[38;5;244m[48;5;234m[6C[1m[38;5;17m[48;5;190m10/[m[38;5;244m[48;5;234m[6C[38;5;17m[48;5;190m1[11;5H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[11;5H[54;121H   [11;6H[2;20H[1m[38;5;124m[48;5;239m{[m[38;5;244m[48;5;234m[13C[38;5;124m{[11;5H}[m[38;5;244m[48;5;234m[1m[38;5;124m[48;5;239m}[m[38;5;244m[48;5;234m[53;128H[38;5;17m[48;5;190m2[11;6H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[11;6H[54;121H   [11;7H[2;5H[1m[38;5;124m[48;5;239m{[m[38;5;244m[48;5;234m[14C[38;5;124m{[m[38;5;244m[48;5;234m"[11;6H[38;5;124m}[m[38;5;244m[48;5;234m[1m[38;5;124m[48;5;239m}[m[38;5;244m[48;5;234m[53;128H[38;5;17m[48;5;190m3[11;7H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[11;7H[54;121H   [11;6H[2;5H[38;5;124m{[m[38;5;244m[48;5;234m"[13C[1m[38;5;124m[48;5;239m{[11;6H}[m[38;5;244m[48;5;234m[38;5;124m}[m[38;5;244m[48;5;234m[53;128H[38;5;17m[48;5;190m2[11;6H[?25h[?25l[m[38;5;244m[48;5;234m[54;121H~@k[11;6H[54;121H   [11;7H[2;5H[1m[38;5;124m[48;5;239m{[m[38;5;244m[48;5;234m[14C[38;5;124m{[m[38;5;244m[48;5;234m"[11;6H[38;5;124m}[m[38;5;244m[48;5;234m[1m[38;5;124m[48;5;239m}[m[38;5;244m[48;5;234m[53;128H[38;5;17m[48;5;190m3[11;7H[?25h[?25l[?25h[?25l[?25h[?25l[?25h[?25l[?25h[?25l[m[38;5;244m[48;5;234m[54;121H^[[11;7H[?25h[?25l[54;121H  [11;7H[?25h[?25l[54;121H:[11;7H[54;1H[K[54;1H:[53;2H[1m[38;5;17m[48;5;190mCOMMAND[m[38;5;244m[48;5;234m[38;5;17m[48;5;190m [m[38;5;244m[48;5;234m[38;5;190m[48;5;238m>[m[38;5;244m[48;5;234m[38;5;238m[48;5;234m>[m[38;5;244m[48;5;234m[38;5;85m[48;5;234m .cursor/mcp.json
+[m[38;5;244m[48;5;234m:[?25hq[?25l[?1006l[?1002l[?2004l[>4;m[23;2t[23;1t[54;1H[K[54;1H[?1004l[?2004l[?1l>[?25h[>4;m[?1049l[23;0;0t[?2004hl0r3zz@tarnover:[2026-02-15 20:44:09]-$(B[m[7mclaude mcp add-json "kubernetes" '{[27m
+[7m  "command": "npx",[27m
+[7m  "args": [[27m
+[7m    "-y",[27m
+[7m    "kubernetes-mcp-server@latest",[27m
+[7m    "--kubeconfig", "'$HOME'/.kube/config",[27m
+[7m    "--read-only",[27m
+[7m    "--disable-destructive"[27m
+[7m  ][27m
+[7m}'[27m
+[A[A[A[A[A[A[A[A[A[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cclaude mcp add-json "kubernetes" '{
+  "command": "npx",
+  "args": [
+    "-y",
+    "kubernetes-mcp-server@latest",
+    "--kubeconfig", "'$HOME'/.kube/config",
+    "--read-only",
+    "--disable-destructive"
+  ]
+}'
+[A
+[?2004lAdded stdio MCP server kubernetes to local config
+[?25h[?2004hl0r3zz@tarnover:[2026-02-15 20:57:51]-$(B[mkgp -A -o wide
+[?2004lNAMESPACE            NAME                                      READY   STATUS             RESTARTS        AGE    IP                NODE   NOMINATED NODE   READINESS GATES
+default              nginx-56c45fd5ff-4fx4b                    1/1     Running            0               2d1h   10.200.0.177      k8-0   <none>           <none>
+default              nginx-56c45fd5ff-6nx82                    1/1     Running            0               2d     10.200.1.169      k8-1   <none>           <none>
+default              nginx-56c45fd5ff-l676j                    1/1     Running            0               2d1h   10.200.0.176      k8-0   <none>           <none>
+default              nginx-56c45fd5ff-q8hhs                    1/1     Running            0               2d     10.200.2.157      k8-2   <none>           <none>
+kube-system          cilium-6z79k                              1/1     Running            0               2d     207.244.237.219   k8-2   <none>           <none>
+kube-system          cilium-envoy-5xwt5                        1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          cilium-envoy-dn6kp                        1/1     Running            0               2d     207.244.237.219   k8-2   <none>           <none>
+kube-system          cilium-envoy-fmfm9                        1/1     Running            0               2d     207.244.225.169   k8-1   <none>           <none>
+kube-system          cilium-n9vnl                              1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          cilium-operator-67888fff84-5msf7          1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          cilium-operator-67888fff84-w4zrt          1/1     Running            0               2d1h   207.244.225.169   k8-1   <none>           <none>
+kube-system          cilium-vf8c7                              1/1     Running            0               2d     207.244.225.169   k8-1   <none>           <none>
+kube-system          coredns-7d764666f9-qw944                  1/1     Running            0               2d1h   10.200.0.175      k8-0   <none>           <none>
+kube-system          coredns-7d764666f9-vdpsf                  1/1     Running            0               2d1h   10.200.0.201      k8-0   <none>           <none>
+kube-system          etcd-k8-0                                 1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          kube-apiserver-k8-0                       1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          kube-controller-manager-k8-0              1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          kube-proxy-4b45f                          1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          kube-proxy-cjrjc                          1/1     Running            0               2d     207.244.225.169   k8-1   <none>           <none>
+kube-system          kube-proxy-tpbfs                          1/1     Running            0               2d     207.244.237.219   k8-2   <none>           <none>
+kube-system          kube-scheduler-k8-0                       1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+local-path-storage   local-path-provisioner-6d59db9dcc-b4rkp   1/1     Running            0               21h    10.200.2.240      k8-2   <none>           <none>
+matrix               matrix-synapse-7c677997b9-6ncqd           0/1     CrashLoopBackOff   233 (46s ago)   21h    10.200.2.230      k8-2   <none>           <none>
+matrix               matrix-synapse-element-59b4565d9-zbvfl    1/1     Running            0               21h    10.200.1.204      k8-1   <none>           <none>
+matrix               matrix-synapse-postgresql-0               1/1     Running            0               21h    10.200.1.32       k8-1   <none>           <none>
+matrix               matrix-synapse-secret-x8mf8               0/1     Completed          0               21h    10.200.2.58       k8-2   <none>           <none>
+metallb-system       metallb-controller-84c7d4d544-6f29s       1/1     Running            0               23h    10.200.2.144      k8-2   <none>           <none>
+metallb-system       metallb-speaker-k92kx                     4/4     Running            0               23h    207.244.237.219   k8-2   <none>           <none>
+metallb-system       metallb-speaker-zg9cq                     4/4     Running            0               23h    207.244.225.169   k8-1   <none>           <none>
+metallb-system       metallb-speaker-zhff5                     4/4     Running            0               23h    144.126.131.105   k8-0   <none>           <none>
+traefik              traefik-678c488c78-4tz5n                  1/1     Running            0               22h    10.200.1.154      k8-1   <none>           <none>
+traefik              traefik-678c488c78-5ggmg                  1/1     Running            0               22h    10.200.2.122      k8-2   <none>           <none>
+[?2004hl0r3zz@tarnover:[2026-02-15 21:16:21]-$(B[mkgp -A -o wide -n matrix
+[?2004lNAMESPACE            NAME                                      READY   STATUS             RESTARTS        AGE    IP                NODE   NOMINATED NODE   READINESS GATES
+default              nginx-56c45fd5ff-4fx4b                    1/1     Running            0               2d1h   10.200.0.177      k8-0   <none>           <none>
+default              nginx-56c45fd5ff-6nx82                    1/1     Running            0               2d     10.200.1.169      k8-1   <none>           <none>
+default              nginx-56c45fd5ff-l676j                    1/1     Running            0               2d1h   10.200.0.176      k8-0   <none>           <none>
+default              nginx-56c45fd5ff-q8hhs                    1/1     Running            0               2d     10.200.2.157      k8-2   <none>           <none>
+kube-system          cilium-6z79k                              1/1     Running            0               2d     207.244.237.219   k8-2   <none>           <none>
+kube-system          cilium-envoy-5xwt5                        1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          cilium-envoy-dn6kp                        1/1     Running            0               2d     207.244.237.219   k8-2   <none>           <none>
+kube-system          cilium-envoy-fmfm9                        1/1     Running            0               2d     207.244.225.169   k8-1   <none>           <none>
+kube-system          cilium-n9vnl                              1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          cilium-operator-67888fff84-5msf7          1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          cilium-operator-67888fff84-w4zrt          1/1     Running            0               2d1h   207.244.225.169   k8-1   <none>           <none>
+kube-system          cilium-vf8c7                              1/1     Running            0               2d     207.244.225.169   k8-1   <none>           <none>
+kube-system          coredns-7d764666f9-qw944                  1/1     Running            0               2d1h   10.200.0.175      k8-0   <none>           <none>
+kube-system          coredns-7d764666f9-vdpsf                  1/1     Running            0               2d1h   10.200.0.201      k8-0   <none>           <none>
+kube-system          etcd-k8-0                                 1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          kube-apiserver-k8-0                       1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          kube-controller-manager-k8-0              1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          kube-proxy-4b45f                          1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+kube-system          kube-proxy-cjrjc                          1/1     Running            0               2d     207.244.225.169   k8-1   <none>           <none>
+kube-system          kube-proxy-tpbfs                          1/1     Running            0               2d     207.244.237.219   k8-2   <none>           <none>
+kube-system          kube-scheduler-k8-0                       1/1     Running            0               2d1h   144.126.131.105   k8-0   <none>           <none>
+local-path-storage   local-path-provisioner-6d59db9dcc-b4rkp   1/1     Running            0               21h    10.200.2.240      k8-2   <none>           <none>
+matrix               matrix-synapse-7c677997b9-6ncqd           0/1     CrashLoopBackOff   233 (54s ago)   21h    10.200.2.230      k8-2   <none>           <none>
+matrix               matrix-synapse-element-59b4565d9-zbvfl    1/1     Running            0               21h    10.200.1.204      k8-1   <none>           <none>
+matrix               matrix-synapse-postgresql-0               1/1     Running            0               21h    10.200.1.32       k8-1   <none>           <none>
+matrix               matrix-synapse-secret-x8mf8               0/1     Completed          0               21h    10.200.2.58       k8-2   <none>           <none>
+metallb-system       metallb-controller-84c7d4d544-6f29s       1/1     Running            0               23h    10.200.2.144      k8-2   <none>           <none>
+metallb-system       metallb-speaker-k92kx                     4/4     Running            0               23h    207.244.237.219   k8-2   <none>           <none>
+metallb-system       metallb-speaker-zg9cq                     4/4     Running            0               23h    207.244.225.169   k8-1   <none>           <none>
+metallb-system       metallb-speaker-zhff5                     4/4     Running            0               23h    144.126.131.105   k8-0   <none>           <none>
+traefik              traefik-678c488c78-4tz5n                  1/1     Running            0               22h    10.200.1.154      k8-1   <none>           <none>
+traefik              traefik-678c488c78-5ggmg                  1/1     Running            0               22h    10.200.2.122      k8-2   <none>           <none>
+[?2004hl0r3zz@tarnover:[2026-02-15 21:16:29]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 21:16:34]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 21:16:34]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 21:16:34]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 21:16:34]-$(B[mkgp -A -o wide -n matrix[K[K[K[K[K[K[K[K[1P[1@n[C[1@ [1@m[1@a[1@t[1@r[1@i[1@x
+[?2004lError from server (NotFound): pods "-" not found
+[?2004hl0r3zz@tarnover:[2026-02-15 21:16:51]-$(B[mkgp -n matrix -o wide -[K[K
+[?2004lNAME                                     READY   STATUS             RESTARTS        AGE   IP             NODE   NOMINATED NODE   READINESS GATES
+matrix-synapse-7c677997b9-6ncqd          0/1     CrashLoopBackOff   233 (87s ago)   21h   10.200.2.230   k8-2   <none>           <none>
+matrix-synapse-element-59b4565d9-zbvfl   1/1     Running            0               21h   10.200.1.204   k8-1   <none>           <none>
+matrix-synapse-postgresql-0              1/1     Running            0               21h   10.200.1.32    k8-1   <none>           <none>
+matrix-synapse-secret-x8mf8              0/1     Completed          0               21h   10.200.2.58    k8-2   <none>           <none>
+[?2004hl0r3zz@tarnover:[2026-02-15 21:17:02]-$(B[mkgp 
+[?2004lNAME                     READY   STATUS    RESTARTS   AGE
+nginx-56c45fd5ff-4fx4b   1/1     Running   0          2d1h
+nginx-56c45fd5ff-6nx82   1/1     Running   0          2d
+nginx-56c45fd5ff-l676j   1/1     Running   0          2d1h
+nginx-56c45fd5ff-q8hhs   1/1     Running   0          2d
+[?2004hl0r3zz@tarnover:[2026-02-15 21:27:32]-$(B[mkgp -o wide
+[?2004lNAME                     READY   STATUS    RESTARTS   AGE    IP             NODE   NOMINATED NODE   READINESS GATES
+nginx-56c45fd5ff-4fx4b   1/1     Running   0          2d1h   10.200.0.177   k8-0   <none>           <none>
+nginx-56c45fd5ff-6nx82   1/1     Running   0          2d     10.200.1.169   k8-1   <none>           <none>
+nginx-56c45fd5ff-l676j   1/1     Running   0          2d1h   10.200.0.176   k8-0   <none>           <none>
+nginx-56c45fd5ff-q8hhs   1/1     Running   0          2d     10.200.2.157   k8-2   <none>           <none>
+[?2004hl0r3zz@tarnover:[2026-02-15 21:27:40]-$(B[mkgp -o wide[C[C[C[C[1@ [1@-[1@A[C[1@ [C[C[C[C[C[C[C[C|grep k8-2
+[?2004ldefault              nginx-56c45fd5ff-q8hhs                    1/1     Running            0               2d     10.200.2.157      [01;31m[Kk8-2[m[K   <none>           <none>
+kube-system          cilium-6z79k                              1/1     Running            0               2d1h   207.244.237.219   [01;31m[Kk8-2[m[K   <none>           <none>
+kube-system          cilium-envoy-dn6kp                        1/1     Running            0               2d1h   207.244.237.219   [01;31m[Kk8-2[m[K   <none>           <none>
+kube-system          kube-proxy-tpbfs                          1/1     Running            0               2d1h   207.244.237.219   [01;31m[Kk8-2[m[K   <none>           <none>
+local-path-storage   local-path-provisioner-6d59db9dcc-b4rkp   1/1     Running            0               21h    10.200.2.240      [01;31m[Kk8-2[m[K   <none>           <none>
+matrix               matrix-synapse-7c677997b9-6ncqd           0/1     CrashLoopBackOff   235 (80s ago)   21h    10.200.2.230      [01;31m[Kk8-2[m[K   <none>           <none>
+matrix               matrix-synapse-secret-x8mf8               0/1     Completed          0               21h    10.200.2.58       [01;31m[Kk8-2[m[K   <none>           <none>
+metallb-system       metallb-controller-84c7d4d544-6f29s       1/1     Running            0               23h    10.200.2.144      [01;31m[Kk8-2[m[K   <none>           <none>
+metallb-system       metallb-speaker-k92kx                     4/4     Running            0               23h    207.244.237.219   [01;31m[Kk8-2[m[K   <none>           <none>
+traefik              traefik-678c488c78-5ggmg                  1/1     Running            0               23h    10.200.2.122      [01;31m[Kk8-2[m[K   <none>           <none>
+[?2004hl0r3zz@tarnover:[2026-02-15 21:28:20]-$(B[mkgp -A  -o wide|grep k8-2[K1
+[?2004ldefault              nginx-56c45fd5ff-6nx82                    1/1     Running            0               2d     10.200.1.169      [01;31m[Kk8-1[m[K   <none>           <none>
+kube-system          cilium-envoy-fmfm9                        1/1     Running            0               2d1h   207.244.225.169   [01;31m[Kk8-1[m[K   <none>           <none>
+kube-system          cilium-operator-67888fff84-w4zrt          1/1     Running            0               2d1h   207.244.225.169   [01;31m[Kk8-1[m[K   <none>           <none>
+kube-system          cilium-vf8c7                              1/1     Running            0               2d1h   207.244.225.169   [01;31m[Kk8-1[m[K   <none>           <none>
+kube-system          kube-proxy-cjrjc                          1/1     Running            0               2d1h   207.244.225.169   [01;31m[Kk8-1[m[K   <none>           <none>
+matrix               matrix-synapse-element-59b4565d9-zbvfl    1/1     Running            0               21h    10.200.1.204      [01;31m[Kk8-1[m[K   <none>           <none>
+matrix               matrix-synapse-postgresql-0               1/1     Running            0               21h    10.200.1.32       [01;31m[Kk8-1[m[K   <none>           <none>
+metallb-system       metallb-speaker-zg9cq                     4/4     Running            0               23h    207.244.225.169   [01;31m[Kk8-1[m[K   <none>           <none>
+traefik              traefik-678c488c78-4tz5n                  1/1     Running            0               23h    10.200.1.154      [01;31m[Kk8-1[m[K   <none>           <none>
+[?2004hl0r3zz@tarnover:[2026-02-15 21:28:32]-$(B[m(reverse-i-search)`': [Ks': claude mcp add-json "kubernetes" '{
+  "command": "npx",
+  "args": [
+    "-y",
+    "kubernetes-mcp-server@latest",
+    "--kubeconfig", "'$HOME'/.kube/config",
+    "--read-only",
+    "--disable-de[7ms[27mtructive"
+  ]
+}'[A[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[A[A[A[A[A[A[A[C[C[C[10Ps': [7mss[27mh root@k8-0.v-site.net
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[A[A[A[A[A[A[A[A[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[1@h': [7mssh[27ml0r3zz@tarnover:[2026-02-15 21:28:32]-$(B[mssh root@k8-0.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 06:34:34 CET 2026
+
+  System load:           3.07
+  Usage of /:            3.2% of 192.69GB
+  Memory usage:          17%
+  Swap usage:            0%
+  Processes:             192
+  Users logged in:       0
+  IPv4 address for eth0: 144.126.131.105
+  IPv4 address for eth0: 147.93.135.115
+  IPv6 address for eth0: 2605:a140:2114:6820::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Mon Feb 16 05:09:44 2026 from 73.222.150.26
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mip -d link show cilium_vxlan[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cip -d link show cilium_vxlan
+[?2004l6: cilium_vxlan: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default 
+    link/ether 62:1c:7c:ca:b2:0e brd ff:ff:ff:ff:ff:ff promiscuity 0  allmulti 0 minmtu 68 maxmtu 65535 
+info: Using default fan map value (33)
+    vxlan external id 0 srcport 0 0 dstport 8472 nolearning ttl auto ageing 300 udpcsum noudp6zerocsumtx noudp6zerocsumrx addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 tso_max_size 65536 tso_max_segs 65535 gro_max_size 65536 
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mip route | grep -E '10\.200\.[012]'[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cip route | grep -E '10\.200\.[012]'
+[?2004l[01;31m[K10.200.0[m[K.0/24 via [01;31m[K10.200.0[m[K.27 dev cilium_host proto kernel src [01;31m[K10.200.0[m[K.27 
+[01;31m[K10.200.0[m[K.27 dev cilium_host proto kernel scope link 
+[01;31m[K10.200.1[m[K.0/24 via [01;31m[K10.200.0[m[K.27 dev cilium_host proto kernel src [01;31m[K10.200.0[m[K.27 mtu 1450 
+[01;31m[K10.200.2[m[K.0/24 via [01;31m[K10.200.0[m[K.27 dev cilium_host proto kernel src [01;31m[K10.200.0[m[K.27 mtu 1450 
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7m# From k8-0, test UDP 8472 to k8-1 and k8-2:[27m
+[7m  nc -uzv 207.244.225.169 8472 -w 3[27m
+[7m  nc -uzv 207.244.237.219 8472 -w 3[27m[A[A[C[C[C[C[C[C[C[C[C[C[C[C[C# From k8-0, test UDP 8472 to k8-1 and k8-2:
+  nc -uzv 207.244.225.169 8472 -w 3
+  nc -uzv 207.244.237.219 8472 -w 3
+[?2004lConnection to 207.244.225.169 8472 port [udp/*] succeeded!
+Connection to 207.244.237.219 8472 port [udp/*] succeeded!
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7miptables -L INPUT -n -v | grep -E '8472|vxlan|DROP'[27m
+[7m  iptables -L FORWARD -n -v | grep -E '8472|DROP'[27m
+[7m  # Also check nftables and ufw:[27m
+[7m  nft list ruleset 2>/dev/null | grep -E '8472|drop|reject' | head -20[27m
+[7m  ufw status verbose 2>/dev/null[27m[A[A[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Ciptables -L INPUT -n -v | grep -E '8472|vxlan|DROP'
+  iptables -L FORWARD -n -v | grep -E '8472|DROP'
+  # Also check nftables and ufw:
+  nft list ruleset 2>/dev/null | grep -E '8472|drop|reject' | head -20
+  ufw status verbose 2>/dev/null
+[?2004lChain INPUT (policy [01;31m[KDROP[m[K 133K packets, 9471K bytes)
+Chain FORWARD (policy [01;31m[KDROP[m[K 128 packets, 5794 bytes)
+		ct state invalid counter packets 876 bytes 125296 drop
+	chain ufw-reject-input {
+	chain ufw-reject-output {
+	chain ufw-reject-forward {
+		type filter hook input priority filter; policy drop;
+		counter packets 133008 bytes 9477014 jump ufw-reject-input
+		counter packets 160967 bytes 9561262 jump ufw-reject-output
+		type filter hook forward priority filter; policy drop;
+		counter packets 128 bytes 5794 jump ufw-reject-forward
+		counter packets 773 bytes 40396 drop
+		counter packets 0 bytes 0 drop
+		counter packets 0 bytes 0 drop
+		counter packets 0 bytes 0 reject
+		ip saddr != 127.0.0.0/8 ip daddr 127.0.0.0/8  ct status dnat counter packets 0 bytes 0 drop
+		meta l4proto tcp ip daddr 10.103.7.3  tcp dport 80 counter packets 0 bytes 0 reject
+		ct state invalid xt match "nfacct" counter packets 0 bytes 0 drop
+		udp dport 8472  counter packets 182 bytes 18766 accept
+		rt type 0 counter packets 0 bytes 0 drop
+		ct state invalid counter packets 0 bytes 0 drop
+		rt type 0 counter packets 0 bytes 0 drop
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), deny (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+6443/tcp                   ALLOW IN    Anywhere                  
+2379:2380/tcp              ALLOW IN    Anywhere                  
+10250/tcp                  ALLOW IN    Anywhere                  
+10257/tcp                  ALLOW IN    Anywhere                  
+10259/tcp                  ALLOW IN    Anywhere                  
+22/tcp                     ALLOW IN    Anywhere                  
+80/tcp                     ALLOW IN    Anywhere                  
+443/tcp                    ALLOW IN    Anywhere                  
+8080/tcp                   ALLOW IN    Anywhere                  
+6443/tcp (v6)              ALLOW IN    Anywhere (v6)             
+2379:2380/tcp (v6)         ALLOW IN    Anywhere (v6)             
+10250/tcp (v6)             ALLOW IN    Anywhere (v6)             
+10257/tcp (v6)             ALLOW IN    Anywhere (v6)             
+10259/tcp (v6)             ALLOW IN    Anywhere (v6)             
+22/tcp (v6)                ALLOW IN    Anywhere (v6)             
+80/tcp (v6)                ALLOW IN    Anywhere (v6)             
+443/tcp (v6)               ALLOW IN    Anywhere (v6)             
+8080/tcp (v6)              ALLOW IN    Anywhere (v6)             
+
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7m # What cloud is this? Check for metadata:[27m
+[7m  curl -s --connect-timeout 2 http://169.254.169.254/metadata/v1/ 2>/dev/null | head -5[27m[A[C[C[C[C[C[C[C[C[C[C[C[C[C # What cloud is this? Check for metadata:
+  curl -s --connect-timeout 2 http://169.254.169.254/metadata/v1/ 2>/dev/null | head -5
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# [7mtcpdump -i eth0 udp port 8472 -c 10 -nn 2>&1 &[27m[C[C[C[C[C[C[C[C[C[C[C[C[Ctcpdump -i eth0 udp port 8472 -c 10 -nn 2>&1 &
+[?2004l[1] 194409
+[?2004h]0;root@k8-0: ~root@k8-0:~# tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+06:39:50.816683 IP 144.126.131.105.45682 > 207.244.237.219.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.0.27.54198 > 10.200.2.145.4240: Flags [S], seq 1695492234, win 64860, options [mss 1410,sackOK,TS val 3917225330 ecr 0,nop,wscale 7], length 0
+06:39:51.041375 IP 207.244.225.169.58187 > 144.126.131.105.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.1.251.59700 > 10.200.0.199.4240: Flags [S], seq 1069050091, win 64860, options [mss 1410,sackOK,TS val 3268938481 ecr 0,nop,wscale 7], length 0
+06:39:51.823128 IP 144.126.131.105.39597 > 207.244.237.219.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.0.27.54198 > 10.200.2.145.4240: Flags [S], seq 1695492234, win 64860, options [mss 1410,sackOK,TS val 3917226337 ecr 0,nop,wscale 7], length 0
+06:39:52.846741 IP 144.126.131.105.42194 > 207.244.237.219.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.0.27.54198 > 10.200.2.145.4240: Flags [S], seq 1695492234, win 64860, options [mss 1410,sackOK,TS val 3917227361 ecr 0,nop,wscale 7], length 0
+06:39:53.870794 IP 144.126.131.105.47599 > 207.244.237.219.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.0.27.54198 > 10.200.2.145.4240: Flags [S], seq 1695492234, win 64860, options [mss 1410,sackOK,TS val 3917228385 ecr 0,nop,wscale 7], length 0
+06:39:55.920144 IP 144.126.131.105.41349 > 207.244.237.219.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.0.27.54198 > 10.200.2.145.4240: Flags [S], seq 1695492234, win 64860, options [mss 1410,sackOK,TS val 3917230434 ecr 0,nop,wscale 7], length 0
+06:39:59.956318 IP 144.126.131.105.39751 > 207.244.237.219.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.0.27.54198 > 10.200.2.145.4240: Flags [S], seq 1695492234, win 64860, options [mss 1410,sackOK,TS val 3917234469 ecr 0,nop,wscale 7], length 0
+06:40:00.807327 IP 207.244.237.219.41723 > 144.126.131.105.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.2.11 > 10.200.0.199: ICMP echo request, id 863, seq 0, length 32
+06:40:00.807327 IP 207.244.237.219.54771 > 144.126.131.105.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.2.11.35844 > 10.200.0.199.4240: Flags [S], seq 160438698, win 64860, options [mss 1410,sackOK,TS val 3402045710 ecr 0,nop,wscale 7], length 0
+06:40:00.920353 IP 207.244.237.219.41723 > 144.126.131.105.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.2.11 > 10.200.0.199: ICMP echo request, id 863, seq 1, length 32
+10 packets captured
+11 packets received by filter
+0 packets dropped by kernel
+
+[?2004l[1]+  Done                    tcpdump -i eth0 udp port 8472 -c 10 -nn 2>&1
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mtcpdump -i cilium_vxlan -c 10 -nn 2>&1[27m[C[C[C[C[C[C[C[C[C[C[C[C[Ctcpdump -i cilium_vxlan -c 10 -nn 2>&1
+[?2004ltcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on cilium_vxlan, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+^C
+0 packets captured
+0 packets received by filter
+0 packets dropped by kernel
+[?2004h]0;root@k8-0: ~root@k8-0:~# exit
+[?2004llogout
+Connection to k8-0.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 21:41:14]-$(B[mssh root@k8-0.v-site.net[C[1P.v-site.net2.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 06:41:25 CET 2026
+
+  System load:           0.02
+  Usage of /:            3.2% of 192.69GB
+  Memory usage:          9%
+  Swap usage:            0%
+  Processes:             175
+  Users logged in:       0
+  IPv4 address for eth0: 207.244.237.219
+  IPv6 address for eth0: 2605:a140:2115:9519::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Sat Feb 14 05:17:22 2026 from 73.222.150.26
+[?2004h]0;root@k8-2: ~root@k8-2:~# [7m ip -d link show cilium_vxlan[27m[C[C[C[C[C[C[C[C[C[C[C[C[C ip -d link show cilium_vxlan
+[?2004l8: cilium_vxlan: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default 
+    link/ether 06:c6:65:dd:12:eb brd ff:ff:ff:ff:ff:ff promiscuity 0  allmulti 0 minmtu 68 maxmtu 65535 
+info: Using default fan map value (33)
+    vxlan external id 0 srcport 0 0 dstport 8472 nolearning ttl auto ageing 300 udpcsum noudp6zerocsumtx noudp6zerocsumrx addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 tso_max_size 65536 tso_max_segs 65535 gro_max_size 65536 
+[?2004h]0;root@k8-2: ~root@k8-2:~# [7mip route | grep -E '10\.200\.[012]'[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cip route | grep -E '10\.200\.[012]'
+[?2004l[01;31m[K10.200.0[m[K.0/24 via [01;31m[K10.200.2[m[K.11 dev cilium_host proto kernel src [01;31m[K10.200.2[m[K.11 mtu 1450 
+[01;31m[K10.200.1[m[K.0/24 via [01;31m[K10.200.2[m[K.11 dev cilium_host proto kernel src [01;31m[K10.200.2[m[K.11 mtu 1450 
+[01;31m[K10.200.2[m[K.0/24 via [01;31m[K10.200.2[m[K.11 dev cilium_host proto kernel src [01;31m[K10.200.2[m[K.11 
+[01;31m[K10.200.2[m[K.11 dev cilium_host proto kernel scope link 
+[?2004h]0;root@k8-2: ~root@k8-2:~# [7miptables -L INPUT -n -v | grep -E '8472|vxlan|DROP'[27m
+[7m  iptables -L FORWARD -n -v | grep -E '8472|DROP'[27m
+[7m  # Also check nftables and ufw:[27m
+[7m  nft list ruleset 2>/dev/null | grep -E '8472|drop|reject' | head -20[27m
+[7m  ufw status verbose 2>/dev/null[27m[A[A[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Ciptables -L INPUT -n -v | grep -E '8472|vxlan|DROP'
+  iptables -L FORWARD -n -v | grep -E '8472|DROP'
+  # Also check nftables and ufw:
+  nft list ruleset 2>/dev/null | grep -E '8472|drop|reject' | head -20
+  ufw status verbose 2>/dev/null
+[?2004lChain INPUT (policy [01;31m[KDROP[m[K 139K packets, 9479K bytes)
+Chain FORWARD (policy [01;31m[KDROP[m[K 0 packets, 0 bytes)
+		ct state invalid counter packets 1111 bytes 104478 drop
+	chain ufw-reject-input {
+	chain ufw-reject-output {
+	chain ufw-reject-forward {
+		type filter hook input priority filter; policy drop;
+		counter packets 139286 bytes 9482871 jump ufw-reject-input
+		counter packets 123722 bytes 7322763 jump ufw-reject-output
+		type filter hook forward priority filter; policy drop;
+		counter packets 0 bytes 0 jump ufw-reject-forward
+		counter packets 4089 bytes 211248 drop
+		counter packets 0 bytes 0 drop
+		counter packets 0 bytes 0 drop
+		counter packets 0 bytes 0 reject
+		ip saddr != 127.0.0.0/8 ip daddr 127.0.0.0/8  ct status dnat counter packets 0 bytes 0 drop
+		meta l4proto tcp ip daddr 10.103.7.3  tcp dport 80 counter packets 0 bytes 0 reject
+		ct state invalid xt match "nfacct" counter packets 0 bytes 0 drop
+		udp dport 8472  counter packets 297 bytes 32930 accept
+		rt type 0 counter packets 0 bytes 0 drop
+		ct state invalid counter packets 0 bytes 0 drop
+		rt type 0 counter packets 0 bytes 0 drop
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), deny (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+10250/tcp                  ALLOW IN    Anywhere                  
+30000:32767/tcp            ALLOW IN    Anywhere                  
+22/tcp                     ALLOW IN    Anywhere                  
+10256/tcp                  ALLOW IN    Anywhere                  
+10250/tcp (v6)             ALLOW IN    Anywhere (v6)             
+30000:32767/tcp (v6)       ALLOW IN    Anywhere (v6)             
+22/tcp (v6)                ALLOW IN    Anywhere (v6)             
+10256/tcp (v6)             ALLOW IN    Anywhere (v6)             
+
+[?2004h]0;root@k8-2: ~root@k8-2:~# [7mufw default allow routed[27m
+[7m  ufw reload  [27m[Aufw default allow routed
+  ufw reload  
+[?2004lDefault routed policy changed to 'allow'
+(be sure to update your rules accordingly)
+Firewall reloaded
+[?2004h]0;root@k8-2: ~root@k8-2:~# exit
+[?2004llogout
+Connection to k8-2.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 21:58:00]-$(B[mssh root@k8-2.v-site.net0.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 06:58:06 CET 2026
+
+  System load:           0.88
+  Usage of /:            3.2% of 192.69GB
+  Memory usage:          17%
+  Swap usage:            0%
+  Processes:             196
+  Users logged in:       0
+  IPv4 address for eth0: 144.126.131.105
+  IPv4 address for eth0: 147.93.135.115
+  IPv6 address for eth0: 2605:a140:2114:6820::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Mon Feb 16 06:34:37 2026 from 73.222.150.26
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mufw default allow routed[27m
+[7m  ufw reload  [27m[Aufw default allow routed
+  ufw reload  
+[?2004lDefault routed policy changed to 'allow'
+(be sure to update your rules accordingly)
+Firewall reloaded
+[?2004h]0;root@k8-0: ~root@k8-0:~# exit
+[?2004llogout
+Connection to k8-0.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 21:58:26]-$(B[mssh root@k8-0.v-site.net[1P.v-site.net2.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 06:58:34 CET 2026
+
+  System load:           0.23
+  Usage of /:            3.2% of 192.69GB
+  Memory usage:          10%
+  Swap usage:            0%
+  Processes:             177
+  Users logged in:       0
+  IPv4 address for eth0: 207.244.237.219
+  IPv6 address for eth0: 2605:a140:2115:9519::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Mon Feb 16 06:41:26 2026 from 73.222.150.26
+[?2004h]0;root@k8-2: ~root@k8-2:~# [7mufw default allow routed[27m
+[7m  ufw reload  [27m[Aufw default allow routed
+  ufw reload  
+[?2004lDefault routed policy changed to 'allow'
+(be sure to update your rules accordingly)
+Firewall reloaded
+[?2004h]0;root@k8-2: ~root@k8-2:~# [7mufw status verbose | grep Default[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cufw status verbose | grep Default
+[?2004l[01;31m[KDefault[m[K: deny (incoming), allow (outgoing), allow (routed)
+[?2004h]0;root@k8-2: ~root@k8-2:~# exit
+[?2004llogout
+Connection to k8-2.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 21:59:17]-$(B[mssh root@k8-2.v-site.net[1P.v-site.net0.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 07:09:17 CET 2026
+
+  System load:           3.05
+  Usage of /:            3.2% of 192.69GB
+  Memory usage:          17%
+  Swap usage:            0%
+  Processes:             192
+  Users logged in:       0
+  IPv4 address for eth0: 144.126.131.105
+  IPv4 address for eth0: 147.93.135.115
+  IPv6 address for eth0: 2605:a140:2114:6820::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Mon Feb 16 06:58:07 2026 from 73.222.150.26
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mufw status verbose | grep Default[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cufw status verbose | grep Default
+[?2004l[01;31m[KDefault[m[K: deny (incoming), allow (outgoing), allow (routed)
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7m# Check actual nftables forward chain[27m
+[7m  nft list chain inet filter forward 2>/dev/null | head -10[27m[A[C[C[C[C[C[C[C[C[C[C[C[C[C# Check actual nftables forward chain
+  nft list chain inet filter forward 2>/dev/null | head -10
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# [7m # Check iptables FORWARD[27m
+[7m  iptables -L FORWARD -n -v | head -5[27m[A[C[C[C[C[C[C[C[C[C[C[C[C[C # Check iptables FORWARD
+  iptables -L FORWARD -n -v | head -5
+[?2004lChain FORWARD (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+    6   276 CILIUM_FORWARD  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* cilium-feeder: CILIUM_FORWARD */
+  141  6759 KUBE-PROXY-FIREWALL  0    --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate NEW /* kubernetes load balancer firewall */
+  141  6759 KUBE-FORWARD  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* kubernetes forwarding rules */
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7m ss -ulnp | grep 8472      [27m[C[C[C[C[C[C[C[C[C[C[C[C[C ss -ulnp | grep 8472      
+[?2004lUNCONN 0      0              0.0.0.0:[01;31m[K8472[m[K       0.0.0.0:*                                             
+UNCONN 0      0                 [::]:[01;31m[K8472[m[K          [::]:*                                             
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7m conntrack -L -p udp --dport 8472 2>/dev/null | head -10[27m
+[7m  conntrack -S[27m[A conntrack -L -p udp --dport 8472 2>/dev/null | head -10
+  conntrack -S
+[?2004lCommand 'conntrack' not found, but can be installed with:
+apt install conntrack
+[?2004h]0;root@k8-0: ~root@k8-0:~# apt install conntrack
+[?2004lReading package lists... 0%Reading package lists... 100%Reading package lists... Done
+Building dependency tree... 0%Building dependency tree... 0%Building dependency tree... 50%Building dependency tree... 50%Building dependency tree... Done
+Reading state information... 0% Reading state information... 0%Reading state information... Done
+The following NEW packages will be installed:
+  conntrack
+0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+Need to get 37.9 kB of archives.
+After this operation, 119 kB of additional disk space will be used.
+[33m0% [Working][0m            Get:1 http://archive.ubuntu.com/ubuntu noble/main amd64 conntrack amd64 1:1.4.8-1ubuntu1 [37.9 kB]
+[33m30% [1 conntrack 14.0 kB/37.9 kB 37%][0m[33m                                     100% [Working][0m              Fetched 37.9 kB in 0s (92.0 kB/s)
+
+7[0;53r8[1ASelecting previously unselected package conntrack.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 106548 files and directories currently installed.)
+Preparing to unpack .../conntrack_1%3a1.4.8-1ubuntu1_amd64.deb ...
+7[54;0f[42m[30mProgress: [  0%][49m[39m [.............................................................................................................] 87[54;0f[42m[30mProgress: [ 20%][49m[39m [#####################........................................................................................] 8Unpacking conntrack (1:1.4.8-1ubuntu1) ...
+7[54;0f[42m[30mProgress: [ 40%][49m[39m [###########################################..................................................................] 8Setting up conntrack (1:1.4.8-1ubuntu1) ...
+7[54;0f[42m[30mProgress: [ 60%][49m[39m [#################################################################............................................] 87[54;0f[42m[30mProgress: [ 80%][49m[39m [#######################################################################################......................] 8Processing triggers for man-db (2.12.0-4build2) ...
+
+7[0;54r8[1A[JScanning processes... [                                                                                                           ]Scanning processes... [                                                                                                           ]Scanning processes... [=                                                                                                          ]Scanning processes... [=                                                                                                          ]Scanning processes... [==                                                                                                         ]Scanning processes... [==                                                                                                         ]Scanning processes... [===                                                                                                        ]Scanning processes... [===                                                                                                        ]Scanning processes... [====                                                                                                       ]Scanning processes... [====                                                                                                       ]Scanning processes... [=====                                                                                                      ]Scanning processes... [======                                                                                                     ]Scanning processes... [======                                                                                                     ]Scanning processes... [=======                                                                                                    ]Scanning processes... [=======                                                                                                    ]Scanning processes... [========                                                                                                   ]Scanning processes... [========                                                                                                   ]Scanning processes... [=========                                                                                                  ]Scanning processes... [=========                                                                                                  ]Scanning processes... [==========                                                                                                 ]Scanning processes... [==========                                                                                                 ]Scanning processes... [===========                                                                                                ]Scanning processes... [============                                                                                               ]Scanning processes... [============                                                                                               ]Scanning processes... [=============                                                                                              ]Scanning processes... [=============                                                                                              ]Scanning processes... [==============                                                                                             ]Scanning processes... [==============                                                                                             ]Scanning processes... [===============                                                                                            ]Scanning processes... [===============                                                                                            ]Scanning processes... [================                                                                                           ]Scanning processes... [================                                                                                           ]Scanning processes... [=================                                                                                          ]Scanning processes... [==================                                                                                         ]Scanning processes... [==================                                                                                         ]Scanning processes... [===================                                                                                        ]Scanning processes... [===================                                                                                        ]Scanning processes... [====================                                                                                       ]Scanning processes... [====================                                                                                       ]Scanning processes... [=====================                                                                                      ]Scanning processes... [=====================                                                                                      ]Scanning processes... [======================                                                                                     ]Scanning processes... [======================                                                                                     ]Scanning processes... [=======================                                                                                    ]Scanning processes... [========================                                                                                   ]Scanning processes... [========================                                                                                   ]Scanning processes... [=========================                                                                                  ]Scanning processes... [=========================                                                                                  ]Scanning processes... [==========================                                                                                 ]Scanning processes... [==========================                                                                                 ]Scanning processes... [===========================                                                                                ]Scanning processes... [===========================                                                                                ]Scanning processes... [============================                                                                               ]Scanning processes... [============================                                                                               ]Scanning processes... [=============================                                                                              ]Scanning processes... [==============================                                                                             ]Scanning processes... [==============================                                                                             ]Scanning processes... [===============================                                                                            ]Scanning processes... [===============================                                                                            ]Scanning processes... [================================                                                                           ]Scanning processes... [================================                                                                           ]Scanning processes... [=================================                                                                          ]Scanning processes... [=================================                                                                          ]Scanning processes... [==================================                                                                         ]Scanning processes... [==================================                                                                         ]Scanning processes... [===================================                                                                        ]Scanning processes... [====================================                                                                       ]Scanning processes... [====================================                                                                       ]Scanning processes... [=====================================                                                                      ]Scanning processes... [=====================================                                                                      ]Scanning processes... [======================================                                                                     ]Scanning processes... [======================================                                                                     ]Scanning processes... [=======================================                                                                    ]Scanning processes... [=======================================                                                                    ]Scanning processes... [========================================                                                                   ]Scanning processes... [========================================                                                                   ]Scanning processes... [=========================================                                                                  ]Scanning processes... [==========================================                                                                 ]Scanning processes... [==========================================                                                                 ]Scanning processes... [===========================================                                                                ]Scanning processes... [===========================================                                                                ]Scanning processes... [============================================                                                               ]Scanning processes... [============================================                                                               ]Scanning processes... [=============================================                                                              ]Scanning processes... [=============================================                                                              ]Scanning processes... [==============================================                                                             ]Scanning processes... [==============================================                                                             ]Scanning processes... [===============================================                                                            ]Scanning processes... [================================================                                                           ]Scanning processes... [================================================                                                           ]Scanning processes... [=================================================                                                          ]Scanning processes... [=================================================                                                          ]Scanning processes... [==================================================                                                         ]Scanning processes... [==================================================                                                         ]Scanning processes... [===================================================                                                        ]Scanning processes... [===================================================                                                        ]Scanning processes... [====================================================                                                       ]Scanning processes... [====================================================                                                       ]Scanning processes... [=====================================================                                                      ]Scanning processes... [======================================================                                                     ]Scanning processes... [======================================================                                                     ]Scanning processes... [=======================================================                                                    ]Scanning processes... [=======================================================                                                    ]Scanning processes... [========================================================                                                   ]Scanning processes... [========================================================                                                   ]Scanning processes... [=========================================================                                                  ]Scanning processes... [=========================================================                                                  ]Scanning processes... [==========================================================                                                 ]Scanning processes... [==========================================================                                                 ]Scanning processes... [===========================================================                                                ]Scanning processes... [============================================================                                               ]Scanning processes... [============================================================                                               ]Scanning processes... [=============================================================                                              ]Scanning processes... [=============================================================                                              ]Scanning processes... [==============================================================                                             ]Scanning processes... [==============================================================                                             ]Scanning processes... [===============================================================                                            ]Scanning processes... [===============================================================                                            ]Scanning processes... [================================================================                                           ]Scanning processes... [================================================================                                           ]Scanning processes... [=================================================================                                          ]Scanning processes... [==================================================================                                         ]Scanning processes... [==================================================================                                         ]Scanning processes... [===================================================================                                        ]Scanning processes... [===================================================================                                        ]Scanning processes... [====================================================================                                       ]Scanning processes... [====================================================================                                       ]Scanning processes... [=====================================================================                                      ]Scanning processes... [=====================================================================                                      ]Scanning processes... [======================================================================                                     ]Scanning processes... [======================================================================                                     ]Scanning processes... [=======================================================================                                    ]Scanning processes... [========================================================================                                   ]Scanning processes... [========================================================================                                   ]Scanning processes... [=========================================================================                                  ]Scanning processes... [=========================================================================                                  ]Scanning processes... [==========================================================================                                 ]Scanning processes... [==========================================================================                                 ]Scanning processes... [===========================================================================                                ]Scanning processes... [===========================================================================                                ]Scanning processes... [============================================================================                               ]Scanning processes... [============================================================================                               ]Scanning processes... [=============================================================================                              ]Scanning processes... [==============================================================================                             ]Scanning processes... [==============================================================================                             ]Scanning processes... [===============================================================================                            ]Scanning processes... [===============================================================================                            ]Scanning processes... [================================================================================                           ]Scanning processes... [================================================================================                           ]Scanning processes... [=================================================================================                          ]Scanning processes... [=================================================================================                          ]Scanning processes... [==================================================================================                         ]Scanning processes... [==================================================================================                         ]Scanning processes... [===================================================================================                        ]Scanning processes... [====================================================================================                       ]Scanning processes... [====================================================================================                       ]Scanning processes... [=====================================================================================                      ]Scanning processes... [=====================================================================================                      ]Scanning processes... [======================================================================================                     ]Scanning processes... [======================================================================================                     ]Scanning processes... [=======================================================================================                    ]Scanning processes... [=======================================================================================                    ]Scanning processes... [========================================================================================                   ]Scanning processes... [========================================================================================                   ]Scanning processes... [=========================================================================================                  ]Scanning processes... [==========================================================================================                 ]Scanning processes... [==========================================================================================                 ]Scanning processes... [===========================================================================================                ]Scanning processes... [===========================================================================================                ]Scanning processes... [============================================================================================               ]Scanning processes... [============================================================================================               ]Scanning processes... [=============================================================================================              ]Scanning processes... [=============================================================================================              ]Scanning processes... [==============================================================================================             ]Scanning processes... [==============================================================================================             ]Scanning processes... [===============================================================================================            ]Scanning processes... [================================================================================================           ]Scanning processes... [================================================================================================           ]Scanning processes... [=================================================================================================          ]Scanning processes... [=================================================================================================          ]Scanning processes... [==================================================================================================         ]Scanning processes... [==================================================================================================         ]Scanning processes... [===================================================================================================        ]Scanning processes... [===================================================================================================        ]Scanning processes... [====================================================================================================       ]Scanning processes... [====================================================================================================       ]Scanning processes... [=====================================================================================================      ]Scanning processes... [======================================================================================================     ]Scanning processes... [======================================================================================================     ]Scanning processes... [=======================================================================================================    ]Scanning processes... [=======================================================================================================    ]Scanning processes... [========================================================================================================   ]Scanning processes... [========================================================================================================   ]Scanning processes... [=========================================================================================================  ]Scanning processes... [=========================================================================================================  ]Scanning processes... [========================================================================================================== ]Scanning processes... [===========================================================================================================]Scanning processes...                                                                                                              
+Scanning linux images... [                                                                                                        ]Scanning linux images... [==========================                                                                              ]Scanning linux images... [====================================================                                                    ]Scanning linux images... [==============================================================================                          ]Scanning linux images... [========================================================================================================]Scanning linux images...                                                                                                           
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# apt install conntrack[C[C[C[C[C[C[C[C[C[C[C[C[C# Check actual nftables forward chain^C[?2004l[?2004h[?2004l
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mconntrack -L -p udp --dport 8472 2>/dev/null | head -10[27m
+[7m  conntrack -S[27m[Aconntrack -L -p udp --dport 8472 2>/dev/null | head -10
+  conntrack -S
+[?2004lcpu=0   	found=0 invalid=17 insert=0 insert_failed=0 drop=0 early_drop=0 error=0 search_restart=0 clash_resolve=0 chaintoolong=0 
+cpu=1   	found=0 invalid=907 insert=0 insert_failed=33 drop=33 early_drop=0 error=6 search_restart=0 clash_resolve=0 chaintoolong=0 
+cpu=2   	found=0 invalid=29 insert=0 insert_failed=0 drop=0 early_drop=0 error=0 search_restart=0 clash_resolve=0 chaintoolong=0 
+cpu=3   	found=0 invalid=21 insert=0 insert_failed=0 drop=0 early_drop=0 error=0 search_restart=0 clash_resolve=0 chaintoolong=0 
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7m nft list chain inet filter input[27m[C[C[C[C[C[C[C[C[C[C[C[C[C nft list chain inet filter input
+[?2004lError: No such file or directory
+list chain inet filter input
+                ^^^^^^
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mnft list chain inet filter input[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cnft list chain inet filter input
+[?2004lError: No such file or directory
+list chain inet filter input
+                ^^^^^^
+[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# 
+[?2004l[?2004h]0;root@k8-0: ~root@k8-0:~# [7mroot@k8-0:~#  tcpdump -i cilium_vxlan -nn -c 5 &                                                                      [27m[7m [27m[7m                                                                                                                                  [27m[7m [27m[7m                           [27m
+[7m  tcpdump -i eth0 udp port 8472 -nn -c 5[27m
+[7m[1] 198715[27m
+[7mtcpdump: verbose output suppressed, use -v[v]... for full protocol decode[27m
+[7mlistening on eth0, link-type EN10MB (Ethernet), snapshot length 262144 bytes[27m
+[7mtcpdump: verbose output suppressed, use -v[v]... for full protocol decode[27m
+[7mlistening on cilium_vxlan, link-type EN10MB (Ethernet), snapshot length 262144 bytes[27m
+[7m07:32:54.756586 IP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 159[27m[7m3[27m[7m019771 ecr 0,nop,wscale 7], length 0 [27m
+[7m07:32:54.756615 IP 144.126.131.105.41441 > 207.244.225.169.8472: OTV, flags [I] (0x08), overlay 0, instance 6[27m
+[7mIP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 1593019771 ecr 0,no[27m[7mp[27m[7m,wscale 7], length 0 [27m
+[7m07:32:58.766765 IP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 159[27m[7m3[27m[7m023782 ecr 0,nop,wscale 7], length 0 [27m
+[7m07:32:58.766792 IP 144.126.131.105.50184 > 207.244.225.169.8472: OTV, flags [I] (0x08), overlay 0, instance 6[27m
+[7mIP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 1593023782 ecr 0,no[27m[7mp[27m[7m,wscale 7], length 0 [27m
+[7m07:33:07.214760 IP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 159[27m[7m3[27m[7m032230 ecr 0,nop,wscale 7], length 0 [27m
+[7m07:33:07.214789 IP 144.126.131.105.49182 > 207.244.225.169.8472: OTV, flags [I] (0x08), overlay 0, instance 6[27m
+[7mIP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 1593032230 ecr 0,no[27m[7mp[27m[7m,wscale 7], length 0 [27m
+[7m07:33:08.525460 IP 207.244.225.169.60418 > 144.126.131.105.8472: OTV, flags [I] (0x08), overlay 0, instance 6[27m
+[7mIP 10.200.1.251.39310 > 10.200.0.199.4240: Flags [S], seq 229537356, win 64860, options [mss 1410,sackOK,TS val 3272135945 ecr 0,no[27m[7mp[27m[7m,wscale 7], length 0 [27m
+[7m07:33:08.525460 IP 207.244.225.169.54617 > 144.126.131.105.8472: OTV, flags [I] (0x08), overlay 0, instance 6[27m
+[7mIP 10.200.1.251 > 10.200.0.199: ICMP echo request, id 48304, seq 0, length 32[27m
+[7m5 packets captured[27m
+[7m5 packets received by filter[27m
+[7m0 packets dropped by kernel[27m
+[7mroot@k8-0:~# [27m
+[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[C[C[C[C[C[C[C[C[C[C[C[C[Croot@k8-0:~#  tcpdump -i cilium_vxlan -nn -c 5 &                                                                                                                                                                                                                                    
+  tcpdump -i eth0 udp port 8472 -nn -c 5
+[1] 198715
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on cilium_vxlan, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+07:32:54.756586 IP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 1593019771 ecr 0,nop,wscale 7], length 0
+07:32:54.756615 IP 144.126.131.105.41441 > 207.244.225.169.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 1593019771 ecr 0,nop,wscale 7], length 0
+07:32:58.766765 IP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 1593023782 ecr 0,nop,wscale 7], length 0
+07:32:58.766792 IP 144.126.131.105.50184 > 207.244.225.169.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 1593023782 ecr 0,nop,wscale 7], length 0
+07:33:07.214760 IP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 1593032230 ecr 0,nop,wscale 7], length 0
+07:33:07.214789 IP 144.126.131.105.49182 > 207.244.225.169.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.0.27.37748 > 10.200.1.217.4240: Flags [S], seq 2279930844, win 64860, options [mss 1410,sackOK,TS val 1593032230 ecr 0,nop,wscale 7], length 0
+07:33:08.525460 IP 207.244.225.169.60418 > 144.126.131.105.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.1.251.39310 > 10.200.0.199.4240: Flags [S], seq 229537356, win 64860, options [mss 1410,sackOK,TS val 3272135945 ecr 0,nop,wscale 7], length 0
+07:33:08.525460 IP 207.244.225.169.54617 > 144.126.131.105.8472: OTV, flags [I] (0x08), overlay 0, instance 6
+IP 10.200.1.251 > 10.200.0.199: ICMP echo request, id 48304, seq 0, length 32
+5 packets captured
+5 packets received by filter
+0 packets dropped by kernel
+root@k8-0:~# 
+[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K
+[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K^C[?2004l[?2004h[?2004l
+[?2004h]0;root@k8-0: ~root@k8-0:~# ^C[?2004l[?2004h[?2004l
+[?2004h]0;root@k8-0: ~root@k8-0:~# ^C[?2004l[?2004h[?2004l
+[?2004h]0;root@k8-0: ~root@k8-0:~# ^C[?2004l[?2004h[?2004l
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7m# Check if the 8472 accept rule still exists in nftables                                                              [27m[7m [27m[7m                                                                                                                                  [27m[7m [27m[7m             [27m
+[7m  nft list ruleset 2>/dev/null | grep 8472[27m
+[7m                                                                                                                                   [27m[7m [27m[7m                                                                                                                                  [27m[7m [27m[7m  [27m
+[7m  # Check iptables INPUT chain[27m
+[7m  iptables -L INPUT -n -v | head -15[27m
+
+[7m  # Check what nftables tables exist[27m
+[7m  nft list tables[27m[A[A[A[A[A[A[A[A[A[A[A# Check if the 8472 accept rule still exists in nftables                                                                                                                                                                                                              
+  nft list ruleset 2>/dev/null | grep 8472
+                                                                                                                                                                                                                                                                        
+  # Check iptables INPUT chain
+  iptables -L INPUT -n -v | head -15
+
+  # Check what nftables tables exist
+  nft list tables
+[?2004l		counter packets 49361038 bytes 9[01;31m[K8472[m[K07673 jump ufw-before-logging-input
+		counter packets 49361038 bytes 9[01;31m[K8472[m[K07673 jump ufw-before-input
+		udp dport [01;31m[K8472[m[K  counter packets 355 bytes 38214 accept
+		udp dport [01;31m[K8472[m[K  counter packets 355 bytes 38214 notrack
+		udp dport [01;31m[K8472[m[K  counter packets 436 bytes 49028 notrack
+Chain INPUT (policy DROP 2164 packets, 156K bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+ 523K  102M CILIUM_INPUT  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* cilium-feeder: CILIUM_INPUT */
+1988K  437M KUBE-PROXY-FIREWALL  0    --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate NEW /* kubernetes load balancer firewall */
+  49M 9480M KUBE-NODEPORTS  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* kubernetes health check service ports */
+1988K  437M KUBE-EXTERNAL-SERVICES  0    --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate NEW /* kubernetes externally-visible service portals */
+  49M 9485M KUBE-FIREWALL  0    --  *      *       0.0.0.0/0            0.0.0.0/0           
+  49M 9847M ufw-before-logging-input  0    --  *      *       0.0.0.0/0            0.0.0.0/0           
+  49M 9847M ufw-before-input  0    --  *      *       0.0.0.0/0            0.0.0.0/0           
+ 139K   11M ufw-after-input  0    --  *      *       0.0.0.0/0            0.0.0.0/0           
+ 138K   11M ufw-after-logging-input  0    --  *      *       0.0.0.0/0            0.0.0.0/0           
+ 138K   11M ufw-reject-input  0    --  *      *       0.0.0.0/0            0.0.0.0/0           
+ 138K   11M ufw-track-input  0    --  *      *       0.0.0.0/0            0.0.0.0/0           
+table ip filter
+table ip6 filter
+table ip mangle
+table ip6 mangle
+table ip6 nat
+table ip nat
+table ip raw
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mufw allow 8472/udp comment 'Cilium VXLAN'[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cufw allow 8472/udp comment 'Cilium VXLAN'
+[?2004lRule added
+Rule added (v6)
+[?2004h]0;root@k8-0: ~root@k8-0:~# exit
+[?2004llogout
+Connection to k8-0.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 23:10:55]-$(B[mssh root@k8-0.v-site.net[C[C[1P.v-site.net1.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 08:11:06 CET 2026
+
+  System load:           0.21
+  Usage of /:            3.6% of 192.69GB
+  Memory usage:          9%
+  Swap usage:            0%
+  Processes:             181
+  Users logged in:       0
+  IPv4 address for eth0: 207.244.225.169
+  IPv6 address for eth0: 2605:a140:2114:6819::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Sat Feb 14 05:15:01 2026 from 73.222.150.26
+[?2004h]0;root@k8-1: ~root@k8-1:~# [7mufw allow 8472/udp comment 'Cilium VXLAN'[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cufw allow 8472/udp comment 'Cilium VXLAN'
+[?2004lRule added
+Rule added (v6)
+[?2004h]0;root@k8-1: ~root@k8-1:~# exit
+[?2004llogout
+Connection to k8-1.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 23:11:16]-$(B[mssh root@k8-1.v-site.net[1P.v-site.net2.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 08:11:24 CET 2026
+
+  System load:           0.34
+  Usage of /:            3.2% of 192.69GB
+  Memory usage:          9%
+  Swap usage:            0%
+  Processes:             175
+  Users logged in:       0
+  IPv4 address for eth0: 207.244.237.219
+  IPv6 address for eth0: 2605:a140:2115:9519::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Mon Feb 16 06:58:34 2026 from 73.222.150.26
+[?2004h]0;root@k8-2: ~root@k8-2:~# [7mufw allow 8472/udp comment 'Cilium VXLAN'[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cufw allow 8472/udp comment 'Cilium VXLAN'
+[?2004lRule added
+Rule added (v6)
+[?2004h]0;root@k8-2: ~root@k8-2:~# ex [Kit
+[?2004llogout
+Connection to k8-2.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 23:11:37]-$(B[mssh root@k8-2.v-site.net1.v-site.net0.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 08:18:38 CET 2026
+
+  System load:           1.08
+  Usage of /:            3.2% of 192.69GB
+  Memory usage:          18%
+  Swap usage:            0%
+  Processes:             193
+  Users logged in:       1
+  IPv4 address for eth0: 144.126.131.105
+  IPv4 address for eth0: 147.93.135.115
+  IPv6 address for eth0: 2605:a140:2114:6820::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Mon Feb 16 07:30:40 2026 from 73.222.150.26
+[?2004h]0;root@k8-0: ~root@k8-0:~# [7mufw allow 4240/tcp[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cufw allow 4240/tcp
+[?2004lRule added
+Rule added (v6)
+[?2004h]0;root@k8-0: ~root@k8-0:~# exit
+[?2004llogout
+Connection to k8-0.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 23:18:49]-$(B[mssh root@k8-0.v-site.net2.v-site.net1.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 08:18:53 CET 2026
+
+  System load:           0.62
+  Usage of /:            3.6% of 192.69GB
+  Memory usage:          10%
+  Swap usage:            0%
+  Processes:             192
+  Users logged in:       0
+  IPv4 address for eth0: 207.244.225.169
+  IPv6 address for eth0: 2605:a140:2114:6819::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Mon Feb 16 08:11:08 2026 from 73.222.150.26
+[?2004h]0;root@k8-1: ~root@k8-1:~# [7mufw allow 4240/tcp[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cufw allow 4240/tcp
+[?2004lRule added
+Rule added (v6)
+[?2004h]0;root@k8-1: ~root@k8-1:~# exit
+[?2004llogout
+Connection to k8-1.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 23:19:05]-$(B[mssh root@k8-1.v-site.net0.v-site.net2.v-site.net
+[?2004lWelcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-100-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Mon Feb 16 08:19:10 CET 2026
+
+  System load:           0.19
+  Usage of /:            3.2% of 192.69GB
+  Memory usage:          11%
+  Swap usage:            0%
+  Processes:             175
+  Users logged in:       0
+  IPv4 address for eth0: 207.244.237.219
+  IPv6 address for eth0: 2605:a140:2115:9519::1
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+  _____
+ / ___/___  _  _ _____ _   ___  ___
+| |   / _ \| \| |_   _/ \ | _ )/ _ \
+| |__| (_) | .` | | |/ _ \| _ \ (_) |
+ \____\___/|_|\_| |_/_/ \_|___/\___/
+
+Welcome!
+
+This server is hosted by Contabo. If you have any questions or need help,
+please don't hesitate to contact us at support@contabo.com.
+
+Last login: Mon Feb 16 08:11:26 2026 from 73.222.150.26
+[?2004h]0;root@k8-2: ~root@k8-2:~# [7mufw allow 4240/tcp[27m[C[C[C[C[C[C[C[C[C[C[C[C[Cufw allow 4240/tcp
+[?2004lRule added
+Rule added (v6)
+[?2004h]0;root@k8-2: ~root@k8-2:~# exit
+[?2004llogout
+Connection to k8-2.v-site.net closed.
+[?2004hl0r3zz@tarnover:[2026-02-15 23:19:20]-$(B[mkgns
+[?2004lkgns: command not found
+[?2004hl0r3zz@tarnover:[2026-02-15 23:20:22]-$(B[msource ~/.bashrc
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 23:20:38]-$(B[malias
+[?2004lalias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
+alias cursor='/usr/bin/cursor >/dev/null 2>&1 &'
+alias egrep='egrep --color=auto'
+alias fgrep='fgrep --color=auto'
+alias grep='grep --color=auto'
+alias k='kubectl'
+alias kaf='k apply -f'
+alias kavf='k apply --validate -f'
+alias kcc='k config current-context'
+alias kd='k describe'
+alias kdd='k delete'
+alias kds='k get daemonset'
+alias kgc='k config get-contexts'
+alias kgd='k get deploy'
+alias kgn='k get nodes'
+alias kgp='k get pods'
+alias kgpsvc='kubectl get pods,svc'
+alias kgpw='k get pods -o wide'
+alias kgs='k get svc'
+alias kgu='k config get-users'
+alias kgv='k get vs'
+alias ksc='k config set-context'
+alias kscn='k config set-context --current --namespace'
+alias l='ls -CF'
+alias la='ls -A'
+alias ll='ls -alF'
+alias ls='ls --color=auto'
+alias pp='python -c "import sys, json; print json.dumps( json.load(sys.stdin), sort_keys=True, indent=4)"'
+alias startlog='script -q -a --log-timing=session-capture.timing session-capture.log'
+[?2004hl0r3zz@tarnover:[2026-02-15 23:20:41]-$(B[mk get namespaces
+[?2004lNAME                 STATUS   AGE
+cilium-secrets       Active   2d3h
+default              Active   2d3h
+kube-node-lease      Active   2d3h
+kube-public          Active   2d3h
+kube-system          Active   2d3h
+local-path-storage   Active   23h
+matrix               Active   24h
+metallb-system       Active   25h
+traefik              Active   25h
+[?2004hl0r3zz@tarnover:[2026-02-15 23:21:57]-$(B[mkgp -n matrix -o wide
+[?2004lNAME                                     READY   STATUS      RESTARTS   AGE     IP             NODE   NOMINATED NODE   READINESS GATES
+matrix-synapse-7c677997b9-x6tcd          1/1     Running     0          7m16s   10.200.2.3     k8-2   <none>           <none>
+matrix-synapse-element-59b4565d9-zbvfl   1/1     Running     0          23h     10.200.1.204   k8-1   <none>           <none>
+matrix-synapse-postgresql-0              1/1     Running     0          23h     10.200.1.32    k8-1   <none>           <none>
+matrix-synapse-secret-x8mf8              0/1     Completed   0          23h     10.200.2.58    k8-2   <none>           <none>
+[?2004hl0r3zz@tarnover:[2026-02-15 23:22:18]-$(B[mhistory |grep curl
+[?2004l   45  [01;31m[Kcurl[m[K -s http://127.0.0.1:4096/global/health 2>&1 | head -5
+   58  sleep 3 && [01;31m[Kcurl[m[K -s http://127.0.0.1:4096/global/health
+   62  [01;31m[Kcurl[m[K -s http://127.0.0.1:4096/session 2>&1 | head -20
+   75  [01;31m[Kcurl[m[K -s http://127.0.0.1:4096/provider 2>&1 | python3 -m json.tool 2>/dev/null | head -50
+   76  [01;31m[Kcurl[m[K -s http://127.0.0.1:4096/provider 2>&1 | grep -A20 '"id": "google-vertex' | head -50
+  732  [01;31m[Kcurl[m[K -k https://matrix.v-site.net/_matrix/client/versions
+  952  history |grep [01;31m[Kcurl[m[K
+[?2004hl0r3zz@tarnover:[2026-02-15 23:27:07]-$(B[m[7mufw allow 4240/tcp[27m[1Pufw allow 4240/tc[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[7mcurl -k https://matrix.v-site.net/_matrix/client/versions[27m[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Ccurl -k https://matrix.v-site.net/_matrix/client/versions
+[?2004l{"versions":["r0.0.1","r0.1.0","r0.2.0","r0.3.0","r0.4.0","r0.5.0","r0.6.0","r0.6.1","v1.1","v1.2","v1.3","v1.4","v1.5","v1.6","v1.7","v1.8","v1.9","v1.10","v1.11","v1.12"],"unstable_features":{"org.matrix.label_based_filtering":true,"org.matrix.e2e_cross_signing":true,"org.matrix.msc2432":true,"uk.half-shot.msc2666.query_mutual_rooms":false,"io.element.e2ee_forced.public":false,"io.element.e2ee_forced.private":false,"io.element.e2ee_forced.trusted_private":false,"org.matrix.msc3026.busy_presence":false,"org.matrix.msc2285.stable":true,"org.matrix.msc3827.stable":true,"org.matrix.msc3440.stable":true,"org.matrix.msc3771":true,"org.matrix.msc3773":false,"fi.mau.msc2815":false,"fi.mau.msc2659.stable":true,"org.matrix.msc3882":false,"org.matrix.msc3881":false,"org.matrix.msc3874":false,"org.matrix.msc3912":false,"org.matrix.msc3981":true,"org.matrix.msc3391":false,"org.matrix.msc4069":false,"org.matrix.msc4028":false,"org.matrix.msc4108":false,"org.matrix.msc4140":false,"org.matrix.simplified_msc3575":true,"uk.tcpip.msc4133":false,"uk.tcpip.msc4133.stable":true,"org.matrix.msc4155":false,"org.matrix.msc4306":false,"com.beeper.msc4169":false,"org.matrix.msc4380":false}}[?2004hl0r3zz@tarnover:[2026-02-15 23:27:45]-$(B[m
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 23:27:53]-$(B[m## Snapse web pages[K is up!!!
+[?2004l[?2004hl0r3zz@tarnover:[2026-02-15 23:28:09]-$(B[mexit
+[?2004lexit
+
+Script done on 2026-02-15 23:36:19-08:00 [COMMAND_EXIT_CODE="0"]

@@ -1,0 +1,29 @@
+{
+  "name": "Node.js",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker",
+        "vscode.typescript-language-features"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "docker.environment": {
+          "DOCKER_HOST": "tcp://socat:2375"
+        }
+      }
+    }
+  },
+
+  "features": {},
+
+  "forwardPorts": [],
+
+  "postCreateCommand": "npm install"
+}

@@ -1,0 +1,10 @@
+# Client API — HTTP on port 8008
+:8008 {
+reverse_proxy agent0-__INSTANCE_NUM__-continuwuity:6167
+}
+
+# Federation API — HTTPS on port 8448 using step-ca certs
+:8448 {
+tls /etc/caddy/server.crt /etc/caddy/server.key
+reverse_proxy agent0-__INSTANCE_NUM__-continuwuity:6167
+}
