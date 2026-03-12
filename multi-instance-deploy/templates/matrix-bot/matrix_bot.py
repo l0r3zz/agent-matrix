@@ -51,6 +51,34 @@ SYNC_TIMEOUT_MS  = int(os.getenv("SYNC_TIMEOUT_MS", "30000"))
 
 BOT_START_TIME   = time.time() * 1000  # ms -- skip messages before bot started
 
+# --- Trigger Prefix Filtering ---------------------------------------------
+# Extract short agent name from USER_ID (e.g., "agent0-3" from "@agent0-3:...")
+_agent_short = USER_ID.split(":")[0].lstrip("@") if USER_ID else "agent"
+_display_name = os.getenv("BOT_DISPLAY_NAME", "").strip()
+TRIGGER_PREFIXES = [
+    _agent_short + ":",          # e.g. "agent0-3:"
+    _agent_short + ",",          # e.g. "agent0-3,"
+    "@" + _agent_short,          # e.g. "@agent0-3"
+    "@all-agents:",              # broadcast
+    "@all-agents,",              # broadcast variant
+]
+# Add display name as trigger prefix if set and different from agent short name
+if _display_name and _display_name.lower() != _agent_short.lower():
+    TRIGGER_PREFIXES.extend([
+        _display_name + ":",     # e.g. "Gandalf:"
+        _display_name + ",",     # e.g. "Gandalf,"
+        "@" + _display_name,     # e.g. "@Gandalf"
+    ])
+log_trigger = None  # set after logging init
+
+# --- Built-in Commands (no LLM needed) ------------------------------------
+BUILTIN_COMMANDS = {
+    "ping": "PONG 🏓",
+    "hello": "Hello! 👋 I'm {agent_identity}, online and ready.",
+    "whoami": "I'm {agent_identity} ({user_id})",
+}
+
+
 # --- Logging --------------------------------------------------------------
 
 logging.basicConfig(
@@ -59,6 +87,36 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("matrix-bot")
+
+# --- Log Rotation & Crash Logging -----------------------------------------
+
+CRASH_LOG = BOT_DIR / "crash.log"
+
+def rotate_logs() -> None:
+    """Preserve previous bot.log so crash evidence survives restarts."""
+    bot_log = BOT_DIR / "bot.log"
+    bot_log_prev = BOT_DIR / "bot.log.prev"
+    if bot_log.exists() and bot_log.stat().st_size > 0:
+        try:
+            bot_log_prev.unlink(missing_ok=True)
+            bot_log.rename(bot_log_prev)
+            log.info("Rotated previous bot.log -> bot.log.prev")
+        except Exception as e:
+            log.warning("Log rotation failed: %s", e)
+
+def log_crash(exc: BaseException) -> None:
+    """Append crash traceback to a persistent crash log for post-mortem."""
+    import traceback
+    try:
+        with open(CRASH_LOG, "a") as f:
+            f.write("\n" + "=" * 72 + "\n")
+            f.write("CRASH at %s\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
+            f.write("=" * 72 + "\n")
+            traceback.print_exc(file=f)
+            f.write("\n")
+        log.error("Crash details written to %s", CRASH_LOG)
+    except Exception:
+        pass  # Last resort -- don't crash the crash logger
 
 # --- State ----------------------------------------------------------------
 
@@ -191,14 +249,43 @@ async def on_message(
     if not body:
         return
 
+    # --- Trigger prefix check (prevent crosstalk) ---
+    body_lower = body.lower()
+    triggered = any(body_lower.startswith(p.lower()) for p in TRIGGER_PREFIXES)
+    if not triggered:
+        log.debug("Ignoring (no trigger prefix): %s", body[:80])
+        return
+
+    # Strip the trigger prefix from the message before forwarding
+    for p in TRIGGER_PREFIXES:
+        if body_lower.startswith(p.lower()):
+            body = body[len(p):].strip()
+            break
+
     log.info("Message in %s from %s: %s", room.room_id, event.sender, body[:120])
+
+    # --- Built-in command check (instant, no LLM) ---
+    body_cmd = body.lower().strip()
+    if body_cmd in BUILTIN_COMMANDS:
+        reply = BUILTIN_COMMANDS[body_cmd].format(
+            agent_identity=AGENT_IDENTITY, user_id=USER_ID
+        )
+        await client.room_send(
+            room_id=room.room_id,
+            message_type="m.room.message",
+            content={"msgtype": "m.text", "body": reply},
+        )
+        log.info("Built-in response sent: %s -> %s", body_cmd, reply)
+        return
 
     await client.room_typing(room.room_id, typing_state=True, timeout=60000)
 
     try:
         full_message = (
             "[MATRIX MESSAGE - reply with plain conversational text only, "
-            "DO NOT use any Matrix tools, do not send messages via MCP]\n"
+            "DO NOT use any Matrix tools, do not send messages via MCP. "
+            "Keep responses concise and conversational - a few sentences max. "
+            "No status reports or diagnostics unless explicitly asked.]\n"
             "From: %s\n"
             "Room: %s\n\n"
             "%s"
@@ -233,6 +320,8 @@ async def on_message(
 # --- Main -----------------------------------------------------------------
 
 async def main() -> None:
+    rotate_logs()
+
     if not HOMESERVER_URL or not USER_ID or not ACCESS_TOKEN:
         log.error("Missing config: MATRIX_HOMESERVER_URL, MATRIX_USER_ID, MATRIX_ACCESS_TOKEN")
         sys.exit(1)
@@ -252,6 +341,15 @@ async def main() -> None:
         config=config,
     )
     client.access_token = ACCESS_TOKEN
+    client.user_id = USER_ID
+
+    # Set bot display name on startup if configured
+    if BOT_DISPLAY_NAME:
+        try:
+            await client.set_displayname(BOT_DISPLAY_NAME)
+            log.info("Set display name to: %s", BOT_DISPLAY_NAME)
+        except Exception as e:
+            log.warning("Failed to set display name: %s", e)
     client.user_id = USER_ID
 
     http_session = aiohttp.ClientSession()
@@ -283,7 +381,7 @@ async def main() -> None:
             attempt += 1
             try:
                 log.info("Performing initial sync...")
-                resp = await client.sync(timeout=10000, full_state=True)
+                resp = await asyncio.wait_for(client.sync(timeout=10000, full_state=True), timeout=60.0)
                 if isinstance(resp, SyncError):
                     log.warning("Initial sync failed: %s -- retrying in 5s", resp.message)
                     await asyncio.sleep(5)
@@ -299,10 +397,13 @@ async def main() -> None:
 
         while not stop.is_set():
             try:
-                resp = await client.sync(
-                    timeout=SYNC_TIMEOUT_MS,
-                    full_state=False,
-                    set_presence="online",
+                resp = await asyncio.wait_for(
+                    client.sync(
+                        timeout=SYNC_TIMEOUT_MS,
+                        full_state=False,
+                        set_presence="online",
+                    ),
+                    timeout=45.0,
                 )
                 if isinstance(resp, SyncError):
                     log.warning("Sync error: %s -- retrying in 5s", resp.message)
@@ -319,4 +420,14 @@ async def main() -> None:
         log.info("Matrix bot stopped.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        log.info("Bot stopped by keyboard interrupt.")
+    except SystemExit as e:
+        log.info("Bot exited with code %s", e.code)
+        raise
+    except BaseException as e:
+        log.critical("FATAL CRASH: %s: %s", type(e).__name__, e)
+        log_crash(e)
+        raise
