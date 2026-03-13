@@ -83,7 +83,9 @@ step 1 "Leave Matrix rooms gracefully"
 if [[ -d "${INSTANCE_DIR}" ]] && docker ps --format '{{.Names}}' | grep -q "^${INSTANCE_NAME}$"; then
     BOT_ENV="${INSTANCE_DIR}/usr/workdir/matrix-bot/.env"
     if [[ -f "${BOT_ENV}" ]]; then
-        source "${BOT_ENV}"
+    set +e
+    source "${BOT_ENV}" 2>/dev/null
+    set -e
         MX_TOKEN="${MATRIX_ACCESS_TOKEN:-}"
         if [[ -n "${MX_TOKEN}" ]]; then
             info "Fetching joined rooms..."
@@ -226,7 +228,11 @@ step 7 "Finalize instance"
 if [[ ${#FINALIZE_ARGS[@]} -gt 0 ]]; then
     info "Passing to finalize: ${FINALIZE_ARGS[*]}"
 fi
-./scripts/finalize-instance.sh "${INSTANCE_NUM}" "${FINALIZE_ARGS[@]:-}"
+if [[ ${#FINALIZE_ARGS[@]} -gt 0 ]]; then
+    ./scripts/finalize-instance.sh "${INSTANCE_NUM}" "${FINALIZE_ARGS[@]}"
+else
+    ./scripts/finalize-instance.sh "${INSTANCE_NUM}"
+fi
 ok "Instance finalized"
 
 step 8 "Verify federation endpoint"

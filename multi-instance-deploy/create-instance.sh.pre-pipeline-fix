@@ -178,35 +178,14 @@ else
     echo "  WARNING: matrix-bot template not found, skipping"
 fi
 
-# --- 8. Deploy service lifecycle scripts ---
-echo "[8/8] Deploying service lifecycle scripts..."
-SCRIPTS_SRC="${TEMPLATE_DIR}/scripts"
-WORKDIR="${INSTANCE_DIR}/usr/workdir"
-
-# 8a. startup-services.sh (container entrypoint launcher)
-if [ -f "${SCRIPTS_SRC}/startup-services.sh" ]; then
-    cp "${SCRIPTS_SRC}/startup-services.sh" "${WORKDIR}/startup-services.sh"
-    chmod +x "${WORKDIR}/startup-services.sh"
-    echo "  Deployed startup-services.sh"
+# --- 8. Deploy startup-services.sh ---
+echo "[8/8] Deploying startup-services.sh..."
+if [ -f "${TEMPLATE_DIR}/scripts/startup-services.sh" ]; then
+    cp "${TEMPLATE_DIR}/scripts/startup-services.sh" "${INSTANCE_DIR}/usr/workdir/startup-services.sh"
+    chmod +x "${INSTANCE_DIR}/usr/workdir/startup-services.sh"
+    echo "  Deployed to usr/workdir/startup-services.sh"
 else
     echo "  WARNING: startup-services.sh template not found, skipping"
-fi
-
-# 8b. watchdog.sh (process monitor + auto-restart)
-if [ -f "${SCRIPTS_SRC}/watchdog.sh" ]; then
-    cp "${SCRIPTS_SRC}/watchdog.sh" "${WORKDIR}/watchdog.sh"
-    chmod +x "${WORKDIR}/watchdog.sh"
-    echo "  Deployed watchdog.sh"
-else
-    echo "  WARNING: watchdog.sh template not found, skipping"
-fi
-
-# 8c. check-token-sync.py (token health validator)
-if [ -f "${SCRIPTS_SRC}/check-token-sync.py" ]; then
-    cp "${SCRIPTS_SRC}/check-token-sync.py" "${WORKDIR}/check-token-sync.py"
-    echo "  Deployed check-token-sync.py"
-else
-    echo "  WARNING: check-token-sync.py template not found, skipping"
 fi
 
 # --- Summary ---

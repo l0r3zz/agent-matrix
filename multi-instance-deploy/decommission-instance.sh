@@ -130,6 +130,7 @@ require_cmd date
 
 INSTANCE_NAME="agent0-${INSTANCE_N}"
 MHS_NAME="agent0-${INSTANCE_N}-mhs"
+CONTINUWUITY_NAME="agent0-${INSTANCE_N}-continuwuity"
 INSTANCE_DIR="${BASE_DIR}/${INSTANCE_NAME}"
 TS="$(date +%Y%m%d-%H%M%S)"
 ARTIFACT_DIR="${ARTIFACT_ROOT}/${INSTANCE_NAME}-${TS}"
@@ -137,6 +138,7 @@ ARTIFACT_DIR="${ARTIFACT_ROOT}/${INSTANCE_NAME}-${TS}"
 blu "=== Decommission Plan ==="
 echo "Instance:       ${INSTANCE_NAME}"
 echo "Homeserver:     ${MHS_NAME}"
+echo "Continuwuity:   ${CONTINUWUITY_NAME}"
 echo "Instance dir:   ${INSTANCE_DIR}"
 echo "Save creds:     ${SAVE_CREDS}"
 echo "Archive:        ${ARCHIVE}"
@@ -175,7 +177,7 @@ if [[ "$ARCHIVE" == true ]]; then
   fi
 
   mapfile -t VOLUMES < <(
-    docker inspect "$INSTANCE_NAME" "$MHS_NAME" 2>/dev/null \
+    docker inspect "$INSTANCE_NAME" "$MHS_NAME" "$CONTINUWUITY_NAME" 2>/dev/null \
       | grep -o '"Name": "[^"]*"' \
       | sed -E 's/"Name": "([^"]*)"/\1/' \
       | sort -u || true
@@ -205,8 +207,9 @@ fi
 
 docker rm -f "$INSTANCE_NAME" >/dev/null 2>&1 || true
 docker rm -f "$MHS_NAME" >/dev/null 2>&1 || true
+docker rm -f "$CONTINUWUITY_NAME" >/dev/null 2>&1 || true
 
-grn "Containers removed (if present): $INSTANCE_NAME, $MHS_NAME"
+grn "Containers removed (if present): $INSTANCE_NAME, $MHS_NAME, $CONTINUWUITY_NAME"
 
 if [[ -d "$INSTANCE_DIR" ]]; then
   rm -rf "$INSTANCE_DIR"

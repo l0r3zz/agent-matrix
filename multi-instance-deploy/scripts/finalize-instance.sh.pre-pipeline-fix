@@ -429,30 +429,6 @@ print(base64.urlsafe_b64encode(hash_bytes).decode().replace('=','')[:16])
 fi
 set -u
 
-
-# =========================================================================
-# STEP 7c: Install MCP server dependencies (npm install)
-# =========================================================================
-echo "[7c] Installing MCP server dependencies..."
-if docker exec "${INSTANCE_NAME}" test -f /a0/usr/workdir/matrix-mcp-server/package.json; then
-    docker exec "${INSTANCE_NAME}" /bin/bash -c "cd /a0/usr/workdir/matrix-mcp-server && npm install --production 2>&1" | tail -3
-    ok "MCP server dependencies installed"
-
-# STEP 7d: Install Matrix bot dependencies (pip install)
-echo ""
-echo "[7d] Installing Matrix bot dependencies..."
-if [ -f "${INSTANCE_DIR}/usr/workdir/matrix-bot/requirements.txt" ]; then
-    docker exec "${INSTANCE_NAME}" /bin/bash -c "cd /a0/usr/workdir/matrix-bot && /opt/venv-a0/bin/pip install -r requirements.txt 2>&1" | tail -5
-    ok "Matrix bot dependencies installed"
-else
-    warn "No requirements.txt found for matrix-bot, skipping"
-fi
-
-else
-    warn "package.json not found in MCP server directory"
-fi
-echo
-
 # Quick health check
 echo
 echo "============================================="
