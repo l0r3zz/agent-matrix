@@ -1,0 +1,134 @@
+#!/bin/bash
+# =============================================================================
+# startup-services.sh — Golden Template (v3.16)
+# =============================================================================
+# Persistent auto-start script for Matrix services on Agent Zero containers.
+# Launched via docker-compose command: runs in background alongside supervisord.
+# Lives on bind mount: /a0/usr/workdir/startup-services.sh
+#
+# Boot sequence:
+#   Phase 0: Apply runtime patches (auth bypass, token sync)
+#   Phase 1: Start MCP server (must be up before Agent Zero preload)
+#   Phase 2: Wait for Agent Zero API (localhost:80)
+#   Phase 3: Install Python dependencies (non-persistent, reinstalled each boot)
+#   Phase 4: Start Matrix bot
+# =============================================================================
+
+set -euo pipefail
+
+LOG="/a0/usr/workdir/startup-services.log"
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+
+log "========== startup-services.sh starting =========="
+
+# -------------------------------------------------------
+# PHASE 0: Apply runtime patches (idempotent)
+# Auth bypass: allows API access when mcp_server_token is empty
+# Token sync: computes and writes A0 API key to bot .env
+# -------------------------------------------------------
+log "Phase 0: Applying runtime patches..."
+
+# Patch 0a: Auth bypass for empty mcp_server_token
+if grep -q 'If no token configured, allow loopback access without auth' /a0/run_ui.py 2>/dev/null; then
+    log "  Patch 0a (auth bypass): already applied"
+else
+    python3 - << 'PATCH_EOF'
+import sys
+try:
+    with open('/a0/run_ui.py', 'r') as f:
+        content = f.read()
+    old = '        valid_api_key = get_settings()["mcp_server_token"]\n\n        if api_key := request.headers.get("X-API-KEY"):'
+    new = '        valid_api_key = get_settings()["mcp_server_token"]\n\n        # If no token configured, allow loopback access without auth\n        if not valid_api_key:\n            return await f(*args, **kwargs)\n\n        if api_key := request.headers.get("X-API-KEY"):'
+    if old in content:
+        content = content.replace(old, new)
+        with open('/a0/run_ui.py', 'w') as f:
+            f.write(content)
+        print('Patch 0a applied: empty-token bypass')
+    else:
+        print('Patch 0a: pattern not found (may be patched or code changed)')
+except Exception as e:
+    print(f'Patch 0a error: {e}', file=sys.stderr)
+PATCH_EOF
+    log "  Patch 0a (auth bypass): applied"
+fi
+
+# Patch 0b: Auto-compute A0 API token and sync to bot .env
+BOT_ENV="/a0/usr/workdir/matrix-bot/.env"
+if [ -f "$BOT_ENV" ]; then
+    NEW_TOKEN=$(cd /a0 && /opt/venv-a0/bin/python -c "
+import sys, hashlib, base64
+sys.path.insert(0, '/a0')
+try:
+    from python.helpers import dotenv, runtime
+    runtime_id = runtime.get_persistent_id()
+    username = dotenv.get_dotenv_value(dotenv.KEY_AUTH_LOGIN) or ''
+    password = dotenv.get_dotenv_value(dotenv.KEY_AUTH_PASSWORD) or ''
+    hash_bytes = hashlib.sha256(f'{runtime_id}:{username}:{password}'.encode()).digest()
+    b64_token = base64.urlsafe_b64encode(hash_bytes).decode().replace('=', '')
+    print(b64_token[:16])
+except Exception as e:
+    print('', end='')  # Empty on failure
+" 2>/dev/null)
+    if [ -n "$NEW_TOKEN" ]; then
+        sed -i "s|^A0_API_KEY=.*|A0_API_KEY=$NEW_TOKEN|" "$BOT_ENV"
+        log "  Patch 0b (token sync): updated A0_API_KEY=${NEW_TOKEN:0:8}..."
+    else
+        log "  Patch 0b (token sync): could not compute token (credentials may be empty)"
+    fi
+else
+    log "  Patch 0b (token sync): $BOT_ENV not found, skipping"
+fi
+
+log "Phase 0: Patches complete"
+
+# -------------------------------------------------------
+# PHASE 1: Start MCP server IMMEDIATELY
+# Must be up before Agent Zero preload connects to localhost:3000
+# -------------------------------------------------------
+if ! pgrep -f 'http-server.js' > /dev/null; then
+    log "Phase 1: Starting matrix-mcp-server..."
+    cd /a0/usr/workdir/matrix-mcp-server
+    # Install node deps if missing
+    if [ ! -d "node_modules" ] && [ -f "package.json" ]; then
+        log "  Installing npm dependencies..."
+        npm install --production --silent 2>> "$LOG" || log "  WARNING: npm install failed"
+    fi
+    nohup node dist/http-server.js >> mcp-server.log 2>&1 &
+    log "Phase 1: matrix-mcp-server started (pid $!)"
+else
+    log "Phase 1: matrix-mcp-server already running, skipping"
+fi
+
+# -------------------------------------------------------
+# PHASE 2: Wait for Agent Zero API (localhost:80)
+# The bot needs the API to forward messages
+# -------------------------------------------------------
+log "Phase 2: Waiting for Agent Zero API..."
+for i in $(seq 1 60); do
+    if curl -s -o /dev/null http://localhost:80; then
+        log "Phase 2: Agent Zero API ready (attempt $i)"
+        break
+    fi
+    sleep 2
+done
+
+# -------------------------------------------------------
+# PHASE 3: Install Python dependencies (wiped on restart)
+# -------------------------------------------------------
+log "Phase 3: Installing pip dependencies..."
+/opt/venv-a0/bin/pip install matrix-nio markdown aiohttp python-dotenv -q 2>> "$LOG"
+log "Phase 3: Dependencies installed"
+
+# -------------------------------------------------------
+# PHASE 4: Start Matrix bot
+# -------------------------------------------------------
+if ! pgrep -f 'matrix_bot.py' > /dev/null; then
+    log "Phase 4: Starting matrix-bot..."
+    cd /a0/usr/workdir/matrix-bot
+    nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &
+    log "Phase 4: matrix-bot started (pid $!)"
+else
+    log "Phase 4: matrix-bot already running, skipping"
+fi
+
+log "========== startup-services.sh complete =========="

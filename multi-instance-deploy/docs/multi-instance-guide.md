@@ -1,30 +1,29 @@
 # Agent Zero Multi-Instance Deployment Guide
 
-**Version:** 4.0 (Continuwuity Edition)
-**Date:** 2026-03-08
+**Version:** 3.10 (Fleet-Ready Edition)
+**Date:** 2026-03-04
 **Primary Host:** g2s.cybertribe.com (128GB RAM)
 
 ---
 
-## What's New in v4.0
+## What's New in v3.10
 
 | Change | Detail |
 | :--- | :--- |
-| **Homeserver migration** | Replaced Dendrite v0.15.2 with Continuwuity v0.5.6 (Rust-based Conduit fork) — resolves federation issues and reduces RAM to ~20-50MB |
-| **3-container architecture** | Each instance now runs Agent Zero + Continuwuity + Caddy TLS sidecar (was 2 containers) |
-| **Environment-based config** | Continuwuity configured entirely via `CONTINUWUITY_` environment variables in docker-compose.yml — no YAML config file |
-| **RocksDB embedded database** | No external database, no SQLite files — Continuwuity uses RocksDB internally |
-| **REST API registration** | Matrix accounts registered via `/_matrix/client/v3/register` with token auth — no `create-account` binary |
-| **Caddy TLS termination** | Caddy sidecar handles HTTPS on port 8448 for federation and reverse-proxies port 8008 for Client API |
-| **Simplified key management** | No Matrix identity key generation needed — Continuwuity generates its own signing keys automatically |
-| **Registration token** | `CONTINUWUITY_REGISTRATION_TOKEN` auto-generated via `openssl rand -base64 32` during scaffolding |
-| **Self-signed certs removed** | Script no longer generates placeholder TLS certs — Caddy handles TLS using step-ca certs directly |
+| **Matrix key generation** | Replaced broken `ssh-keygen` / Docker `generate-keys` with Python-based generator that creates Dendrite-native `MATRIX PRIVATE KEY` format |
+| **Variable safety** | All variables pre-declared to prevent `set -u` unbound variable crashes |
+| **Database syntax patch** | Auto-applies `connection_string:` fix after dendrite.yaml generation |
+| **Gold standard template** | `dendrite.yaml.template` replaced with working agent0-2 config (includes `relay_api`, `room_server` blocks) |
+| **Federation-ready compose** | `docker-compose.yml.template` now includes `--https-bind-address :8448` command flag and TLS cert volume mounts |
+| **Self-signed TLS certs** | Script auto-generates placeholder certs so Dendrite starts cleanly; replace with step-ca certs for real federation |
+| **Matrix credentials** | Auto-generates random password, stores in `.env`, prints registration command with pre-filled password |
+| **Step-CA compatibility** | Documented `--not-after=8760h` (equals syntax required for Smallstep CLI v0.29.0), `--bundle` flag not supported |
 
 ---
 
 ## 1. Quick Start: Deploying a New Agent
 
-The v4.0 script handles everything — directory creation, config generation, API key injection, Caddyfile generation, and registration token creation — in a single command.
+The v3.8 script handles everything — directory creation, config generation, API key injection, and Matrix identity key generation — in a single command.
 
 ```bash
 # 1. Export keys (auto-injected into .env)
@@ -39,19 +38,15 @@ cd /opt/agent-zero/multi-instance-deploy
 cd /opt/agent-zero/agent0-3
 docker compose up -d
 
-# 4. Verify all 3 containers are running
-docker compose ps
-# Expected: agent0-3, agent0-3-continuwuity, agent0-3-mhs — all "Up"
-
-# 5. Check Continuwuity logs
-docker compose logs -f continuwuity
-# Expected: clean startup, RocksDB initialized, listening on port 6167
+# 4. Verify Dendrite is running clean
+docker compose logs -f dendrite
+# Expected: jetstream + MSC2946 warnings only, NO fatal errors
 ```
 
-> **Note:** Continuwuity generates its own signing keys on first start.
-> No manual key generation or self-signed cert creation is needed.
-> The Caddy sidecar handles TLS termination for federation on port 8448.
-> Deploy step-ca certs (Section 6) for trusted federation with Synapse.
+> **Note:** Steps 3-5 from v3.4 (manual key generation) are no longer needed.  
+> The script auto-generates a valid Matrix identity key AND self-signed TLS certs.  
+> Dendrite starts with federation listener on port 8448 immediately.  
+> Replace self-signed certs with step-ca certs (Section 6) for real federation.
 
 ---
 
@@ -75,14 +70,57 @@ Run `./create-instance.sh --help` at any time to see valid flavors, descriptions
 ## 4. Zero-Touch Environment
 
 The script automatically:
-1. **Creates directory structure** — `usr/`, `mhs/`, `mhs/continuwuity-data/`
-2. **Generates docker-compose.yml** — from template with correct IPs, MACs, ports, and `CONTINUWUITY_` environment variables
-3. **Generates Caddyfile** — from `Caddyfile.template` with instance-specific hostnames and TLS cert paths
-4. **Injects API Keys** — exported in your current shell
-5. **Sets the Profile** — via `A0_SET_agent_profile` in `.env`
-6. **Configures Models** — defaults to `gemini-2.0-flash-001` (Fast & Cheap)
-7. **Generates registration token** — `CONTINUWUITY_REGISTRATION_TOKEN` via `openssl rand -base64 32`
-8. **Matrix credentials** — Auto-generates random password, stores in `.env`, prints registration command with pre-filled values
+1. **Creates directory structure** — `usr/`, `mhs/`, `mhs/data/`
+2. **Generates docker-compose.yml** — from template with correct IPs, MACs, ports
+3. **Injects API Keys** — exported in your current shell
+4. **Sets the Profile** — via `A0_SET_agent_profile` in `.env`
+5. **Configures Models** — defaults to `gemini-2.0-flash-001` (Fast & Cheap)
+6. **Generates dendrite.yaml** — from gold standard template with `connection_string:` safety patch
+7. **Generates Matrix identity key** — native Dendrite `MATRIX PRIVATE KEY` format via Python
+8. **Generates self-signed TLS certs** — placeholder certs so Dendrite starts with port 8448 listener
+9. **Federation-ready compose** — `--https-bind-address :8448` command flag and TLS cert volume mounts baked in
+
+### 4.1 Matrix Identity Key Format
+
+Dendrite requires a proprietary PEM format — **NOT** OpenSSH or standard PKCS8:
+
+```
+-----BEGIN MATRIX PRIVATE KEY-----
+Key-ID: ed25519:<random6chars>
+
+<base64_encoded_32_byte_seed>
+-----END MATRIX PRIVATE KEY-----
+```
+
+**Important:**
+- `ssh-keygen -t ed25519` produces `OPENSSH PRIVATE KEY` → **REJECTED** by Dendrite (`keyBlock is nil`)
+- Dendrite's own `generate-keys` tool has a chicken-and-egg problem (needs config which needs key)
+- The v3.8 script uses a Python generator that creates the correct format directly
+- Each instance **MUST** have a unique key — never copy keys between agents
+
+### 4.2 Manual Key Generation (if needed)
+
+If you ever need to regenerate a key outside the script:
+
+```bash
+python3 -c "
+import base64, os, string, random
+seed = os.urandom(32)
+chars = string.ascii_letters + string.digits
+key_id = ''.join(random.choices(chars, k=6))
+key_b64 = base64.b64encode(seed).decode()
+lines = []
+lines.append('-----BEGIN MATRIX PRIVATE KEY-----')
+lines.append('Key-ID: ed25519:' + key_id)
+lines.append('')
+lines.append(key_b64)
+lines.append('-----END MATRIX PRIVATE KEY-----')
+with open('/opt/agent-zero/agent0-N/mhs/matrix_key.pem', 'w') as f:
+    f.write(chr(10).join(lines) + chr(10))
+print('Key generated: ed25519:' + key_id)
+"
+chmod 600 /opt/agent-zero/agent0-N/mhs/matrix_key.pem
+```
 
 ---
 
@@ -92,40 +130,28 @@ After `create-instance.sh` and `docker compose up -d`, federation requires TLS c
 
 ### 5.1 Register Matrix Account
 
-Continuwuity uses REST API registration with a token. The `create-instance.sh` script generates the token and prints the exact registration command. After `docker compose up -d`, run:
+The `create-instance.sh` script auto-generates a random password and prints the exact registration command. After `docker compose up -d`, run it:
 
 ```bash
-curl -s -X POST http://172.23.89.N:8008/_matrix/client/v3/register \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "username": "agent0-N",
-    "password": "<password-from-env>",
-    "auth": {
-      "type": "m.login.registration_token",
-      "token": "<registration-token-from-compose>"
-    }
-  }'
+docker exec -it agent0-N-mhs /usr/bin/create-account \
+  -config /etc/dendrite/dendrite.yaml \
+  -username agent0-N -password <auto-generated-password> -admin
 ```
 
-- The **password** is stored in `/opt/agent-zero/agent0-N/.env` as `MATRIX_PASSWORD`.
-- The **registration token** is in `docker-compose.yml` as `CONTINUWUITY_REGISTRATION_TOKEN`.
-- The response JSON contains `access_token` — save it to `.env` as `MATRIX_ACCESS_TOKEN` for the MCP server and bot.
+The password is stored in `/opt/agent-zero/agent0-N/.env` as `MATRIX_PASSWORD`.
+The returned `AccessToken` should also be saved to `.env` as `MATRIX_ACCESS_TOKEN` for the MCP server.
 
 ### 5.2 TLS Transport (The Secure Envelope)
 
-Caddy handles TLS termination for federation. The Caddyfile proxies:
-- **Port 8008** (HTTP) → Continuwuity internal port 6167 (Client API)
-- **Port 8448** (HTTPS/TLS) → Continuwuity internal port 6167 (Federation API)
+The `create-instance.sh` script generates **self-signed placeholder certificates** so Dendrite can start immediately with the federation listener on port 8448. However, real federation with Synapse requires trusted certificates from your `step-ca` infrastructure.
 
-For real federation with Synapse, deploy trusted certificates from your `step-ca` infrastructure.
-
-**To deploy step-ca certs:**
+**To upgrade from self-signed to step-ca certs:**
 
 1. **Generate**: Request a certificate for `agent0-N-mhs.cybertribe.com` (see Section 6)
-2. **Deploy**: Place `server.crt` and `server.key` inside the `mhs/` directory
+2. **Deploy**: Overwrite `server.crt` and `server.key` inside the `mhs/` directory
 3. **Permissions**: `chmod 600 server.key`
-4. **Restart**: `docker compose restart caddy`
-5. **Verify**: `curl -sk https://172.23.89.N:8448/_matrix/key/v2/server`
+4. **Restart**: `docker compose restart dendrite`
+5. **Verify**: `curl -k https://172.23.89.N:8448/_matrix/key/v2/server`
 
 ### 5.3 Synapse Gateway Whitelisting
 
@@ -138,7 +164,7 @@ Your central Synapse hub (v-site.net) must trust the new node:
 
 The matrix-mcp-server is a Node.js application that gives the agent Matrix
 capabilities (send messages, list rooms, manage invites, etc.) via the Model
-Context Protocol. It is **automatically deployed** by `create-instance.sh` v4.0+.
+Context Protocol. It is **automatically deployed** by `create-instance.sh` v3.11+.
 
 #### What create-instance.sh does automatically
 
@@ -154,7 +180,7 @@ Context Protocol. It is **automatically deployed** by `create-instance.sh` v4.0+
 
 After registering the Matrix account (Step 5.1), update the token:
 ```bash
-# Replace PENDING_REGISTRATION with the actual token from the registration response
+# Replace PENDING_REGISTRATION with the actual token from create-account output
 sed -i 's/PENDING_REGISTRATION/<actual_access_token>/' \
   /opt/agent-zero/agent0-N/usr/workdir/matrix-mcp-server/.env
 ```
@@ -216,11 +242,11 @@ The matrix-bot is a Python application that listens on Matrix rooms for incoming
 messages and routes them through the Agent Zero API for intelligent responses.
 This enables humans and other agents to communicate with the agent via any Matrix
 client (Element, FluffyChat, etc.). It is **automatically deployed** by
-`create-instance.sh` v4.0+.
+`create-instance.sh` v3.11+.
 
 #### How it works
 
-1. The bot connects to the Caddy reverse proxy (which fronts Continuwuity) using `matrix-nio`
+1. The bot connects to the agent's Dendrite homeserver using `matrix-nio`
 2. When invited to a room, it auto-joins
 3. When a message arrives, it forwards it to the Agent Zero `/api_message` endpoint
 4. The agent's response is posted back into the Matrix room
@@ -233,7 +259,6 @@ client (Element, FluffyChat, etc.). It is **automatically deployed** by
 - Generates a configured `.env` from `.env.template` with instance-specific
   homeserver URL, user ID, display name, and API key
 - Sets `MATRIX_ACCESS_TOKEN=PENDING_REGISTRATION` (updated after Step 5.1)
-- Sets `AGENT_IDENTITY=Agent0-N` for persona consistency in LLM responses
 
 #### Post-deployment steps
 
@@ -266,14 +291,13 @@ tail -f bot.log
 
 | Variable | Value | Purpose |
 | :--- | :--- | :--- |
-| `MATRIX_HOMESERVER_URL` | `http://agent0-N-mhs:8008` | Caddy reverse proxy (Docker DNS) |
+| `MATRIX_HOMESERVER_URL` | `http://agent0-N-mhs:8008` | Dendrite client API (Docker DNS) |
 | `MATRIX_USER_ID` | `@agent0-N:agent0-N-mhs.cybertribe.com` | Bot's Matrix identity |
-| `MATRIX_ACCESS_TOKEN` | Token string | From REST API registration (Step 5.1) |
+| `MATRIX_ACCESS_TOKEN` | Token string | From `create-account` (Step 5.1) |
 | `MATRIX_DEVICE_ID` | `AgentZeroBot` | Device identifier for sync |
 | `A0_API_URL` | `http://localhost:80/api_message` | Agent Zero API endpoint |
 | `A0_API_KEY` | Auto-generated | API key for Agent Zero authentication |
 | `BOT_DISPLAY_NAME` | `Agent0-N` | Display name in Matrix rooms |
-| `AGENT_IDENTITY` | `Agent0-N` | Identity string prepended to LLM context for persona consistency |
 | `TRIGGER_PREFIX` | (empty) | Optional prefix to filter messages |
 | `SYNC_TIMEOUT_MS` | `30000` | Matrix sync polling interval |
 
@@ -394,12 +418,12 @@ scp server.crt server.key g2s:/opt/agent-zero/agent0-N/mhs/
 ### 6.4 File Permissions & Restart (on g2s)
 ```bash
 chmod 600 /opt/agent-zero/agent0-N/mhs/server.key
-cd /opt/agent-zero/agent0-N && docker compose restart caddy
+cd /opt/agent-zero/agent0-N && docker compose down && docker compose up -d
 ```
 
 ### 6.5 Verify Federation Locally
 ```bash
-curl -sk https://172.23.89.N:8448/_matrix/key/v2/server
+docker exec agent0-N-mhs wget -qO- --no-check-certificate https://localhost:8448/_matrix/key/v2/server
 ```
 
 ### 6.6 Verify Federation from Synapse Gateway
@@ -491,10 +515,10 @@ address=/agent0-N-mhs.cybertribe.com/172.23.89.N
 
 | Instance | Host | Agent IP | MHS IP | Profile | Federation | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| agent0-1 | g2s | 172.23.88.1 | 172.23.89.1 | standard | ✅ Verified | Continuwuity |
-| agent0-2 | g2s | 172.23.88.2 | 172.23.89.2 | standard | ✅ Verified | Dendrite (pending) |
-| agent0-3 | g2s | 172.23.88.3 | 172.23.89.3 | standard | ✅ Verified | Dendrite (pending) |
-| agent0-4 | g2s | 172.23.88.4 | 172.23.89.4 | hacker | ✅ Verified | Continuwuity |
+| agent0-1 | tarnover | 172.23.88.1 | 172.23.89.1 | standard | TBD | Legacy |
+| agent0-2 | g2s | 172.23.88.2 | 172.23.89.2 | standard | ✅ Verified | Sovereign |
+| agent0-3 | g2s | 172.23.88.3 | 172.23.89.3 | standard | ✅ Verified | Sovereign |
+| agent0-4 | g2s | 172.23.88.4 | 172.23.89.4 | — | Pre-wired | Available |
 | agent0-5 | g2s | 172.23.88.5 | 172.23.89.5 | — | Pre-wired | Available |
 
 ---
@@ -503,22 +527,51 @@ address=/agent0-N-mhs.cybertribe.com/172.23.89.N
 
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
-| `401 Unauthorized` on registration | Wrong or missing registration token | Check `CONTINUWUITY_REGISTRATION_TOKEN` in docker-compose.yml matches the token in your curl command |
-| `M_FORBIDDEN` on registration | Registration disabled or token auth not enabled | Verify `CONTINUWUITY_ALLOW_REGISTRATION=true` and `CONTINUWUITY_REGISTRATION_TOKEN` are set in compose |
-| Caddy refuses to start | Invalid Caddyfile or cert path mismatch | Run `docker compose logs caddy` — check `server.crt` and `server.key` exist in `mhs/` |
-| Port 8448 unreachable | Caddy not running or TLS cert missing | `docker compose ps` to verify caddy container is up; check Caddyfile TLS paths |
-| Port 8008 unreachable | Continuwuity not running or Caddy proxy misconfigured | Verify continuwuity container is healthy: `docker compose logs continuwuity` |
-| `CONTINUWUITY_` env var ignored | Typo in variable name or wrong container | All `CONTINUWUITY_` vars must be in the `continuwuity` service section of docker-compose.yml |
-| Federation signing key mismatch | Stale signing keys after DB wipe | Delete `mhs/continuwuity-data/` and restart — Continuwuity regenerates keys; re-register the account |
-| Bot gets `401` after migration | Access token invalidated by homeserver change | Re-register account (Step 5.1), update token in bot and MCP server `.env` files |
+| `keyBlock is nil` | Wrong key format (OpenSSH instead of MATRIX PRIVATE KEY) | Regenerate with Python generator (Section 4.2) |
 | `unbound variable` | Script variable used before declaration | Ensure all vars initialized at top of script |
-| Caddy `TLS handshake error` | Expired or malformed step-ca cert | Regenerate cert (Section 6), ensure CA chain is bundled in `server.crt` |
-| `@conduit:` admin bot messages | Normal Continuwuity behavior | Continuwuity's internal admin bot uses `@conduit:` prefix (Conduit heritage) — safe to ignore |
+| `connection: unsupported` | Old `connection:` key in dendrite.yaml | Run `sed -i 's/connection:/connection_string:/g'` on the file |
+| Missing `relay_api` / `room_server` | Outdated dendrite.yaml.template | Replace template with gold standard from agent0-2 |
+| Port 8448 unreachable | No TLS listener configured | Add `--https-bind-address :8448` to docker-compose command + mount certs |
+| Container can't read key | Permission mismatch | `chmod 600` + `chown 1000:1000` on matrix_key.pem |
 
+---
 
-## Zero-Touch Hardening v3.17
-See: ./zero-touch-hardening-v3.17.md
+## Bot Display Names (Matrix Aliases)
 
+Matrix bots can have custom display names ("aliases") that show up in Element rooms next to their messages.
 
-## Instance Acceptance Validation
-See: ./validate-instance-guide.md
+### Configuration
+
+Set in your `.env` file:
+```bash
+BOT_DISPLAY_NAME=My Awesome Bot    # Shows as "My Awesome Bot" in all rooms
+AGENT_IDENTITY=Agent Zero          # Used in system prompts
+```
+
+The bot automatically sets this name on startup.
+
+### Runtime Changes
+
+Use the `set_display_name.py` utility to change names without restarting:
+
+```bash
+# Set global display name (all rooms)
+python3 set_display_name.py "New Name"
+
+# Set per-room display name
+python3 set_display_name.py "Room Helper" --room '!roomid:server.com'
+
+# Reset to default
+python3 set_display_name.py --reset
+
+# Show configuration
+python3 set_display_name.py --list
+```
+
+### Technical Details
+
+| Method | Scope | API Call |
+|--------|-------|----------|
+| Global | All rooms | `client.set_displayname()` |
+| Per-room | Specific room | `client.room_put_state(m.room.member)` |
+

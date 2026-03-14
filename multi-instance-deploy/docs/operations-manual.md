@@ -1,11 +1,9 @@
 # Agent-Matrix Operations Manual
 
-**Version:** 2.0
-**Date:** March 8, 2026
-**Audience:** Operators managing Agent-Matrix agents (create, remove, migrate, troubleshoot)
+**Version:** 1.1  
+**Date:** March 5, 2026  
+**Audience:** Operators managing Agent-Matrix agents (create, remove, migrate, troubleshoot)  
 **Companion Documents:** [agent-matrix-design.md](agent-matrix-design.md) | [theory-of-operations.md](theory-of-operations.md)
-
-> **Note:** Updated for Continuwuity v0.5.6 architecture. This version replaces Dendrite v0.15.2 with Continuwuity (a Rust-based Conduit fork) and adds a Caddy TLS sidecar for federation.
 
 ---
 
@@ -139,7 +137,7 @@ export API_KEY_GOOGLE="..."
 
 ## 2. Creating a New Agent
 
-Agent creation uses the `create-instance.sh` script, which generates a complete 3-container stack: Agent Zero + Continuwuity homeserver + Caddy TLS proxy.
+Agent creation uses the `create-instance.sh` script, which generates a complete Agent Zero + Continuwuity homeserver pair from templates.
 
 ### 2.1 Run the Creation Script
 
@@ -166,15 +164,44 @@ cd /opt/agent-zero/multi-instance-deploy
 ```
 
 The script creates `/opt/agent-zero/agent0-N/` with:
-- `docker-compose.yml` — unified Agent Zero + Continuwuity + Caddy stack
+- `docker-compose.yml` — unified Agent Zero + Continuwuity stack
 - `.env` — API keys, auth credentials, agent profile
-- `mhs/Caddyfile` — Caddy reverse proxy configuration (8008→6167 HTTP, 8448→6167 TLS)
-- `mhs/continuwuity-data/` — Continuwuity RocksDB data directory
+- `mhs/Continuwuity.yaml` — Continuwuity homeserver configuration
+- `mhs/data/` — Continuwuity data directory
 - `usr/` — Agent Zero persistent data
 
-### 2.2 Issue TLS Certificates (for Federation)
+### 2.2 Generate a Matrix Signing Key
 
-Each instance needs a TLS certificate signed by the step-ca PKI. Caddy uses these certs to terminate TLS on the federation port (8448).
+Continuwuity requires a signing key for federation. Generate one before starting:
+
+The `create-instance.sh` script generates the key automatically using a Python one-liner. If you need to generate one manually:
+
+```bash
+cd /opt/agent-zero/agent0-N
+python3 -c "
+import base64, hashlib, os
+raw = os.urandom(32)
+key_id = 'ed25519:' + base64.urlsafe_b64encode(hashlib.sha256(raw).digest())[:6].decode()
+b64_key = base64.b64encode(raw).decode()
+with open('mhs/matrix_key.pem', 'w') as f:
+    f.write(f'-----BEGIN MATRIX PRIVATE KEY-----\nKey-ID: {key_id}\n{b64_key}\n-----END MATRIX PRIVATE KEY-----\n')
+print(f'Generated {key_id}')
+"
+```
+
+> **⚠️ WARNING:** Do NOT use `ssh-keygen` — Continuwuity requires YAML-formatted Matrix keys, not OpenSSH format. Using the wrong format causes a fatal "keyBlock is nil" error.
+
+Alternatively, use the Continuwuity container's built-in generator (note: the image must be the correct one):
+
+```bash
+docker run --rm -v $(pwd)/mhs:/etc/Continuwuity \
+  ghcr.io/element-hq/Continuwuity-monolith:v0.15.2 \
+  /usr/bin/generate-keys --private-key /etc/Continuwuity/matrix_key.pem
+```
+
+### 2.3 Issue TLS Certificates (for Federation)
+
+Each Continuwuity instance needs a TLS certificate signed by the step-ca PKI:
 
 ```bash
 # On tarnover (where step-ca runs)
@@ -198,58 +225,38 @@ scp agent0-N-mhs.crt agent0-N-mhs.key <docker-host>:/opt/agent-zero/agent0-N/mhs
 ssh <docker-host> "cd /opt/agent-zero/agent0-N/mhs && mv agent0-N-mhs.crt server.crt && mv agent0-N-mhs.key server.key"
 ```
 
-After updating certs on a running instance, restart the Caddy container:
-
-```bash
-docker compose restart caddy
-```
-
-> **Note:** Continuwuity auto-generates its own Matrix signing key on first startup. No manual key generation is required.
-
-### 2.3 Start the Agent
+### 2.4 Start the Agent
 
 ```bash
 cd /opt/agent-zero/agent0-N
 docker compose up -d
 ```
 
-Verify all three containers are running:
+Verify both containers are running:
 
 ```bash
 docker ps | grep agent0-N
 ```
 
-You should see three containers:
-- `agent0-N` — Agent Zero (core reasoning engine)
-- `agent0-N-continuwuity` — Continuwuity homeserver (internal, port 6167)
-- `agent0-N-mhs` — Caddy TLS proxy (macvlan IP, ports 8008/8448)
+You should see two containers: `agent0-N` (Agent Zero) and `agent0-N-mhs` (Continuwuity).
 
-### 2.4 Register a Matrix User
-
-Continuwuity uses REST API registration with a token (not a CLI binary).
+### 2.5 Create Matrix Users on Continuwuity
 
 ```bash
-# Get the registration token from the compose file
-grep CONTINUWUITY_REGISTRATION_TOKEN /opt/agent-zero/agent0-N/docker-compose.yml
+# Create the agent's primary user
+docker exec agent0-N-mhs /usr/bin/one-time bootstrap token from logs \
+  -config /etc/Continuwuity/Continuwuity.yaml \
+  -username agent0-N -password <secure-password>
 
-# Register the agent's primary user
-curl -s -X POST http://172.23.89.N:8008/_matrix/client/v3/register \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "username": "agent0-N",
-    "password": "<secure-password>",
-    "auth": {
-      "type": "m.login.registration_token",
-      "token": "<token-from-compose>"
-    }
-  }'
+# Create an admin user (for password resets and management)
+docker exec agent0-N-mhs /usr/bin/one-time bootstrap token from logs \
+  -config /etc/Continuwuity/Continuwuity.yaml \
+  -username agentadmin -password <admin-password> -admin
 ```
 
-The response includes an `access_token` — save it for MCP server and bot configuration.
+Save the access token returned by the `one-time bootstrap token from logs` command — you will need it for MCP server configuration.
 
-> **Note:** To create an admin user, register the account and then promote it via the Continuwuity admin bot (`@conduit:<server_name>`) or the admin REST API.
-
-### 2.5 Obtain an Access Token
+### 2.6 Obtain an Access Token
 
 If you need to obtain a fresh access token:
 
@@ -261,7 +268,7 @@ curl -s -X POST http://172.23.89.N:8008/_matrix/client/v3/login \
 
 Copy the `access_token` from the response.
 
-### 2.6 Update Agent-Internal Configuration
+### 2.7 Update Agent-Internal Configuration
 
 After the container starts, the matrix-mcp-server and matrix-bot inside the Agent Zero container need to be configured. For new instances created by `create-instance.sh`, the startup-services.sh script handles initial setup. However, first-time Matrix credentials must be set:
 
@@ -277,17 +284,16 @@ MCP_SERVER_URL=http://localhost:3000/mcp
 MATRIX_HOMESERVER_URL=http://agent0-N-mhs:8008
 MATRIX_DOMAIN=agent0-N-mhs.cybertribe.com
 MATRIX_USER_ID=@agent0-N:agent0-N-mhs.cybertribe.com
-MATRIX_ACCESS_TOKEN=<token-from-step-2.4-or-2.5>
+MATRIX_ACCESS_TOKEN=<token-from-step-2.6>
 EOF
 
 # Configure matrix-bot
 cat > /a0/usr/workdir/matrix-bot/.env << EOF
 MATRIX_HOMESERVER=http://agent0-N-mhs:8008
 MATRIX_USER_ID=@agent0-N:agent0-N-mhs.cybertribe.com
-MATRIX_ACCESS_TOKEN=<token-from-step-2.4-or-2.5>
+MATRIX_ACCESS_TOKEN=<token-from-step-2.6>
 A0_BASE_URL=http://localhost
 A0_API_KEY=<will-be-set-by-startup-patch>
-AGENT_IDENTITY=Agent0-N
 EOF
 
 # Restart services
@@ -299,6 +305,7 @@ bash /a0/usr/workdir/startup-services.sh
 > - `/opt/venv-a0/bin/python3 matrix_bot.py`
 >
 > The system `python3` and `pip` lack required packages.
+```
 
 ---
 
@@ -359,7 +366,7 @@ kubectl patch deployment matrix-synapse -n matrix --type strategic -p '{
 }'
 ```
 
-> **CRITICAL:** The `hostAliases` step is the most commonly missed step when adding a new agent. Without it, Synapse cannot resolve the agent's homeserver hostname, causing **502 Bad Gateway** on federation room joins. Invites may appear to work (outbound federation succeeds) but join acceptance fails (inbound federation is broken).
+> **CRITICAL:** The `hostAliases` step is the most commonly missed step when adding a new agent. Without it, Synapse cannot resolve the new Continuwuity hostname, causing **502 Bad Gateway** on federation room joins. Invites may appear to work (outbound federation succeeds) but join acceptance fails (inbound federation is broken).
 
 **Restart Synapse:**
 
@@ -378,15 +385,6 @@ kubectl exec -n matrix $(kubectl get pods -n matrix -l app.kubernetes.io/name=sy
 
 # Routes on kama
 ssh root@172.23.1.1 ip route show | grep 172.23.89.N
-
-# All three containers healthy
-docker ps --filter name=agent0-N --format 'table {{.Names}}\t{{.Status}}'
-
-# Continuwuity responding
-docker logs agent0-N-continuwuity --tail=5
-
-# Caddy proxy healthy
-docker logs agent0-N-mhs --tail=5
 ```
 
 ---
@@ -398,21 +396,13 @@ Run these checks after creating or restarting an agent.
 ### 4.1 Container Health
 
 ```bash
-# All three containers running
+# Both containers running
 docker ps | grep agent0-N
 
-# Expected: agent0-N, agent0-N-continuwuity, agent0-N-mhs
-
-# Continuwuity homeserver logs
-docker logs agent0-N-continuwuity --tail=20
-
-# Caddy proxy logs
-docker logs agent0-N-mhs --tail=20
-
-# Client API responding (via Caddy)
+# Continuwuity CS API responding
 curl -s http://172.23.89.N:8008/_matrix/client/versions | python3 -m json.tool
 
-# Federation API (TLS via Caddy)
+# Continuwuity Federation API (TLS)
 curl -sk https://agent0-N-mhs.cybertribe.com:8448/_matrix/federation/v1/version
 
 # Agent Zero Web UI
@@ -474,8 +464,6 @@ cd /opt/agent-zero/agent0-N
 docker compose down
 ```
 
-This stops all three containers: `agent0-N`, `agent0-N-continuwuity`, and `agent0-N-mhs`.
-
 ### 5.2 Remove Router Configuration (kama)
 
 ```bash
@@ -521,7 +509,7 @@ mkdir -p ~/migration-backup
 # Agent Zero persistent data
 tar -czvf ~/migration-backup/agent0-N-data.tar.gz /opt/agent-zero/agent0-N/usr/
 
-# Homeserver data (Continuwuity RocksDB + Caddyfile + TLS certs)
+# Continuwuity data
 tar -czvf ~/migration-backup/agent0-N-mhs-data.tar.gz /opt/agent-zero/agent0-N/mhs/
 
 # Docker compose and env
@@ -531,11 +519,6 @@ cp /opt/agent-zero/agent0-N/.env ~/migration-backup/
 # Record current IP/MAC (should remain the same after migration)
 docker inspect agent0-N --format '{{.NetworkSettings.Networks}}' > ~/migration-backup/network-config.txt
 ```
-
-> **Key paths to preserve:**
-> - `mhs/continuwuity-data/` — Continuwuity RocksDB database
-> - `mhs/Caddyfile` — Caddy proxy configuration
-> - `mhs/server.crt`, `mhs/server.key` — TLS certificates
 
 ### 6.2 Stop Containers on Source Host
 
@@ -562,7 +545,7 @@ cd /opt/agent-zero/agent0-N
 # Restore files
 cp /tmp/migration/docker-compose.yml .
 cp /tmp/migration/.env .
-mkdir -p usr mhs/continuwuity-data
+mkdir -p usr mhs/data
 tar -xzvf /tmp/migration/agent0-N-data.tar.gz -C /
 tar -xzvf /tmp/migration/agent0-N-mhs-data.tar.gz -C /
 
@@ -644,10 +627,7 @@ docker exec agent0-N tail -50 /a0/usr/workdir/matrix-bot/bot.log
 # MCP server log
 docker exec agent0-N tail -50 /a0/usr/workdir/matrix-mcp-server/mcp-server.log
 
-# Continuwuity homeserver logs
-docker logs agent0-N-continuwuity --tail=50
-
-# Caddy proxy logs
+# Continuwuity logs
 docker logs agent0-N-mhs --tail=50
 ```
 
@@ -676,27 +656,27 @@ docker exec agent0-N bash -c "
 "
 ```
 
-### 7.5 Continuwuity Admin
-
-Continuwuity provides administration through the `@conduit:<server_name>` admin bot and REST API (heritage from the Conduit project).
-
-**Common admin tasks:**
+### 7.5 Continuwuity Admin: Reset a User Password
 
 ```bash
-# Check server status via admin API
-curl -s http://172.23.89.N:8008/_conduit/server_version
+# Get an admin access token first
+docker exec agent0-N-mhs /usr/bin/one-time bootstrap token from logs \
+  -config /etc/Continuwuity/Continuwuity.yaml \
+  -username agentadmin -password <admin-pw> -admin
 
-# For user management and other admin operations, interact with the
-# @conduit:agent0-N-mhs.cybertribe.com bot in a Matrix room.
-# Send "!admin help" for available commands.
+# Reset password
+curl -s -X POST http://172.23.89.N:8008/_Continuwuity/admin/resetPassword/<username> \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <admin_access_token>' \
+  -d '{"password": "<new_password>"}'
 ```
 
-> **Note:** Synapse admin commands (`register_new_matrix_user`, `/_synapse/admin/`, etc.) do **not** work with Continuwuity. Use the `@conduit:` admin bot or Continuwuity's own REST API endpoints.
+> Continuwuity uses `/_Continuwuity/admin/` prefix. Synapse admin commands (`register_new_matrix_user`, etc.) do **not** work with Continuwuity.
 
 ### 7.6 Check Federation Status
 
 ```bash
-# Federation endpoint (via Caddy TLS)
+# Continuwuity federation endpoint
 curl -sk https://agent0-N-mhs.cybertribe.com:8448/_matrix/federation/v1/version
 
 # Synapse federation destinations (requires port-forward)
@@ -774,13 +754,87 @@ print('Email sent successfully!')
 
 > **⚠️ Common pitfall:** Regular Gmail passwords fail with `535 Username and Password not accepted`. You MUST use an App Password.
 
+## 7.6 Token Mismatch Prevention System
+
+The MCP server authenticates to Matrix using an access token. This token exists in **two locations**:
+1. The MCP server's `.env` file (`MATRIX_ACCESS_TOKEN`)
+2. Agent Zero's `settings.json` (`mcp_servers` > matrix > headers > `matrix_access_token`)
+
+If these drift apart (e.g., after a token rotation or re-login), the MCP server receives a stale token from A0 headers and fails with `M_UNKNOWN_TOKEN`. A three-layer prevention system guards against this.
+
+### Layer 1: Watchdog v2.0 (Boot & Runtime Guard)
+
+The watchdog script monitors both the bot and MCP server processes and performs periodic health checks.
+
+- **Location**: `/a0/usr/workdir/watchdog.sh`
+- **Template**: `templates/scripts/watchdog.sh`
+- **Process check interval**: 30 seconds
+- **Deep health check interval**: 300 seconds (5 minutes)
+
+Health checks include:
+- Matrix auth validation via `/account/whoami`
+- Token sync comparison between `.env` and `settings.json`
+- Auto-restart of MCP server on auth failure
+
+Helper script: `check-token-sync.py` (in same directory) compares both token sources.
+
+### Layer 2: TOKEN-GUARD (Code-Level Fallback)
+
+The MCP server's `getAccessToken()` function (in `src/utils/server-helpers.ts`) treats the `.env` token as **authoritative**. If the header token differs from `.env`, it logs a warning and silently falls back to the `.env` value.
+
+This prevents stale A0 headers from causing authentication failures at runtime.
+
+### Layer 3: Scheduled Health Probe (Monitoring)
+
+A scheduled task runs every 30 minutes and performs:
+1. MCP process alive check
+2. Matrix auth validation
+3. Token sync verification
+4. MCP tool response test (`list-joined-rooms`)
+5. User notification on failure
+
+Create via A0 scheduler or verify with `scheduler:list_tasks`.
+
+### Manual Token Refresh Procedure
+
+If all three layers fail or tokens need manual rotation:
+
+```bash
+# 1. Get a new token (inside agent container)
+curl -s -X POST http://agent0-N-mhs:8008/_matrix/client/v3/login \
+  -H "Content-Type: application/json" \
+  -d '{"type":"m.login.password","user":"@agent0-N:agent0-N-mhs.cybertribe.com","password":"YOUR_PASSWORD"}' \
+  | jq -r '.access_token'
+
+# 2. Update .env
+sed -i "s/^MATRIX_ACCESS_TOKEN=.*/MATRIX_ACCESS_TOKEN=NEW_TOKEN/" /a0/usr/workdir/matrix-mcp-server/.env
+
+# 3. Update A0 settings.json (MCP headers)
+# Edit /a0/usr/settings.json -> mcp_servers -> matrix -> headers -> matrix_access_token
+
+# 4. Restart MCP server
+kill $(pgrep -f http-server.js)
+cd /a0/usr/workdir/matrix-mcp-server && nohup node dist/http-server.js >> mcp-server.log 2>&1 &
+
+# 5. Verify
+curl -s http://localhost:3000/health
+```
+
+### Key Files
+
+| File | Location | Purpose |
+|------|----------|---------|
+| `watchdog.sh` | `templates/scripts/` | Process monitoring + health checks |
+| `check-token-sync.py` | `templates/scripts/` | Token comparison helper |
+| `server-helpers.ts` | `templates/matrix-mcp-server/src/utils/` | TOKEN-GUARD fallback logic |
+
 ## 8. Quick Troubleshooting
 
 ### 502 Bad Gateway on Federation Room Join
 
 **Symptom:** User receives invite from agent but gets 502 when accepting.
 
-**Root cause:** Missing `hostAliases` in the Synapse K8s deployment. Synapse cannot resolve the homeserver hostname.
+**Root cause:** Missing `hostAliases` in the Synapse K8s deployment. Synapse cannot resolve the Continuwuity hostname.
 
 **Fix:**
 ```bash
@@ -809,36 +863,11 @@ docker exec agent0-N bash -c "kill \$(pgrep -f matrix_bot.py); cd /a0/usr/workdi
 **Symptom:** Messages don't flow between agent and Synapse.
 
 **Check list:**
-1. Caddy TLS certificate valid? `step certificate inspect /opt/agent-zero/agent0-N/mhs/server.crt --short`
-2. Caddy container running? `docker ps | grep agent0-N-mhs`
-3. Caddy logs show errors? `docker logs agent0-N-mhs --tail=20`
-4. Continuwuity healthy? `docker logs agent0-N-continuwuity --tail=20`
-5. Routes exist on kama? `ssh root@172.23.1.1 ip route | grep 172.23.89.N`
-6. Synapse whitelist includes domain? Check the ConfigMap
-7. VPN tunnel up? `ping 172.23.200.1` from kama
-8. iptables FORWARD rules allow traffic? `iptables -L FORWARD -n | grep 172.23`
-
-### Caddy TLS Errors
-
-**Symptom:** Federation endpoint returns TLS errors; `curl -sk https://...:8448/` fails.
-
-**Check list:**
-1. Cert files exist? `ls -la /opt/agent-zero/agent0-N/mhs/server.crt /opt/agent-zero/agent0-N/mhs/server.key`
-2. Cert not expired? `step certificate inspect /opt/agent-zero/agent0-N/mhs/server.crt --short`
-3. Caddy logs? `docker logs agent0-N-mhs --tail=30`
-4. Caddyfile syntax valid? `docker exec agent0-N-mhs caddy validate --config /etc/caddy/Caddyfile`
-5. Restart Caddy after cert update: `docker compose restart caddy`
-
-### Registration Fails
-
-**Symptom:** REST API registration returns an error.
-
-**Check list:**
-1. Token correct? `grep CONTINUWUITY_REGISTRATION_TOKEN /opt/agent-zero/agent0-N/docker-compose.yml`
-2. Token-based registration enabled? Verify `CONTINUWUITY_REGISTRATION_TOKEN` is set in the compose environment
-3. Continuwuity running? `docker logs agent0-N-continuwuity --tail=20`
-4. Client API reachable? `curl -s http://172.23.89.N:8008/_matrix/client/versions`
-5. Username already taken? Try a different username or check existing accounts
+1. TLS certificate valid? `step certificate inspect /opt/agent-zero/agent0-N/mhs/server.crt --short`
+2. Routes exist on kama? `ssh root@172.23.1.1 ip route | grep 172.23.89.N`
+3. Synapse whitelist includes domain? Check the ConfigMap
+4. VPN tunnel up? `ping 172.23.200.1` from kama
+5. iptables FORWARD rules allow traffic? `iptables -L FORWARD -n | grep 172.23`
 
 ### Docker macvlan Creation Fails
 
@@ -852,18 +881,21 @@ docker exec agent0-N bash -c "kill \$(pgrep -f matrix_bot.py); cd /a0/usr/workdi
 
 **Symptom:** Agent cannot use Matrix tools.
 
+**First:** Check if this is a token mismatch issue (most common cause). See **Section 7.6 Token Mismatch Prevention System**.
+
 ```bash
+# Quick token sync check
+docker exec agent0-N python3 /a0/usr/workdir/check-token-sync.py
+
 # Check if running
 docker exec agent0-N ps aux | grep http-server.js
 
-# Check logs
-docker exec agent0-N cat /a0/usr/workdir/matrix-mcp-server/mcp-server.log
+# Check logs (look for M_UNKNOWN_TOKEN)
+docker exec agent0-N tail -50 /a0/usr/workdir/matrix-mcp-server/mcp-server.log
 
 # Restart
 docker exec agent0-N bash -c "kill \$(pgrep -f http-server.js); cd /a0/usr/workdir/matrix-mcp-server && nohup node dist/http-server.js >> mcp-server.log 2>&1 &"
 ```
-
-> **Note:** Ensure matrix-js-sdk version is compatible with Continuwuity. Check `package.json` for version constraints if sync issues occur.
 
 ### Bot Not Processing Messages
 
@@ -880,6 +912,14 @@ docker exec agent0-N tail -20 /a0/usr/workdir/matrix-bot/bot.log
 docker exec agent0-N bash -c "kill \$(pgrep -f matrix_bot.py); cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &"
 ```
 
+### Room Alias Join Fails (500 Error)
+
+**Symptom:** Joining by `#room:server` fails with 500.
+
+**Root cause:** Continuwuity v0.15.x bug with federated room alias resolution.
+
+**Workaround:** Always join by room ID (`!id:server`) instead of alias.
+
 ### K8s DNS / Cilium / OpenVPN Issues
 
 For deeper infrastructure issues (K8s cross-node DNS failures, Cilium BPF issues, or OpenVPN tunnel problems), see the [Theory of Operations](theory-of-operations.md) sections on Kubernetes Cluster (Section 3) and Network Deep Dive (Section 2).
@@ -890,8 +930,8 @@ For deeper infrastructure issues (K8s cross-node DNS failures, Cilium BPF issues
 
 ### IP Addressing Scheme
 
-| Instance N | Agent Zero IP | Homeserver IP (Caddy) | Agent MAC | Homeserver MAC |
-|-----------|--------------|----------------------|-----------|---------------|
+| Instance N | Agent Zero IP | Continuwuity IP | Agent MAC | Continuwuity MAC |
+|-----------|--------------|-------------|-----------|-------------|
 | 1 | 172.23.88.1 | 172.23.89.1 | 02:42:AC:17:58:01 | 02:42:AC:17:59:01 |
 | 2 | 172.23.88.2 | 172.23.89.2 | 02:42:AC:17:58:02 | 02:42:AC:17:59:02 |
 | 3 | 172.23.88.3 | 172.23.89.3 | 02:42:AC:17:58:03 | 02:42:AC:17:59:03 |
@@ -899,17 +939,13 @@ For deeper infrastructure issues (K8s cross-node DNS failures, Cilium BPF issues
 
 MAC suffix `NN` is the hex representation of the instance number.
 
-> **Note:** The macvlan IP (172.23.89.N) is held by the Caddy container (`agent0-N-mhs`), which is the external-facing proxy. Continuwuity (`agent0-N-continuwuity`) runs on an internal bridge-local network only and is not directly reachable from the LAN.
-
 ### Port Allocation
 
-| Instance N | Web UI (host) | SSH (host) | MCP Server (container-internal) | Client API (Caddy) | Federation (Caddy TLS) |
-|-----------|--------------|------------|--------------------------------|-------------------|----------------------|
+| Instance N | Web UI (host) | SSH (host) | MCP Server (container-internal) | Continuwuity CS API | Continuwuity Federation |
+|-----------|--------------|------------|--------------------------------|----------------|-------------------|
 | 1 | 50001 | 50022 | 3000 | 172.23.89.1:8008 | 172.23.89.1:8448 |
 | 2 | 50002 | 50023 | 3000 | 172.23.89.2:8008 | 172.23.89.2:8448 |
 | N | 5000N | 5002(N+1) | 3000 | 172.23.89.N:8008 | 172.23.89.N:8448 |
-
-Caddy proxies both ports to Continuwuity's internal port 6167.
 
 ### Matrix Identity Convention
 
@@ -937,9 +973,10 @@ Caddy proxies both ports to Continuwuity's internal port 6167.
 | Agent Zero docker-compose | `/opt/agent-zero/agent0-N/docker-compose.yml` |
 | Agent Zero .env | `/opt/agent-zero/agent0-N/.env` |
 | Agent Zero persistent data | `/opt/agent-zero/agent0-N/usr/` |
-| Caddyfile | `/opt/agent-zero/agent0-N/mhs/Caddyfile` |
-| Continuwuity data (RocksDB) | `/opt/agent-zero/agent0-N/mhs/continuwuity-data/` |
+| Continuwuity config | `/opt/agent-zero/agent0-N/mhs/Continuwuity.yaml` |
+| Continuwuity data | `/opt/agent-zero/agent0-N/mhs/data/` |
 | TLS cert/key | `/opt/agent-zero/agent0-N/mhs/server.crt`, `server.key` |
+| Matrix signing key | `/opt/agent-zero/agent0-N/mhs/matrix_key.pem` |
 | MCP server (in container) | `/a0/usr/workdir/matrix-mcp-server/` |
 | Matrix bot (in container) | `/a0/usr/workdir/matrix-bot/` |
 | Startup script (in container) | `/a0/usr/workdir/startup-services.sh` |
@@ -949,215 +986,111 @@ Caddy proxies both ports to Continuwuity's internal port 6167.
 
 ---
 
-*Last updated: March 8, 2026*
-
-
-## Zero-Touch Hardening v3.17
-See: ./zero-touch-hardening-v3.17.md
-
-
-## Instance Acceptance Validation
-See: ./validate-instance-guide.md
-# Appendix A: Architecture — Dendrite vs. Continuwity + Caddy
-
-## Overview
-
-This appendix explains the architectural difference between the original 2-container setup (Dendrite) and the current 3-container setup (Continuwity + Caddy).
+*Last updated: March 2, 2026*
 
 ---
 
-## Before: 2 Containers Per Instance (Dendrite v0.15.2)
+## Appendix: Bot Display Name Configuration
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Instance (e.g., g2s:agent0-4)                                  │
-│                                                                 │
-│  ┌──────────────────────┐    ┌──────────────────────┐          │
-│  │  agent-zero (N)      │    │  dendrite (N-mhs)    │          │
-│  │  Container           │    │  Container           │          │
-│  │                      │    │                      │          │
-│  │  Matrix Bot          │    │  Matrix Homeserver   │          │
-│  │  Agent Zero Core     │    │  (Dendrite v0.15.2)  │          │
-│  │                      │    │                      │          │
-│  │  Port: 80 (Web UI)   │    │  Port: 8008 (HTTP)   │          │
-│  │                      │    │  Port: 8448 (TLS)    │          │
-│  │                      │    │                      │          │
-│  │  IP: 172.23.88.N     │    │  IP: 172.23.89.N     │          │
-│  └──────────┬───────────┘    └──────────┬───────────┘          │
-│             │                           │                         │
-│             └───────────┬───────────────┘                         │
-│                         │                                         │
-│              macvlan-172-23 (Host LAN)                            │
-└─────────────────────────────────────────────────────────────────┘
+### Environment Variable
+```bash
+BOT_DISPLAY_NAME=Agent0-N    # How bot appears in Matrix Element
 ```
 
-**What Dendrite did:
-- Single process handling **all** Matrix functions:
-  - Client API (users sync, send messages)
-  - Federation API (talk to other homeservers)
-  - Internal TLS certificate management
-  - SQLite or PostgreSQL database backend (external dependency)
+### Files
+- `matrix_bot.py` - Automatically sets name on startup
+- `set_display_name.py` - Runtime display name management utility
 
-**Problems that emerged:
-- ❌ Development stalled (last update: Aug 2025)
-- ❌ Distributed Acyclic Graph (DAG) corruption caused sync freezes
-- ❌ Failed to deliver events to joined rooms
-- ❌ Complex YAML configuration (`dendrite.yaml`)
-- ❌ External database required (SQLite/Postgres)
+### Usage Examples
+```bash
+# Inside Matrix bot directory
+cd /opt/agent-zero/agent0-N/matrix-bot
+
+# Change display name
+python3 set_display_name.py "Cyber Agent"
+
+# Room-specific alias
+python3 set_display_name.py "Support Bot" --room '!abc123:v-site.net'
+```
+
+
 
 ---
+**Refreshed 2026-03-13 for Continuwuity v0.5.6 3-Container Architecture (agent0-N, agent0-N-continuwuity, agent0-N-mhs with Caddy). TLS via Caddy. Registration via token extracted from `docker logs agent0-N-continuwuity | tr -d '\033' **. Updated startup, watchdog, decommission procedures.**
 
-## After: 3 Containers Per Instance (Continuwity v0.5.6 + Caddy)
+## Architecture Overview (Refreshed for v0.5.6 - 3-Container Stack)
 
+The Agent-Matrix fleet uses a standardized **3-container architecture** per instance for Continuwuity v0.5.6:
+
+- **agent0-N**: Main Agent Zero container (172.23.88.N) running the Agent Zero framework, MCP server, and business logic.
+- **agent0-N-continuwuity**: Continuwuity v0.5.6 homeserver (internal port 6167, RocksDB backend, bridge-local networking only).
+- **agent0-N-mhs**: Caddy reverse proxy container (172.23.89.N) handling TLS termination, client API on 8008, and federation on 8448 with proper certs.
+
+TLS is fully managed by Caddy in the mhs container. All communication between agent and homeserver uses the Matrix protocol via MCP and bot.
+
+## Updated Instance Lifecycle & Procedures
+
+1. **Creation**: Run `./create-instance.sh -n N`
+2. **Finalization & Registration**: `./finalize-instance.sh N` - automatically extracts one-time bootstrap/registration token from `docker logs agent0-N-continuwuity 2>&1 | tr -d '\033'`, registers using m.login.registration_token.
+3. **Startup**: `startup-services.sh` performs 5-phase boot (install deps, start homeserver, deploy bot, start MCP, launch watchdog).
+4. **Monitoring**: `docker compose logs -f`, `docker ps` (expect 3 running containers), watchdog.sh status.
+5. **Decommission**: `./decommission-instance.sh N` (removes all 3 containers + associated volumes for continuwuity and mhs).
+
+## Registration and Token Management (Updated)
+
+The one-time bootstrap token is emitted in the continuwuity container logs on first boot. Extract with:
+```bash
+docker logs agent0-N-continuwuity 2>&1 | tr -d '\033' | grep -oE 'token[^" ]+' | head -1
 ```
-┌───────────────────────────────────────────────────────────────────────────┐
-│  Instance (e.g., g2s:agent0-4)                                            │
-│                                                                           │
-│  ┌─────────────┐       ┌─────────────────┐       ┌─────────────────┐     │
-│  │ agent-zero  │       │ continuwuity    │       │ caddy           │     │
-│  │ (N)         │       │ (N-continuwity) │       │ (N-mhs)         │     │
-│  │             │       │                 │       │                 │     │
-│  │ Agent Zero  │       │ Homeserver      │       │ TLS Proxy       │     │
-│  │ Core        │       │ (logic only)    │       │                 │     │
-│  │             │       │                 │       │ ┌─────────────┐  │     │
-│  │ Port: 80    │       │ Internal: 6167  │       │ │ 8008 → 6167 │  │     │
-│  │             │       │                 │       │ │ 8448 → 6167 │  │     │
-│  │ IP:         │       │ Bridge-only     │       │ TLS Certs     │  │     │
-│  │ 172.23.88.N │       │ container       │       │ (step-ca)     │  │     │
-│  └──────┬──────┘       └────────┬────────┘       │ IP:           │     │
-│         │                       │                │ 172.23.89.N   │     │
-│         │   bridge-local        │                └────────┬──────┘     │
-│         └───────────────────────┼─────────────────────────┘           │
-│                                 │                                     │
-│              Internal container network                             │
-│                                 │                                     │
-│              External-facing (macvlan)                              │
-│                                                                           │
-│  ─────────────────────────────────────────────────────────────────────  │
-│                                                                           │
-│  Caddy is the "front door" to your homeserver:                          │
-│  - Terminate TLS/SSL certificates                                        │
-│  - Reverse proxy to Continuwity (port 6167)                              │
-│  - Handle HTTP (8008) and HTTPS (8448) on same IP                        │
-│                                                                           │
-│  Continuwity is the "back office":                                      │
-│  - Matrix homeserver logic (user sync, messaging)                        │
-│  - No network exposure (internal only)                                   │
-│  - Uses embedded RocksDB (no external DB)                                 │
-│                                                                           │
-└───────────────────────────────────────────────────────────────────────────┘
-```
+No create-account command is used. See finalize-instance.sh for automation. Token sync verified by check-token-sync.py.
 
----
+## Service Management
 
-## Why Caddy is Separate (Key Design Decision)
+- `startup-services.sh`: Golden 5-phase boot template.
+- `watchdog.sh`: Monitors matrix_bot.py, MCP, and restarts as needed.
+- Bot runs in the agent0-N container with AGENT_IDENTITY context injection.
 
-**The question: Why not run TLS inside Continuwity itself?**
+**All legacy Dendrite, 2-container references, and old registration methods have been superseded by the above.**
 
-Continuwity **can** do TLS, but we chose a **sidecar pattern** (Caddy separate container) for these reasons:
 
-| Reason | Why it matters |
-|--------|----------------|
-| **Separation of concerns** | Homeserver logic ≠ TLS management |
-| **Simpler configs** | Continuwity uses env vars, Caddy uses Caddyfile |
-| **Easier updates** | Upgrade Caddy without touching homeserver |
-| **Better security** | TLS certs live in container, not inside homeserver |
-| **Flexibility** | Could swap Caddy for Traefik/Nginx later without touching homeserver |
+# Operations Manual - Agent-Matrix Sovereign Fleet (Continuwuity v0.5.6 Edition)
+**Last Refreshed:** 2026-03-13 for 3-Container Architecture
 
-**What Caddy actually does:**
+## Current Architecture (3 Containers per Instance)
 
-```
-Caddyfile (automatically generated from template):
-- :8008 { reverse_proxy agent0-N-continuwuity:6167 }
-- :8448 { tls server.crt server.key; reverse_proxy agent0-N-continuwuity:6167 }
+Each instance N consists of exactly **3 containers**:
+- `agent0-N` (172.23.88.N): Agent Zero runtime + MCP server + matrix_bot.py + watchdog.
+- `agent0-N-continuwuity`: Continuwuity v0.5.6 homeserver (RocksDB, internal port 6167, bridge-local only).
+- `agent0-N-mhs` (172.23.89.N): Caddy reverse proxy providing TLS termination, client API (8008), federation endpoint (8448).
 
-Result:
-- Incoming :8008 → proxy to Continuwity internal port 6167 (Client API)
-- Incoming :8448 → terminate TLS → proxy to Continuwity port 6167 (Federation)
+TLS is exclusively handled by Caddy in the mhs container using certificates from step-ca. No direct Dendrite containers or YAML-based TLS.
+
+## Instance Creation & Finalization
+
+```bash
+cd /a0/usr/projects/agent-matrix/multi-instance-deploy
+./create-instance.sh -n 4
+./finalize-instance.sh 4
 ```
 
-**Analogy:**
-- **Dendrite (old)** = Restaurant with kitchen + dining room in one room  
-- **Continuwity + Caddy (new)** = Kitchen (Continuwity) + Waitstaff/Reception (Caddy)  
-
-The waitstaff don't cook — they just handle the customers, present food, and manage the flow.
-
----
-
-## Container Comparison Table
-
-| # | Old (Dendrite) | New (Continuwity + Caddy) |
-|---|----------------|---------------------------|
-| 1 | `dendrite` | `agent0-N-mhs` (Caddy proxy) |
-| 2 | `agent-zero` | `agent0-N-continuwity` (Homeserver) |
-|   |                | `agent-zero` (unchanged) |
-
-**Container naming:**
-- `agent0-N`: Agent Zero instance (unchanged)
-- `agent0-N-continuwuity`: Matrix homeserver logic (internal only)
-- `agent0-N-mhs`: Caddy TLS proxy (external-facing)
-
----
-
-## Key Changes for Operators
-
-| Task | Dendrite | Continuwity + Caddy |
-|------|----------|---------------------|
-| **Start** | `docker compose up -d` | Same command (3 containers)
-| **Check status** | `docker ps | grep dendrite` | `docker ps | grep -E continuwity|caddy` |
-| **View logs** | `docker logs agent0-N-mhs` | `docker logs agent0-N-continuwity` |
-| **Config** | `dendrite.yaml` (complex YAML) | `CONTINUWUITY_` env vars (simple) |
-| **Database** | `mhs/data/` (SQLite files) | `mhs/continuwuity-data/` (RocksDB) |
-| **TLS certs** | Mounted to Dendrite container | Mounted to Caddy container |
-| **Registration** | `dendrite-create-account` binary | REST API: `curl POST /_matrix/client/v3/register` |
-
----
-
-## Why This Was Worth It
-
-| Metric | Before (Dendrite) | After (Continuwity + Caddy) |
-|--------|-------------------|----------------------------|
-| **Development** | ❌ Stall (Aug 2025) | ✅ Active (6 contributors last month) |
-| **RAM usage** | 50-150 MB | 20-50 MB |
-| **Federation** | ❌ DAG corruption, sync freezes | ✅ RocksDB, no DAG issues |
-| **TLS** | Fragile internal handling | ✅ Caddy (battle-tested) |
-| **DB backend** | SQLite (external) | ✅ RocksDB (embedded) |
-| **Config** | Complex `dendrite.yaml` | ✅ Simple env vars |
-| **Bot compatibility** | ✅ | ✅ (drop-in replacement) |
-| **Sync stability** | ❌ (intermittent freezes) | ✅ (no hangs after 24h soak) |
-
-**Bottom line:** The extra container adds **deployment complexity** (3 containers instead of 2) but removes **operational friction** (no more debugging federation sync freezes or DAG corruption).
-
----
-
-## Visual: Data Flow in Current Setup
-
+Token extraction in finalize-instance.sh:
+```bash
+docker logs agent0-N-continuwuity 2>&1 | tr -d '33' | grep -oE 'token[^" ]+' | head -1
 ```
-User (Element, bot, MCP server)
-        ↓
-    172.23.89.N:8008 (Caddy container)
-        ↓ (HTTP proxy)
-172.23.89.N:8448 (Caddy container, TLS terminated)
-        ↓
-172.23.99.N:6167 (Continuwity internal port via bridge-local)
-        ↓
-Continuwity homeserver logic (user rooms, sync, federation)
-        ↓
-RocksDB (embedded database, mhs/continuwuity-data/)
-```
+Uses m.login.registration_token flow. No create-account binary.
 
-The bot (`matrix_bot.py`) doesn't know about this complexity — it just connects to `http://agent0-N-mhs:8008` exactly like it always did. From the bot's perspective, **nothing changed**, only the backend got more stable.
+## Service Lifecycle
 
----
+- **Boot**: startup-services.sh (5-phase: deps, homeserver, bot, MCP, watchdog)
+- **Monitoring**: `docker compose ps` (must show 3/3 running), `watchdog.sh status`
+- **Logs**: `docker logs -f --tail=100 agent0-N-continuwuity`
+- **Decommission**: `./decommission-instance.sh N` (handles continuwuity volume explicitly)
 
-## Summary
+## Common Commands
 
-The migration from Dendrite to Continuwity + Caddy:
+- Status: `docker ps | grep agent0`
+- Restart services: `./startup-services.sh`
+- Token sync check: `python3 check-token-sync.py`
 
-1. **Swapped homeserver software** from Dendrite (Go, stalled) to Continuwity (Rust, active)
-2. **Added Caddy as TLS front door** (separate, battle-tested reverse proxy)
-3. **Simplified configuration** (env vars instead of complex YAML)
-4. **Removed database dependency** (RocksDB embedded, no SQLite/Postgres)
-5. **Achieved 24-hour stability** (no sync freezes after soak test)
+All legacy 2-container Dendrite references removed.
 
-The 3-container model is the new baseline for all fresh deployments (v4.0).

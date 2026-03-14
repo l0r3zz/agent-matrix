@@ -3,7 +3,6 @@
 This guide documents how to safely decommission an Agent-Matrix instance using:
 
 - `multi-instance-deploy/decommission-instance.sh`
-- `multi-instance-deploy/decommission_instannce.sh` (compatibility wrapper)
 
 ---
 
@@ -11,7 +10,7 @@ This guide documents how to safely decommission an Agent-Matrix instance using:
 
 The decommission script handles **instance teardown only**:
 
-- Stops/removes instance containers (`agent0-N`, `agent0-N-continuwuity`, `agent0-N-mhs`)
+- Stops/removes instance containers (`agent0-N`, `agent0-N-mhs`)
 - Removes instance directory (`/opt/agent-zero/agent0-N`)
 - Optionally saves credentials/certs/keys (`--save-creds`)
 - Optionally archives data + docker volumes (`--archive`)
@@ -39,7 +38,7 @@ Networking decommission is intentionally a separate concern.
 Compatibility alias:
 
 ```bash
-/a0/usr/projects/agent-matrix/multi-instance-deploy/decommission_instannce.sh
+/a0/usr/projects/agent-matrix/multi-instance-deploy/decommission-instance.sh
 ```
 
 ---
@@ -99,30 +98,6 @@ Typical contents:
 
 ---
 
----
-
-## Container Names (v4.0 Continuwuity Edition)
-
-As of v4.0, each instance has **three** containers:
-
-| Container | Purpose |
-| :--- | :--- |
-| `agent0-N` | Agent Zero (reasoning core, web UI) |
-| `agent0-N-continuwuity` | Continuwuity homeserver (Matrix server) |
-| `agent0-N-mhs` | Caddy TLS proxy (federation + client API) |
-
-### Data Paths
-
-| Path | Content |
-| :--- | :--- |
-| `/opt/agent-zero/agent0-N/usr/` | Agent Zero persistent data |
-| `/opt/agent-zero/agent0-N/mhs/continuwuity-data/` | Continuwuity RocksDB database |
-| `/opt/agent-zero/agent0-N/mhs/Caddyfile` | Caddy configuration |
-| `/opt/agent-zero/agent0-N/mhs/server.crt`, `server.key` | TLS certificates |
-
-> **Note:** Legacy Dendrite instances used `mhs/data/` for the database and `mhs/dendrite.yaml` for config.
-> Continuwuity uses environment variables (no YAML config) and stores data in `mhs/continuwuity-data/`.
-
 ## Recommended commands
 
 ### Interactive decommission (safe prompt)
@@ -143,10 +118,9 @@ As of v4.0, each instance has **three** containers:
 /a0/usr/projects/agent-matrix/multi-instance-deploy/decommission-instance.sh -y --save-creds --archive 2
 ```
 
-### Using compatibility wrapper
 
 ```bash
-/a0/usr/projects/agent-matrix/multi-instance-deploy/decommission_instannce.sh -y --save-creds --archive 3
+/a0/usr/projects/agent-matrix/multi-instance-deploy/decommission-instance.sh -y --save-creds --archive 3
 ```
 
 ---
