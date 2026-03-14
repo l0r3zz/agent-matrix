@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Matrix Bot for Agent Zero — Stable Edition
+Matrix Bot for Agent Zero — Stable Edition 
 ==========================================
 Simple, reliable Matrix bot that:
 - Connects to a Matrix homeserver
