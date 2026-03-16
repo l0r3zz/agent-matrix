@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Matrix Bot for Agent Zero — Stable Edition 
+Matrix Bot for Agent Zero — Stable Edition
 ==========================================
 Simple, reliable Matrix bot that:
 - Connects to a Matrix homeserver
@@ -249,10 +249,13 @@ async def on_message(
     if not body:
         return
 
+    # Check if this is a one-on-one room (exactly 2 members)
+    is_one_on_one = room.member_count == 2 if room else False
+
     # --- Trigger prefix check (prevent crosstalk) ---
     body_lower = body.lower()
     triggered = any(body_lower.startswith(p.lower()) for p in TRIGGER_PREFIXES)
-    if not triggered:
+    if not is_one_on_one and not triggered:
         log.debug("Ignoring (no trigger prefix): %s", body[:80])
         return
 
