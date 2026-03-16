@@ -129,7 +129,7 @@ cp "${MID_SRC}/operations-manual.md" "${MID_DST}/" 2>/dev/null || true
 cp "${MID_SRC}/agent-matrix-design.md" "${MID_DST}/" 2>/dev/null || true
 cp "${MID_SRC}/theory-of-operations.md" "${MID_DST}/" 2>/dev/null || true
 cp "${MID_SRC}/Migration.md" "${MID_DST}/" 2>/dev/null || true
-cp "${MID_SRC}/agent-matrix-design-next.md" "${MID_DST}/" 2>/dev/null || true
+cp "${MID_SRC}/continuwuity-migration.md" "${MID_DST}/" 2>/dev/null || true
 
 # Bundle 2: Create tarball
 cd /tmp
