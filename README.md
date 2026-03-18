@@ -1,2 +1,2 @@
 ![][AGENT-MATRIX-LOGO]
-(docs/agent-matrix-logo.png)
+[AGENT-MATRIX-LOGO](docs/agent-matrix-logo.png)
