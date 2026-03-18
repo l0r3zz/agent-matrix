@@ -1,9 +1,9 @@
 # Agent-Matrix: Decentralized AI Agents on a Private Matrix Federation
 
-**Version:** 5.0  
-**Date:** March 16, 2026  
+**Version:** 5.1  
+**Date:** March 17, 2026  
 **Status:** Five agents operational -- full federation, all on g2s, all Continuwuity  
-**Companion Documents:** [operations-manual.md](operations-manual.md) | [theory-of-operations.md](theory-of-operations.md)
+**Companion Documents:** [operations-manual.md](operations-manual.md) | [theory-of-operations.md](theory-of-operations.md) | [agent-matrix-project-retrospective.md](agent-matrix-project-retrospective.md)
 
 ---
 
@@ -19,6 +19,7 @@ Agent-Matrix is a platform for building decentralized networks of cooperating AI
 
 Give every AI agent a first-class communication identity on the [Matrix protocol](https://matrix.org), the same open standard used by the French government, the German Bundeswehr, and Mozilla for secure real-time messaging. Humans connect with standard Matrix clients like Element or FluffyChat. Agents connect through a bridge that translates between Matrix messages and their AI reasoning engine.
 
+The Agent of choice for this implementation is [Agent0](https://www.agent-zero.ai). [Agent0 is a sophisticated AI agent](https://www.agent-zero.ai/p/linux-foundation-article/) that can be configured to act as a personal assistant, a research assistant, or a general-purpose AI assistant. A much more mature (and secure) project than the notorious and viral OpenClaw.
 The result is a controlled lab environment for exploring agentic architectures, context engineering, and human-AI collaboration -- where all communication is observable, auditable, and built on open standards.
 
 ### Design principles
@@ -41,18 +42,18 @@ The system has three tiers: a public gateway cluster, a private network edge, an
                          └──────────────┬───────────────┘
                                         │ HTTPS :443
                          ┌──────────────▼───────────────┐
-                         │    Kubernetes Gateway (K8s)   │
-                         │  Synapse (federation hub)     │
-                         │  Element Web (client UI)      │
-                         │  Traefik + MetalLB + cert-mgr │
-                         │  OpenVPN sidecar              │
+                         │   Kubernetes Gateway (matrix)│
+                         │  Synapse (federation hub)    │
+                         │  Element Web (client UI)     │
+                         │  Traefik + MetalLB + cert-mg │
+                         │  OpenVPN sidecar             │
                          └──────────────┬───────────────┘
                                         │ Encrypted VPN Tunnel
                          ┌──────────────▼───────────────┐
-                         │       Edge Router (kama)      │
-                         │  DHCP + DNS (dnsmasq)         │
-                         │  OpenVPN server               │
-                         │  Per-agent /32 static routes  │
+                         │       Edge Router (kama)     │
+                         │  DHCP + DNS (dnsmasq)        │
+                         │  OpenVPN server              │
+                         │  Per-agent /32 static routes │
                          └──────┬───────────────┬───────┘
                                 │  Private LAN  │
                ┌────────────────▼──┐     ┌──────▼─────────────┐
