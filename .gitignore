@@ -211,3 +211,7 @@ scripts/bb-epub.sh
 
 # Agent Matrix specific
 *-NOCOPY
+*.key
+*.pem
+*.crt
+*.ovpn
