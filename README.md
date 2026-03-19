@@ -1,3 +1,3 @@
 ![][AGENT-MATRIX-LOGO]
 ---
-[AGENT-MATRIX-LOGO]: docs/agent-matrix-logo.png
+[AGENT-MATRIX-LOGO]: multi-instance-deploy/docs/agent-matrix-logo.png
