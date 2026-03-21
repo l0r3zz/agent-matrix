@@ -215,6 +215,5 @@ scripts/bb-epub.sh
 *.pem
 *.crt
 *.ovpn
-*/step_ca_password
-*/step_ca_provisioner_passwd
-synapse_admin_token
+multi-instance-deploy/scripts/step_ca_provisioner_passwd
+multi-instance-deploy/scripts/step_ca_password
