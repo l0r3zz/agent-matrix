@@ -95,6 +95,8 @@ if mcp_auth_check; then
     log "HEALTH: Initial auth PASSED"
 else
     log "HEALTH: Initial auth FAILED"
+    log "WATCHDOG: token mismatch detected; syncing settings.json MCP header token"
+    python3 /a0/usr/workdir/sync-mcp-token-into-settings.py >> "$LOG" 2>&1 || true
     restart_mcp "AUTH_FAILED"
 fi
 
@@ -120,6 +122,8 @@ while true; do
             token_sync_check
             if ! mcp_auth_check; then
                 log "HEALTH: Periodic auth FAILED"
+                log "WATCHDOG: token mismatch detected; syncing settings.json MCP header token"
+                python3 /a0/usr/workdir/sync-mcp-token-into-settings.py >> "$LOG" 2>&1 || true
                 restart_mcp "AUTH_FAILED"
             elif ! mcp_tool_check; then
                 log "HEALTH: Periodic tool FAILED"
