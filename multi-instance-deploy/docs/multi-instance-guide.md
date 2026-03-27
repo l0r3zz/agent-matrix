@@ -462,13 +462,18 @@ kubectl exec -it -n matrix <synapse-pod> -c matrix -- cat /data/homeserver.yaml 
 Before deploying any containers on **g2s**, the host networking must be configured to allow 'macvlan' traffic to reach the physical network through `eno1`.
 
 ### 7.1 Permanent Bridge Service (Systemd)
-Instead of manual `ip link` commands, use the `agent-bridge.service` to survive reboots:
+Instead of manual `ip link` commands, use the `agent-bridge.service` to survive reboots.
+
+> ⚠️ **Important**: If `mac0-macvlan.service` exists on the host (legacy service from older deployments), it **must be masked** before enabling `agent-bridge.service` to prevent conflicts. Both services manage `mac0` but only `agent-bridge.service` should run.
 
 ```bash
+# Step 1: Install the agent-bridge.service
 cat << 'EOF' | sudo tee /etc/systemd/system/agent-bridge.service
 [Unit]
 Description=Agent-Matrix Host Bridge (mac0)
-After=network-online.target
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
 
 [Service]
 Type=oneshot
@@ -480,14 +485,28 @@ ExecStart=/usr/bin/bash -c "\
   ip link set mac0 up && \
   ip route add 172.23.88.0/24 dev mac0 || true && \
   ip route add 172.23.89.0/24 dev mac0 || true"
+ExecStartPost=/usr/bin/bash -c "\
+  sleep 20 && \
+  for i in 1 2 3 4 5; do \
+    curl -s --connect-timeout 2 http://172.23.88.$i/ > /dev/null 2>&1 || true; \
+  done && \
+  echo 'macvlan ARP stimulation complete'"
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+# Step 2: Mask legacy conflicting service (if present)
+sudo systemctl mask --force mac0-macvlan.service 2>/dev/null || true
+
+# Step 3: Enable and start
+sudo systemctl daemon-reload
 sudo systemctl enable --now agent-bridge.service
 ```
 
+> 💡 **Why `After=docker.service` and `Requires=docker.service`?** This ensures `mac0` is always created after Docker starts, preventing post-reboot ARP warm-up failures where container macvlan interfaces announce themselves before the host bridge is ready to hear them.
+>
+> 💡 **Why `ExecStartPost`?** After a reboot, container macvlan interfaces may not send gratuitous ARP probes, leaving g2s unable to reach them by their macvlan IPs. The post-start script curls all agent IPs 20 seconds after boot to stimulate ARP resolution fleet-wide.
 ---
 
 ## 8. Router Configuration (kama.cybertribe.com)
