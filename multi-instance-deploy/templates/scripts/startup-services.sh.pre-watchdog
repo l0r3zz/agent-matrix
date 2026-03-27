@@ -122,10 +122,10 @@ log "Phase 3: Dependencies installed"
 # -------------------------------------------------------
 # PHASE 4: Start Matrix bot
 # -------------------------------------------------------
-if ! pgrep -f 'matrix_bot.py' > /dev/null; then
+if ! pgrep -f 'run-matrix-bot.sh\|matrix_bot.py\|matrix-bot-rust' > /dev/null; then
     log "Phase 4: Starting matrix-bot..."
     cd /a0/usr/workdir/matrix-bot
-    nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &
+    nohup ./run-matrix-bot.sh >> bot.log 2>&1 &
     log "Phase 4: matrix-bot started (pid $!)"
 else
     log "Phase 4: matrix-bot already running, skipping"

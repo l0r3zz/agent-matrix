@@ -1,0 +1,24 @@
+[package]
+name = "matrix-bot-rust"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "matrix-bot-rust"
+path = "src/main.rs"
+
+[[bin]]
+name = "set-display-name-rust"
+path = "src/bin/set_display_name.rs"
+
+[dependencies]
+anyhow = "1"
+dotenvy = "0.15"
+log = "0.4"
+env_logger = "0.11"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "fs"] }
+urlencoding = "2.1"
+pulldown-cmark = "0.12"

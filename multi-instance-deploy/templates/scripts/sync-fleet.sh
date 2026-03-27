@@ -88,15 +88,26 @@ for N in $INSTANCES; do
             cp "${BOT_DST}/.env" "${BOT_DST}/.env.sync-backup"
         fi
         if [ "$DRY_RUN" = true ]; then
-            echo "  [DRY-RUN] Would sync matrix-bot/*.py, requirements.txt"
+            echo "  [DRY-RUN] Would sync matrix-bot template (python + optional rust runtime files)"
         else
-            cp "${BOT_SRC}/matrix_bot.py" "${BOT_DST}/matrix_bot.py"
-            cp "${BOT_SRC}/requirements.txt" "${BOT_DST}/requirements.txt" 2>/dev/null || true
+            rsync -a \
+                --exclude='.env' \
+                --exclude='.env.sync-backup' \
+                --exclude='room_contexts.json' \
+                --exclude='bot.log' \
+                --exclude='bot.log.prev' \
+                --exclude='crash.log' \
+                --exclude='bot.pid' \
+                --exclude='.bot_runtime' \
+                "${BOT_SRC}/" "${BOT_DST}/"
+            chmod +x "${BOT_DST}/run-matrix-bot.sh" 2>/dev/null || true
+            chmod +x "${BOT_DST}/run-set-display-name.sh" 2>/dev/null || true
+            chmod +x "${BOT_DST}/build-rust.sh" 2>/dev/null || true
             # Restore instance .env (never overwrite)
             if [ -f "${BOT_DST}/.env.sync-backup" ]; then
                 mv "${BOT_DST}/.env.sync-backup" "${BOT_DST}/.env"
             fi
-            echo "  ✅ matrix-bot synced (matrix_bot.py, requirements.txt)"
+            echo "  ✅ matrix-bot synced (python + rust optional runtime assets)"
         fi
     else
         echo "  ⚠️  matrix-bot: source or dest missing, skipping"
@@ -138,14 +149,40 @@ for N in $INSTANCES; do
         fi
     fi
 
+    # --- Sync switch-matrix-bot.sh ---
+    SWITCH_SRC="${TEMPLATE_DIR}/scripts/switch-matrix-bot.sh"
+    SWITCH_DST="${WORKDIR}/switch-matrix-bot.sh"
+    if [ -f "$SWITCH_SRC" ]; then
+        if [ "$DRY_RUN" = true ]; then
+            echo "  [DRY-RUN] Would sync switch-matrix-bot.sh"
+        else
+            cp "$SWITCH_SRC" "$SWITCH_DST"
+            chmod +x "$SWITCH_DST"
+            echo "  ✅ switch-matrix-bot.sh synced"
+        fi
+    fi
+
+    # --- Sync smoke-test-matrix-bot.sh ---
+    SMOKE_SRC="${TEMPLATE_DIR}/scripts/smoke-test-matrix-bot.sh"
+    SMOKE_DST="${WORKDIR}/smoke-test-matrix-bot.sh"
+    if [ -f "$SMOKE_SRC" ]; then
+        if [ "$DRY_RUN" = true ]; then
+            echo "  [DRY-RUN] Would sync smoke-test-matrix-bot.sh"
+        else
+            cp "$SMOKE_SRC" "$SMOKE_DST"
+            chmod +x "$SMOKE_DST"
+            echo "  ✅ smoke-test-matrix-bot.sh synced"
+        fi
+    fi
+
     # --- Restart bots if requested ---
     if [ "$RESTART" = true ] && [ "$DRY_RUN" = false ]; then
         echo "  Restarting services..."
-        docker exec agent0-$N pkill -9 -f matrix_bot.py 2>/dev/null || true
+        docker exec agent0-$N pkill -9 -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust' 2>/dev/null || true
         docker exec agent0-$N pkill -9 -f 'node.*http-server' 2>/dev/null || true
         sleep 2
         docker exec -d agent0-$N bash -c 'cd /a0/usr/workdir/matrix-mcp-server && nohup node dist/http-server.js >> mcp-server.log 2>&1 &'
-        docker exec -d agent0-$N bash -c 'cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &'
+        docker exec -d agent0-$N bash -c 'cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh >> bot.log 2>&1 &'
         echo "  ✅ Services restarted"
     fi
 
