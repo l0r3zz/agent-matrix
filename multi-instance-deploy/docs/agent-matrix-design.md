@@ -391,7 +391,7 @@ The Agent-Matrix design provides:
 | Agent Homeserver | [Continuwuity](https://github.com/continuwuity/continuwuity) (Rust) | Lightweight per-agent Matrix homeserver (Conduit/Conduwuit fork) |
 | TLS Termination | [Caddy](https://caddyserver.com/) 2 (Alpine) | Reverse proxy with step-ca certificates for federation TLS |
 | Database | RocksDB (embedded in Continuwuity) | Per-agent persistent storage |
-| Matrix Bridge (reactive) | matrix-bot (Python) | Sync loop forwarding messages to Agent Zero |
+| Matrix Bridge (reactive) | matrix-bot runtime (Python default, Rust optional) | Sync loop forwarding messages to Agent Zero via `run-matrix-bot.sh` |
 | Matrix Bridge (proactive) | matrix-mcp-server (Node.js) | MCP tools for agent-initiated Matrix operations |
 | Container Runtime | Docker with macvlan networking | First-class LAN IPs per container |
 | Kubernetes | K8s 1.35 + Cilium CNI + MetalLB + Traefik | Gateway cluster infrastructure |

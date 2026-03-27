@@ -15,12 +15,23 @@ Run a deterministic acceptance test for a sovereign instance after create/restar
 - Agent and homeserver containers are running (`agent0-N`, `agent0-N-continuwuity`, `agent0-N-mhs`)
 - Continuwuity responds on 8008 (via Caddy) and 8448 (TLS via Caddy)
 - startup-services completed
-- `run_ui.py`, `http-server.js`, and `matrix_bot.py` are running
+- `run_ui.py`, `http-server.js`, and a matrix-bot runtime process (`run-matrix-bot.sh` or `matrix-bot-rust`) are running
 - `A0_API_KEY` exists and matches in bot + MCP env
 - `AGENT_IDENTITY` is set correctly in bot .env
 - API auth smoke does not return 401
 - Matrix `/sync` returns `next_batch`
 - (optional) room membership contains provided room id
+
+## Related Runtime Utilities
+
+```bash
+# Switch runtime mode (inside agent container)
+/a0/usr/workdir/switch-matrix-bot.sh --restart rust
+/a0/usr/workdir/switch-matrix-bot.sh --restart python
+
+# Quick bot runtime/process/log smoke test
+/a0/usr/workdir/smoke-test-matrix-bot.sh
+```
 
 ## Validation Commands
 
