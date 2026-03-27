@@ -81,7 +81,7 @@ restart_mcp() {
 }
 
 # Capture initial PIDs
-BOT_PID=$(ps -eo pid,cmd | grep '[p]ython.*matrix_bot' | awk '{print $1}' | head -1)
+BOT_PID=$(ps -eo pid,cmd | grep -E '[r]un-matrix-bot\.sh|[p]ython.*matrix_bot\.py|[m]atrix-bot-rust' | awk '{print $1}' | head -1)
 MCP_PID=$(ps -eo pid,cmd | grep '[n]ode.*http-server' | awk '{print $1}' | head -1)
 [ -n "$BOT_PID" ] && echo "$BOT_PID" > "$BOT_PIDFILE"
 [ -n "$MCP_PID" ] && echo "$MCP_PID" > "$MCP_PIDFILE"
@@ -107,7 +107,7 @@ while true; do
     if ! is_alive "$BOT_PIDFILE"; then
         log "WATCHDOG: matrix-bot DEAD -- restarting"
         cd /a0/usr/workdir/matrix-bot || continue
-        /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &
+        ./run-matrix-bot.sh >> bot.log 2>&1 &
         echo $! > "$BOT_PIDFILE"
         log "WATCHDOG: matrix-bot restarted PID=$!"
     fi

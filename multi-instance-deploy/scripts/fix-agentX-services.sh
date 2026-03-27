@@ -25,7 +25,7 @@ if [ $# -eq 0 ]; then
     echo "  2. Copy startup-services.sh to agent container"
     echo "  3. Run startup-services.sh to start services"
     echo "  4. Verify MCP server (http-server.js) running"
-    echo "  5. Verify matrix-bot (matrix_bot.py) running"
+    echo "  5. Verify matrix-bot runtime running"
     echo "  6. Show diagnostics and next steps"
     exit 1
 fi
@@ -87,10 +87,10 @@ else
 fi
 
 echo
-exec step 5: Verify matrix-bot (matrix_bot.py)..."
-BOT_CHECK=$(docker exec \$AGENT sh -c "ps aux 2>/dev/null | grep 'python.*matrix_bot.py' | grep -v grep" || echo "NOT RUNNING")
+exec step 5: Verify matrix-bot runtime..."
+BOT_CHECK=$(docker exec \$AGENT sh -c "ps aux 2>/dev/null | grep -E 'run-matrix-bot.sh|python.*matrix_bot.py|matrix-bot-rust' | grep -v grep" || echo "NOT RUNNING")
 echo "$BOT_CHECK"
-if echo "$BOT_CHECK" | grep -q "python.*matrix_bot.py"; then
+if ! echo "$BOT_CHECK" | grep -q "NOT RUNNING"; then
     BOT_PID=$(echo "$BOT_CHECK" | awk '{print \$2}')
     echo "OK: matrix-bot running (PID \$BOT_PID)"
 else

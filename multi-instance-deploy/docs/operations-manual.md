@@ -319,7 +319,7 @@ bash /a0/usr/workdir/startup-services.sh
 
 > **Note:** When manually starting the bot or installing pip packages, use the virtual environment:
 > - `/opt/venv-a0/bin/pip install -r requirements.txt`
-> - `/opt/venv-a0/bin/python3 matrix_bot.py`
+> - `cd /a0/usr/workdir/matrix-bot && ./run-matrix-bot.sh`
 >
 > The system `python3` and `pip` lack required packages.
 ```
@@ -429,8 +429,8 @@ curl -s -o /dev/null -w "%{http_code}" http://172.23.88.N
 ### 4.2 Internal Services
 
 ```bash
-# Check matrix-mcp-server and matrix-bot are running
-docker exec agent0-N ps aux | grep -E 'http-server.js|matrix_bot' | grep -v grep
+# Check matrix-mcp-server and matrix-bot runtime are running
+docker exec agent0-N ps aux | grep -E 'http-server.js|run-matrix-bot.sh|matrix-bot-rust|matrix_bot.py' | grep -v grep
 
 # MCP endpoint responding
 docker exec agent0-N curl -s -X POST http://localhost:3000/mcp \
@@ -653,9 +653,27 @@ docker logs agent0-N-mhs --tail=50
 ```bash
 docker exec agent0-N bash -c "
   kill \$(pgrep -f http-server.js) 2>/dev/null
-  kill \$(pgrep -f matrix_bot.py) 2>/dev/null
+  kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust') 2>/dev/null
   bash /a0/usr/workdir/startup-services.sh
 "
+```
+
+### 7.3.1 Switch Bot Runtime (Optional)
+
+Python remains default. Rust can be enabled per instance:
+
+```bash
+# Inside container
+docker exec -it agent0-N bash -lc 'cd /a0/usr/workdir && ./switch-matrix-bot.sh --restart rust'
+
+# Roll back to Python
+docker exec -it agent0-N bash -lc 'cd /a0/usr/workdir && ./switch-matrix-bot.sh --restart python'
+```
+
+Quick runtime/process/log validation:
+
+```bash
+docker exec agent0-N bash -lc '/a0/usr/workdir/smoke-test-matrix-bot.sh'
 ```
 
 ### 7.4 Rotate API Tokens
@@ -668,8 +686,8 @@ docker exec agent0-N bash /a0/usr/workdir/startup-patch.sh
 
 # Then restart the bot
 docker exec agent0-N bash -c "
-  kill \$(pgrep -f matrix_bot.py) 2>/dev/null
-  cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &
+  kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust') 2>/dev/null
+  cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh >> bot.log 2>&1 &
 "
 ```
 
@@ -745,9 +763,9 @@ EOF
 Restart the bot after updating:
 
 ```bash
-kill $(pgrep -f matrix_bot.py) 2>/dev/null
+kill $(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust') 2>/dev/null
 cd /a0/usr/workdir/matrix-bot
-/opt/venv-a0/bin/python3 matrix_bot.py &
+./run-matrix-bot.sh &
 ```
 
 ### Verification
@@ -872,7 +890,7 @@ kubectl rollout restart deployment matrix-synapse -n matrix
 **Fix:**
 ```bash
 docker exec agent0-N bash /a0/usr/workdir/startup-patch.sh
-docker exec agent0-N bash -c "kill \$(pgrep -f matrix_bot.py); cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &"
+docker exec agent0-N bash -c "kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust'); cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh >> bot.log 2>&1 &"
 ```
 
 ### Continuwuity Not Federating
@@ -920,13 +938,13 @@ docker exec agent0-N bash -c "kill \$(pgrep -f http-server.js); cd /a0/usr/workd
 
 ```bash
 # Check if running
-docker exec agent0-N ps aux | grep matrix_bot
+docker exec agent0-N ps aux | grep -E 'run-matrix-bot.sh|matrix-bot-rust|matrix_bot.py'
 
 # Check bot log for errors
 docker exec agent0-N tail -20 /a0/usr/workdir/matrix-bot/bot.log
 
 # Restart bot
-docker exec agent0-N bash -c "kill \$(pgrep -f matrix_bot.py); cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &"
+docker exec agent0-N bash -c "kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust'); cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh >> bot.log 2>&1 &"
 ```
 
 ### Room Alias Join Fails (500 Error)
@@ -1015,8 +1033,10 @@ BOT_DISPLAY_NAME=Agent0-N    # How bot appears in Matrix Element
 ```
 
 ### Files
-- `matrix_bot.py` - Automatically sets name on startup
-- `set_display_name.py` - Runtime display name management utility
+- `run-matrix-bot.sh` - Runtime launcher (Python default, Rust optional)
+- `matrix_bot.py` - Python bot implementation
+- `run-set-display-name.sh` - Runtime-aware display name utility wrapper
+- `set_display_name.py` - Python display name utility
 
 ### Usage Examples
 ```bash
@@ -1024,10 +1044,10 @@ BOT_DISPLAY_NAME=Agent0-N    # How bot appears in Matrix Element
 cd /opt/agent-zero/agent0-N/matrix-bot
 
 # Change display name
-python3 set_display_name.py "Cyber Agent"
+./run-set-display-name.sh "Cyber Agent"
 
 # Room-specific alias
-python3 set_display_name.py "Support Bot" --room '!abc123:v-site.net'
+./run-set-display-name.sh "Support Bot" --room '!abc123:v-site.net'
 ```
 
 
@@ -1064,7 +1084,7 @@ No create-account command is used. See finalize-instance.sh for automation. Toke
 ## Service Management
 
 - `startup-services.sh`: Golden 5-phase boot template.
-- `watchdog.sh`: Monitors matrix_bot.py, MCP, and restarts as needed.
+- `watchdog.sh`: Monitors matrix-bot runtime (`run-matrix-bot.sh` / Python / Rust), MCP, and restarts as needed.
 - Bot runs in the agent0-N container with AGENT_IDENTITY context injection.
 
 **All legacy Dendrite, 2-container references, and old registration methods have been superseded by the above.**
@@ -1076,7 +1096,7 @@ No create-account command is used. See finalize-instance.sh for automation. Toke
 ## Current Architecture (3 Containers per Instance)
 
 Each instance N consists of exactly **3 containers**:
-- `agent0-N` (172.23.88.N): Agent Zero runtime + MCP server + matrix_bot.py + watchdog.
+- `agent0-N` (172.23.88.N): Agent Zero runtime + MCP server + matrix-bot runtime + watchdog.
 - `agent0-N-continuwuity`: Continuwuity v0.5.6 homeserver (RocksDB, internal port 6167, bridge-local only).
 - `agent0-N-mhs` (172.23.89.N): Caddy reverse proxy providing TLS termination, client API (8008), federation endpoint (8448).
 

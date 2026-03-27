@@ -275,7 +275,7 @@ sed -i 's/PENDING_REGISTRATION/<actual_access_token>/' \
 docker exec -it agent0-N bash
 cd /a0/usr/workdir/matrix-bot
 /opt/venv-a0/bin/pip install -r requirements.txt
-/opt/venv-a0/bin/python3 matrix_bot.py &
+./run-matrix-bot.sh &
 
 # Check the log
 tail -f bot.log
@@ -300,6 +300,7 @@ tail -f bot.log
 | `BOT_DISPLAY_NAME` | `Agent0-N` | Display name in Matrix rooms |
 | `TRIGGER_PREFIX` | (empty) | Optional prefix to filter messages |
 | `SYNC_TIMEOUT_MS` | `30000` | Matrix sync polling interval |
+| `MATRIX_BOT_RUNTIME` | (unset / `python`) | Optional runtime override (`python` or `rust`) |
 
 #### Verification
 
@@ -354,7 +355,7 @@ FORCE_TLS=true
 After updating `.env`, restart the matrix-bot:
 
 ```bash
-docker exec agent0-N bash -c 'pkill -f matrix_bot.py; sleep 2; cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python3 matrix_bot.py > bot.log 2>&1 &'
+docker exec agent0-N bash -c 'pkill -9 -f "run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust"; sleep 2; cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh > bot.log 2>&1 &'
 ```
 
 #### Verification
@@ -571,20 +572,37 @@ The bot automatically sets this name on startup.
 
 ### Runtime Changes
 
-Use the `set_display_name.py` utility to change names without restarting:
+Use the runtime-aware wrapper to change names without restarting:
 
 ```bash
 # Set global display name (all rooms)
-python3 set_display_name.py "New Name"
+./run-set-display-name.sh "New Name"
 
 # Set per-room display name
-python3 set_display_name.py "Room Helper" --room '!roomid:server.com'
+./run-set-display-name.sh "Room Helper" --room '!roomid:server.com'
 
 # Reset to default
-python3 set_display_name.py --reset
+./run-set-display-name.sh --reset
 
 # Show configuration
-python3 set_display_name.py --list
+./run-set-display-name.sh --list
+```
+
+### Optional Runtime Switching (Python <-> Rust)
+
+Python remains the default runtime. Switch per instance only when desired:
+
+```bash
+# Inside container
+cd /a0/usr/workdir
+./switch-matrix-bot.sh --restart rust
+./switch-matrix-bot.sh --restart python
+```
+
+You can also validate runtime health quickly:
+
+```bash
+./smoke-test-matrix-bot.sh
 ```
 
 ### Technical Details
