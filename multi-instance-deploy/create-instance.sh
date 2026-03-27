@@ -173,6 +173,9 @@ if [ -d "${TEMPLATE_DIR}/matrix-bot" ]; then
             "${BOT_DIR}/.env.template" > "${BOT_DIR}/.env"
         rm -f "${BOT_DIR}/.env.template"
     fi
+    chmod +x "${BOT_DIR}/run-matrix-bot.sh" 2>/dev/null || true
+    chmod +x "${BOT_DIR}/run-set-display-name.sh" 2>/dev/null || true
+    chmod +x "${BOT_DIR}/build-rust.sh" 2>/dev/null || true
     echo "  Deployed to usr/workdir/matrix-bot/"
 else
     echo "  WARNING: matrix-bot template not found, skipping"
@@ -207,6 +210,24 @@ if [ -f "${SCRIPTS_SRC}/check-token-sync.py" ]; then
     echo "  Deployed check-token-sync.py"
 else
     echo "  WARNING: check-token-sync.py template not found, skipping"
+fi
+
+# 8d. switch-matrix-bot.sh (runtime selector: python|rust)
+if [ -f "${SCRIPTS_SRC}/switch-matrix-bot.sh" ]; then
+    cp "${SCRIPTS_SRC}/switch-matrix-bot.sh" "${WORKDIR}/switch-matrix-bot.sh"
+    chmod +x "${WORKDIR}/switch-matrix-bot.sh"
+    echo "  Deployed switch-matrix-bot.sh"
+else
+    echo "  WARNING: switch-matrix-bot.sh template not found, skipping"
+fi
+
+# 8e. smoke-test-matrix-bot.sh (runtime/process/log quick validator)
+if [ -f "${SCRIPTS_SRC}/smoke-test-matrix-bot.sh" ]; then
+    cp "${SCRIPTS_SRC}/smoke-test-matrix-bot.sh" "${WORKDIR}/smoke-test-matrix-bot.sh"
+    chmod +x "${WORKDIR}/smoke-test-matrix-bot.sh"
+    echo "  Deployed smoke-test-matrix-bot.sh"
+else
+    echo "  WARNING: smoke-test-matrix-bot.sh template not found, skipping"
 fi
 
 # --- Summary ---

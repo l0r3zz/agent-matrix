@@ -9,7 +9,7 @@ Checks:
   1) Containers running (agent0-N and agent0-N-mhs)
   2) Dendrite endpoints healthy (:8008 client versions, :8448 server key)
   3) startup-services completed latest cycle
-  4) Processes up (run_ui.py, http-server.js, matrix_bot.py)
+  4) Processes up (run_ui.py, http-server.js, matrix-bot runtime)
   5) Env invariants:
      - TRIGGER_PREFIX=agent0-N:
      - A0_API_KEY exists and matches bot/mcp env files
@@ -63,13 +63,19 @@ else
 fi
 
 # 4) process checks
-for p in "python /a0/run_ui.py" "node dist/http-server.js" "matrix_bot.py"; do
+for p in "python /a0/run_ui.py" "node dist/http-server.js"; do
   if docker exec "$AGENT" sh -lc "ps -ef | grep -F '$p' | grep -v grep >/dev/null"; then
     pass "process present: $p"
   else
     fail "process missing: $p"
   fi
 done
+
+if docker exec "$AGENT" sh -lc "ps -ef | grep -E 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust' | grep -v grep >/dev/null"; then
+  pass "process present: matrix-bot runtime"
+else
+  fail "process missing: matrix-bot runtime"
+fi
 
 # 5) env invariants
 BOT_KEY=$(docker exec "$AGENT" sh -lc "grep '^A0_API_KEY=' $BOT_ENV | tail -n1 | cut -d= -f2-" || true)
