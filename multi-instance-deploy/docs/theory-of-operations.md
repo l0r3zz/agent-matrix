@@ -549,7 +549,7 @@ command: /bin/bash -c '/a0/usr/workdir/startup-services.sh & exec /usr/bin/pytho
 | 2 | Wait for Agent Zero API | Polls http://localhost:80 every 2s for up to 60s |
 | 2.5 | Run startup-patch.sh | Computes deterministic API token, injects into bot .env |
 | 3 | Install pip dependencies | matrix-nio, markdown, aiohttp (wiped on each container restart) |
-| 4 | Start matrix-bot | Launches matrix_bot.py after API confirmed live |
+| 4 | Start matrix-bot | Launches `run-matrix-bot.sh` (Python default, Rust optional) |
 | 5 | Start watchdog | Monitors bot and MCP server processes, periodic health checks |
 
 ### 6.2 API Token Flow
@@ -568,7 +568,7 @@ Inputs:
 
 **startup-patch.sh** (Phase 2.5) computes this token at boot and injects it into `/a0/usr/workdir/matrix-bot/.env` as `A0_API_KEY`. Without this, a container restart leaves the bot with a stale token, causing 401 errors.
 
-### 6.3 matrix-bot (Python)
+### 6.3 matrix-bot (Python default, Rust optional)
 
 The reactive bridge component. Located at `/a0/usr/workdir/matrix-bot/`.
 
@@ -585,7 +585,11 @@ The reactive bridge component. Located at `/a0/usr/workdir/matrix-bot/`.
 **Key files:**
 | File | Path |
 |------|------|
-| Bot script | `/a0/usr/workdir/matrix-bot/matrix_bot.py` |
+| Bot launcher | `/a0/usr/workdir/matrix-bot/run-matrix-bot.sh` |
+| Python bot script | `/a0/usr/workdir/matrix-bot/matrix_bot.py` |
+| Runtime selector | `/a0/usr/workdir/matrix-bot/.bot_runtime` |
+| Runtime switch helper | `/a0/usr/workdir/switch-matrix-bot.sh` |
+| Runtime smoke test | `/a0/usr/workdir/smoke-test-matrix-bot.sh` |
 | Bot .env | `/a0/usr/workdir/matrix-bot/.env` |
 | Bot log | `/a0/usr/workdir/matrix-bot/bot.log` |
 | Room contexts | `/a0/usr/workdir/matrix-bot/room_contexts.json` |
@@ -663,7 +667,7 @@ Agents can send outbound email via Gmail SMTP. Configuration is per-instance via
     d. Caddy proxies to Continuwuity on port 6167
     e. Delivers event via Server-Server API
 5.  Continuwuity stores event, updates sync stream
-6.  matrix-bot (Python) receives event via sync response (polling Caddy :8008)
+6.  matrix-bot runtime receives event via sync response (polling Caddy :8008)
 7.  matrix-bot POSTs to Agent Zero /api_message with A0_API_KEY header
 8.  Agent Zero processes with LLM, generates response
 9.  Agent Zero returns response to matrix-bot
@@ -748,7 +752,7 @@ grep A0_API_KEY /a0/usr/workdir/matrix-bot/.env
 **Fix:**
 ```bash
 docker exec agent0-N bash /a0/usr/workdir/startup-patch.sh
-docker exec agent0-N bash -c "kill \$(pgrep -f matrix_bot.py); cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python3 matrix_bot.py >> bot.log 2>&1 &"
+docker exec agent0-N bash -c "kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust'); cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh >> bot.log 2>&1 &"
 ```
 
 ### 8.3 K8s: Cross-Node DNS Failure
@@ -1099,7 +1103,7 @@ dhcp-option=br0,121,0.0.0.0/0,172.23.1.1,172.23.200.0/24,172.23.1.1
 
 ```bash
 # Service status
-docker exec agent0-N ps aux | grep -E 'http-server.js|matrix_bot' | grep -v grep
+docker exec agent0-N ps aux | grep -E 'http-server.js|run-matrix-bot.sh|matrix-bot-rust|matrix_bot.py' | grep -v grep
 
 # Startup log
 docker exec agent0-N cat /a0/usr/workdir/startup-services.log
