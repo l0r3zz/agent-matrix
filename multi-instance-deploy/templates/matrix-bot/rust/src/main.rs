@@ -50,7 +50,7 @@ impl Config {
         let access_token = std::env::var("MATRIX_ACCESS_TOKEN").unwrap_or_default();
         let device_id = std::env::var("MATRIX_DEVICE_ID").unwrap_or_else(|_| "AgentZeroBot".to_string());
         let a0_api_url =
-            std::env::var("A0_API_URL").unwrap_or_else(|_| "http://localhost:80/api_message".to_string());
+            std::env::var("A0_API_URL").unwrap_or_else(|_| "http://localhost:80/api/api_message".to_string());
         let a0_api_key = std::env::var("A0_API_KEY").unwrap_or_default();
         let bot_display_name = std::env::var("BOT_DISPLAY_NAME").unwrap_or_else(|_| "Agent Zero".to_string());
         let agent_identity = std::env::var("AGENT_IDENTITY").unwrap_or_else(|_| bot_display_name.clone());
