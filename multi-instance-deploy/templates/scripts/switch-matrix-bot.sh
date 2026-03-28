@@ -61,7 +61,7 @@ if [[ -n "$INSTANCE" ]]; then
 
     if [[ "$RESTART" == true ]]; then
         docker exec "$AGENT" sh -lc "pkill -9 -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust' 2>/dev/null || true"
-        docker exec -d "$AGENT" sh -lc "cd '${BOT_DIR}' && nohup ./run-matrix-bot.sh >> bot.log 2>&1 &"
+        docker exec -d "$AGENT" sh -lc "cd '${BOT_DIR}' && nohup ./run-matrix-bot.sh >> bot.log 2>&1 & echo \$! > bot.pid"
         echo "[$AGENT] bot restarted"
     fi
     exit 0
@@ -80,5 +80,6 @@ if [[ "$RESTART" == true ]]; then
     pkill -9 -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust' 2>/dev/null || true
     cd "$BOT_DIR"
     nohup ./run-matrix-bot.sh >> bot.log 2>&1 &
+    echo $! > "${BOT_DIR}/bot.pid"
     echo "bot restarted"
 fi
