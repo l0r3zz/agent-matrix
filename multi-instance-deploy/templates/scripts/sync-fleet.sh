@@ -16,7 +16,7 @@ set -euo pipefail
 
 # --- Configuration ---
 BASE_DIR="/opt/agent-zero"
-TEMPLATE_DIR="${BASE_DIR}/agent0-1/usr/projects/agent-matrix/multi-instance-deploy/templates"
+TEMPLATE_DIR="${BASE_DIR}/multi-instance-deploy/templates"
 ALL_INSTANCES="1 2 3 4 5"
 
 # --- Parse arguments ---
