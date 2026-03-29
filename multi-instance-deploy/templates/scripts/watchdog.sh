@@ -81,7 +81,7 @@ restart_mcp() {
 }
 
 # Capture initial PIDs
-BOT_PID=$(ps -eo pid,cmd | grep -E '[r]un-matrix-bot\.sh|[p]ython.*matrix_bot\.py|[m]atrix-bot-rust' | awk '{print $1}' | head -1)
+BOT_PID=$(ps -eo pid,cmd | grep '[p]ython.*matrix_bot' | awk '{print $1}' | head -1)
 MCP_PID=$(ps -eo pid,cmd | grep '[n]ode.*http-server' | awk '{print $1}' | head -1)
 [ -n "$BOT_PID" ] && echo "$BOT_PID" > "$BOT_PIDFILE"
 [ -n "$MCP_PID" ] && echo "$MCP_PID" > "$MCP_PIDFILE"
@@ -90,13 +90,15 @@ log "WATCHDOG v2.0: Starting interval=${WATCHDOG_INTERVAL}s health=${HEALTH_CHEC
 log "WATCHDOG: BOT PID=$(cat "$BOT_PIDFILE" 2>/dev/null || echo none)"
 log "WATCHDOG: MCP PID=$(cat "$MCP_PIDFILE" 2>/dev/null || echo none)"
 
+if ! token_sync_check; then
+    log "WATCHDOG: token mismatch detected; syncing settings.json MCP header token"
+    /a0/usr/workdir/sync-mcp-token-into-settings.py >> "$LOG" 2>&1 || true
+fi
 token_sync_check
 if mcp_auth_check; then
     log "HEALTH: Initial auth PASSED"
 else
     log "HEALTH: Initial auth FAILED"
-    log "WATCHDOG: token mismatch detected; syncing settings.json MCP header token"
-    python3 /a0/usr/workdir/sync-mcp-token-into-settings.py >> "$LOG" 2>&1 || true
     restart_mcp "AUTH_FAILED"
 fi
 
@@ -107,7 +109,7 @@ while true; do
     if ! is_alive "$BOT_PIDFILE"; then
         log "WATCHDOG: matrix-bot DEAD -- restarting"
         cd /a0/usr/workdir/matrix-bot || continue
-        ./run-matrix-bot.sh >> bot.log 2>&1 &
+        ./run-matrix-bot.sh >> bot.log.prev 2>&1 &
         echo $! > "$BOT_PIDFILE"
         log "WATCHDOG: matrix-bot restarted PID=$!"
     fi
@@ -122,8 +124,6 @@ while true; do
             token_sync_check
             if ! mcp_auth_check; then
                 log "HEALTH: Periodic auth FAILED"
-                log "WATCHDOG: token mismatch detected; syncing settings.json MCP header token"
-                python3 /a0/usr/workdir/sync-mcp-token-into-settings.py >> "$LOG" 2>&1 || true
                 restart_mcp "AUTH_FAILED"
             elif ! mcp_tool_check; then
                 log "HEALTH: Periodic tool FAILED"
