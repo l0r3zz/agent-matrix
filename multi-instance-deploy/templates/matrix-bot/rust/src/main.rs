@@ -13,6 +13,43 @@ use tokio::time::timeout;
 
 const MAX_CHARS_PER_MESSAGE: usize = 32000;
 
+/// Strip Matrix mention "pills" from plain-text message bodies.
+/// Element sends mentions as `[@user:server](https://matrix.to/#/@user:server)`
+/// in the plain-text `body` field. This function converts them to plain `@user:server`.
+fn strip_matrix_mention_pills(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let chars: Vec<char> = input.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    while i < len {
+        if chars[i] == '[' && i + 1 < len && chars[i + 1] == '@' {
+            // Potential mention pill: look for closing `](https://matrix.to/`
+            if let Some(bracket_close) = chars[i..].iter().position(|&c| c == ']') {
+                let bracket_close = i + bracket_close;
+                // Check for `](https://matrix.to/` after the closing bracket
+                let after = bracket_close + 1;
+                if after < len && chars[after] == '(' {
+                    // Find the closing paren
+                    if let Some(paren_close) = chars[after..].iter().position(|&c| c == ')') {
+                        let paren_close = after + paren_close;
+                        let link: String = chars[after + 1..paren_close].iter().collect();
+                        if link.starts_with("https://matrix.to/") {
+                            // Extract the mention text (without brackets)
+                            let mention: String = chars[i + 1..bracket_close].iter().collect();
+                            result.push_str(&mention);
+                            i = paren_close + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+        result.push(chars[i]);
+        i += 1;
+    }
+    result
+}
+
 #[derive(Clone, Debug)]
 struct Config {
     homeserver_url: String,
@@ -569,6 +606,9 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
                 .unwrap_or("")
                 .trim()
                 .to_string();
+            // Normalize Matrix mention pills: convert Element's
+            // [@user:server](https://matrix.to/#/@user:server) to plain @user:server
+            let body = strip_matrix_mention_pills(&body).trim().to_string();
             if body.is_empty() {
                 continue;
             }
