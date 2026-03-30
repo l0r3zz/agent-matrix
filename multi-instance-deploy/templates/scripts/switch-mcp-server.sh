@@ -49,12 +49,13 @@ log() {
 }
 
 current_variant() {
-    if [ -f "$MARKER_FILE" ]; then
-        cat "$MARKER_FILE"
-    elif pgrep -f "matrix-mcp-server-r2" >/dev/null 2>&1; then
+    # Prefer live processes over stale .mcp-variant (watchdog / manual kills can desync).
+    if pgrep -f "matrix-mcp-server-r2" >/dev/null 2>&1; then
         echo "rust"
     elif pgrep -f "node.*http-server" >/dev/null 2>&1; then
         echo "ts"
+    elif [ -f "$MARKER_FILE" ]; then
+        cat "$MARKER_FILE"
     else
         echo "none"
     fi
@@ -65,7 +66,7 @@ kill_mcp() {
     pkill -9 -f 'matrix-mcp-server-r2' 2>/dev/null || true
     pkill -9 -f 'node.*http-server' 2>/dev/null || true
     sleep 2
-    rm -f "$MCP_PIDFILE"
+    rm -f "$MCP_PIDFILE" "$MARKER_FILE"
 }
 
 start_rust() {
@@ -168,6 +169,13 @@ case "${1:-status}" in
         wait_healthy
         show_status
         ;;
+    rust-restart|r2-restart|restart-rust)
+        log "Force restart: Rust MCP server"
+        kill_mcp
+        start_rust
+        wait_healthy
+        show_status
+        ;;
     ts|typescript|node)
         CURRENT=$(current_variant)
         if [ "$CURRENT" = "ts" ]; then
@@ -180,15 +188,24 @@ case "${1:-status}" in
         wait_healthy
         show_status
         ;;
+    ts-restart|restart-ts)
+        log "Force restart: TypeScript MCP server"
+        kill_mcp
+        start_ts
+        wait_healthy
+        show_status
+        ;;
     status|s)
         show_status
         ;;
     *)
-        echo "Usage: $0 {rust|ts|status}"
+        echo "Usage: $0 {rust|rust-restart|ts|ts-restart|status}"
         echo ""
-        echo "  rust   - Switch to Rust MCP server (matrix-mcp-server-r2)"
-        echo "  ts     - Switch to TypeScript MCP server (node http-server.js)"
-        echo "  status - Show which variant is running"
+        echo "  rust          - Switch to Rust (no-op if already Rust)"
+        echo "  rust-restart  - Always kill MCP and start Rust (use after deploy / config change)"
+        echo "  ts            - Switch to TypeScript (no-op if already TS)"
+        echo "  ts-restart    - Always kill MCP and start TypeScript"
+        echo "  status        - Show which variant is running"
         exit 1
         ;;
 esac
