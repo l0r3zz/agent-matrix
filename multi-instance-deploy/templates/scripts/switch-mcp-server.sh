@@ -26,7 +26,23 @@ MCP_LOG="${MCP_DIR}/mcp-server.log"
 RUST_BIN="${MCP_DIR}/matrix-mcp-server-r2"
 TS_ENTRY="${MCP_DIR}/dist/http-server.js"
 MARKER_FILE="${MCP_DIR}/.mcp-variant"
-HEALTH_URL="http://localhost:3000/health"
+
+# HTTP port must match matrix-mcp-server/.env (PORT or default 3000). Rust does not
+# listen until after initial Matrix sync (can be ~30s+), so health waits longer.
+mcp_http_port() {
+    local p=3000
+    if [ -f "${MCP_DIR}/.env" ]; then
+        local line
+        line=$(grep -E '^[[:space:]]*PORT[[:space:]]*=' "${MCP_DIR}/.env" | tail -1 || true)
+        if [ -n "${line}" ]; then
+            p="${line#*=}"
+            p="${p//\"/}"
+            p="${p//\'/}"
+            p="${p//[[:space:]]/}"
+        fi
+    fi
+    echo "${p:-3000}"
+}
 
 log() {
     echo "$(date '+%F %T') SWITCH: $*" | tee -a "$MCP_LOG"
@@ -64,6 +80,7 @@ start_rust() {
     fi
 
     log "Starting Rust MCP server..."
+    log "Note: Rust waits for initial Matrix sync before binding HTTP; /health may take 30-90s."
     cd "$MCP_DIR"
     "$RUST_BIN" >> "$MCP_LOG" 2>&1 &
     local PID=$!
@@ -89,16 +106,23 @@ start_ts() {
 }
 
 wait_healthy() {
+    local port
+    port="$(mcp_http_port)"
+    local health_url="http://127.0.0.1:${port}/health"
+    local max_tries=45
+    local sleep_s=2
+    local max_wait=$((max_tries * sleep_s))
     local TRIES=0
-    while [ $TRIES -lt 15 ]; do
-        if curl -sf --max-time 3 "$HEALTH_URL" >/dev/null 2>&1; then
-            log "Health check PASSED"
+    while [ $TRIES -lt $max_tries ]; do
+        if curl -sf --max-time 3 "$health_url" >/dev/null 2>&1; then
+            log "Health check PASSED (${health_url})"
             return 0
         fi
         TRIES=$((TRIES + 1))
-        sleep 2
+        sleep "$sleep_s"
     done
-    log "WARNING: Health check did not pass after 30 seconds"
+    log "WARNING: Health check did not pass after ${max_wait}s (${health_url})"
+    log "Check: tail -80 ${MCP_LOG} ; process may have exited (sync error, bad token, or wrong PORT)."
     return 1
 }
 
@@ -120,9 +144,10 @@ show_status() {
             echo "MCP server: NOT RUNNING"
             ;;
     esac
-    if curl -sf --max-time 3 "$HEALTH_URL" >/dev/null 2>&1; then
+    local health_url="http://127.0.0.1:$(mcp_http_port)/health"
+    if curl -sf --max-time 3 "$health_url" >/dev/null 2>&1; then
         echo "Health: OK"
-        curl -sf "$HEALTH_URL" 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+        curl -sf "$health_url" 2>/dev/null | python3 -m json.tool 2>/dev/null || true
     else
         echo "Health: UNREACHABLE"
     fi
