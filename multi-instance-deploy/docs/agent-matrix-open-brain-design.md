@@ -16,7 +16,7 @@ The Cybertribe lab runs five Agent Zero instances (agent0-1 through agent0-5), e
 
 Open Brain provides the collective unconscious -- a shared PostgreSQL + pgvector knowledge store that every agent in the fleet can read from and write to. Organizational knowledge that transcends any single agent's experience.
 
-The AGI transcript captures the broader pattern:
+This Youtube video [Is "Agent Zero" the Secret Key to Achieving AGI?](https://www.youtube.com/watch?v=B2FodNIDZDk) captures the broader pattern:
 
 > "We are shifting from building single all-knowing oracles to designing collaborative ecosystems of specialized intelligence."
 
