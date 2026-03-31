@@ -286,10 +286,10 @@ if [ "$STATUS_MODE" = true ]; then
     TMPL_HASH_RUST=$(get_template_bot_hash "rust")
 
     # Header row
-    printf "  ${BOLD}%-14s %-11s %-10s %-10s %-7s %-8s %-10s %-5s %-4s %s${NC}\n" \
+    printf "  ${BOLD}%-14s %-11s %-10s %-10s %-7s %-8s %-10s %-10s %-4s %s${NC}\n" \
         "Instance" "Container" "Version" "Compose" "BotRT" "BotVer" "Bot" "MCP" "WD" "Last Update"
-    printf "  %-14s %-11s %-10s %-10s %-7s %-8s %-10s %-5s %-4s %s\n" \
-        "------------" "---------" "-------" "-------" "-----" "------" "---" "---" "--" "-----------"
+    printf "  %-14s %-11s %-10s %-10s %-7s %-8s %-10s %-10s %-4s %s\n" \
+        "------------" "---------" "-------" "-------" "-----" "------" "---" "--------" "--" "-----------"
 
     for N in $INSTANCES; do
         # Container status
@@ -367,10 +367,15 @@ if [ "$STATUS_MODE" = true ]; then
             BOT_CLR="${RED}"
         fi
 
-        # MCP process
-        MCP_ALIVE=$(docker exec "agent0-$N" bash -c "ps aux 2>/dev/null | grep 'http-server' | grep -v grep | wc -l" 2>/dev/null || echo "0"); MCP_ALIVE=$(echo "$MCP_ALIVE" | tr -d '[:space:]'); [ -z "$MCP_ALIVE" ] && MCP_ALIVE=0
-        if [ "$MCP_ALIVE" -ge 1 ]; then
-            MCP_TXT="✓"
+        # MCP process -- detect both TypeScript (http-server) and Rust (matrix-mcp-server-r2)
+        MCP_R2=$(docker exec "agent0-$N" bash -c "ps aux 2>/dev/null | grep 'matrix-mcp-server-r2' | grep -v grep | wc -l" 2>/dev/null || echo "0"); MCP_R2=$(echo "$MCP_R2" | tr -d '[:space:]'); [ -z "$MCP_R2" ] && MCP_R2=0
+        MCP_TS=$(docker exec "agent0-$N" bash -c "ps aux 2>/dev/null | grep 'http-server' | grep -v grep | wc -l" 2>/dev/null || echo "0"); MCP_TS=$(echo "$MCP_TS" | tr -d '[:space:]'); [ -z "$MCP_TS" ] && MCP_TS=0
+        if [ "$MCP_R2" -ge 1 ]; then
+            MCP_VER=$(docker exec "agent0-$N" curl -sf --max-time 2 http://127.0.0.1:3000/health 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','?'))" 2>/dev/null || echo "?")
+            MCP_TXT="r2:${MCP_VER}"
+            MCP_CLR="${GREEN}"
+        elif [ "$MCP_TS" -ge 1 ]; then
+            MCP_TXT="ts ✓"
             MCP_CLR="${GREEN}"
         else
             MCP_TXT="✗"
@@ -413,9 +418,8 @@ except:
         ROW+=$(printf " ${BOT_RT_CLR}%-7s${NC}" "$BOT_RT_TXT")
         ROW+=$(printf " ${BOT_VER_CLR}%-8s${NC}" "$BOT_VER_TXT")
         ROW+=$(printf " ${BOT_CLR}%-10s${NC}" "$BOT_TXT")
-        # MCP: ✓/✗ is 3 bytes but 1 col
-        ROW+=$(printf " ${MCP_CLR}%s${NC}" "$MCP_TXT")
-        ROW+="      "
+        # MCP: variant + version
+        ROW+=$(printf " ${MCP_CLR}%-10s${NC}" "$MCP_TXT")
         ROW+=$(printf "${WD_CLR}%s${NC}" "$WD_TXT")
         ROW+="   "
         ROW+="$LAST_UPD"
@@ -431,6 +435,15 @@ except:
             echo "             Homeserver: HTTP $HS_CODE | Health API: HTTP $HEALTH_CODE"
             echo "             Uptime: $UPTIME"
             echo "             Bot: runtime=$BOT_RT configured=$BOT_RT_CFG hash=$BOT_HASH tmpl=$TMPL_CMP"
+            # MCP variant details
+            if [ "$MCP_R2" -ge 1 ]; then
+                MCP_HEALTH=$(docker exec "agent0-$N" curl -sf --max-time 2 http://127.0.0.1:3000/health 2>/dev/null || echo "{}")
+                echo "             MCP: Rust (r2) | health: $MCP_HEALTH"
+            elif [ "$MCP_TS" -ge 1 ]; then
+                echo "             MCP: TypeScript (ts) | /health: not implemented"
+            else
+                echo "             MCP: NOT RUNNING"
+            fi
             echo "             Last watchdog health: $LAST_HEALTH"
             echo ""
         fi
