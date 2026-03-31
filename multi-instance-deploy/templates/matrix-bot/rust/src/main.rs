@@ -425,10 +425,26 @@ fn built_in_response(body: &str, agent_identity: &str, user_id: &str) -> Option<
 #[tokio::main]
 async fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    if let Err(e) = run().await {
-        error!("FATAL CRASH: {e}");
-        let _ = append_crash_log(&e.to_string()).await;
-        std::process::exit(1);
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        match run().await {
+            Ok(()) => {
+                info!("Clean shutdown.");
+                break;
+            }
+            Err(e) if attempt < 10 => {
+                let backoff = std::cmp::min(30, 2u64 * attempt as u64);
+                error!("FATAL CRASH (attempt {}/10): {e} -- restarting in {backoff}s", attempt);
+                let _ = append_crash_log(&format!("Attempt {attempt}: {e}")).await;
+                tokio::time::sleep(Duration::from_secs(backoff)).await;
+            }
+            Err(e) => {
+                error!("FATAL CRASH: {e} -- max retries exceeded, exiting");
+                let _ = append_crash_log(&format!("Final attempt {attempt}: {e}")).await;
+                std::process::exit(1);
+            }
+        }
     }
 }
 
@@ -475,6 +491,8 @@ async fn run() -> Result<()> {
         .context("register SIGTERM handler")?;
 
     info!("Starting sync loop -- bot is live!");
+    let mut empty_sync_count: u32 = 0;
+    let mut sync_count: u64 = 0;
     loop {
         #[cfg(unix)]
         let should_stop = tokio::select! {
@@ -483,16 +501,45 @@ async fn run() -> Result<()> {
             result = timeout(Duration::from_secs(45), bot.sync(since.as_deref(), bot.cfg.sync_timeout_ms, false)) => {
                 match result {
                     Ok(Ok(sync)) => {
+                        sync_count += 1;
+                        if sync_count % 60 == 0 {
+                            info!("Sync loop heartbeat: {} syncs completed", sync_count);
+                        }
+                        // Check if this is an empty/stale sync
+                        let has_rooms = sync.get("rooms").and_then(Value::as_object)
+                            .map(|r| !r.is_empty()).unwrap_or(false);
+                        if !has_rooms {
+                            empty_sync_count += 1;
+                            if empty_sync_count >= 5 {
+                                warn!("Consecutive empty syncs: {} -- forcing full sync (clearing since token)", empty_sync_count);
+                                since = None;
+                                empty_sync_count = 0;
+                            }
+                        } else {
+                            empty_sync_count = 0;
+                        }
                         since = sync.get("next_batch").and_then(Value::as_str).map(ToString::to_string);
                         if let Err(e) = handle_sync(&mut bot, &sync).await {
                             warn!("Sync handler error: {}", e);
                         }
                     }
                     Ok(Err(e)) => {
+                        empty_sync_count += 1;
+                        if empty_sync_count >= 5 {
+                            warn!("Consecutive sync errors/timeouts: {} -- forcing full sync", empty_sync_count);
+                            since = None;
+                            empty_sync_count = 0;
+                        }
                         warn!("Sync error: {} -- retrying in 5s", e);
                         tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                     Err(_) => {
+                        empty_sync_count += 1;
+                        if empty_sync_count >= 5 {
+                            warn!("Consecutive sync timeouts: {} -- forcing full sync", empty_sync_count);
+                            since = None;
+                            empty_sync_count = 0;
+                        }
                         warn!("Sync timeout -- retrying in 10s");
                         tokio::time::sleep(Duration::from_secs(10)).await;
                     }
@@ -507,16 +554,44 @@ async fn run() -> Result<()> {
             result = timeout(Duration::from_secs(45), bot.sync(since.as_deref(), bot.cfg.sync_timeout_ms, false)) => {
                 match result {
                     Ok(Ok(sync)) => {
+                        sync_count += 1;
+                        if sync_count % 60 == 0 {
+                            info!("Sync loop heartbeat: {} syncs completed", sync_count);
+                        }
+                        let has_rooms = sync.get("rooms").and_then(Value::as_object)
+                            .map(|r| !r.is_empty()).unwrap_or(false);
+                        if !has_rooms {
+                            empty_sync_count += 1;
+                            if empty_sync_count >= 5 {
+                                warn!("Consecutive empty syncs: {} -- forcing full sync", empty_sync_count);
+                                since = None;
+                                empty_sync_count = 0;
+                            }
+                        } else {
+                            empty_sync_count = 0;
+                        }
                         since = sync.get("next_batch").and_then(Value::as_str).map(ToString::to_string);
                         if let Err(e) = handle_sync(&mut bot, &sync).await {
                             warn!("Sync handler error: {}", e);
                         }
                     }
                     Ok(Err(e)) => {
+                        empty_sync_count += 1;
+                        if empty_sync_count >= 5 {
+                            warn!("Consecutive sync errors/timeouts: {} -- forcing full sync", empty_sync_count);
+                            since = None;
+                            empty_sync_count = 0;
+                        }
                         warn!("Sync error: {} -- retrying in 5s", e);
                         tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                     Err(_) => {
+                        empty_sync_count += 1;
+                        if empty_sync_count >= 5 {
+                            warn!("Consecutive sync timeouts: {} -- forcing full sync", empty_sync_count);
+                            since = None;
+                            empty_sync_count = 0;
+                        }
                         warn!("Sync timeout -- retrying in 10s");
                         tokio::time::sleep(Duration::from_secs(10)).await;
                     }
@@ -592,7 +667,7 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
                 continue;
             }
             let ts = event.get("origin_server_ts").and_then(Value::as_i64).unwrap_or(0);
-            if ts < bot.cfg.bot_start_time_ms {
+            if ts < bot.cfg.bot_start_time_ms.saturating_sub(10_000) {
                 continue;
             }
             let content = event.get("content").unwrap_or(&Value::Null);
@@ -608,7 +683,7 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
                 .to_string();
             // Normalize Matrix mention pills: convert Element's
             // [@user:server](https://matrix.to/#/@user:server) to plain @user:server
-            let body = strip_matrix_mention_pills(&body).trim().to_string();
+            let mut body = strip_matrix_mention_pills(&body).trim().to_string();
             if body.is_empty() {
                 continue;
             }

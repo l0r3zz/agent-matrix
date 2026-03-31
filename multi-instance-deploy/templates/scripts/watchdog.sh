@@ -19,6 +19,49 @@ is_alive() {
     [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null
 }
 
+mcp_variant() {
+    local marker="${MCP_DIR}/.mcp-variant"
+    if [ -f "$marker" ]; then
+        cat "$marker" | tr -d '\n'
+    else
+        echo "ts"
+    fi
+}
+
+start_mcp_variant() {
+    local variant
+    variant=$(mcp_variant)
+    cd "$MCP_DIR" || return
+    > mcp-server.log
+    case "$variant" in
+        rust|r2)
+            if [ -x "${MCP_DIR}/matrix-mcp-server-r2" ]; then
+                log "WATCHDOG: Starting Rust MCP server (variant=rust)"
+                "${MCP_DIR}/matrix-mcp-server-r2" >> mcp-server.log 2>&1 &
+                echo $! > "$MCP_PIDFILE"
+                log "WATCHDOG: Rust MCP PID=$!"
+            else
+                log "WATCHDOG: ERROR - Rust binary not found, falling back to TS"
+                node dist/http-server.js >> mcp-server.log 2>&1 &
+                echo $! > "$MCP_PIDFILE"
+                log "WATCHDOG: TS MCP PID=$! (fallback)"
+            fi
+            ;;
+        ts|typescript)
+            log "WATCHDOG: Starting TypeScript MCP server (variant=ts)"
+            node dist/http-server.js >> mcp-server.log 2>&1 &
+            echo $! > "$MCP_PIDFILE"
+            log "WATCHDOG: TS MCP PID=$!"
+            ;;
+        *)
+            log "WATCHDOG: Unknown MCP variant '$variant', defaulting to TS"
+            node dist/http-server.js >> mcp-server.log 2>&1 &
+            echo $! > "$MCP_PIDFILE"
+            log "WATCHDOG: TS MCP PID=$! (default)"
+            ;;
+    esac
+}
+
 mcp_auth_check() {
     local MCP_ENV="${MCP_DIR}/.env"
     [ ! -f "$MCP_ENV" ] && { log "HEALTH: .env not found"; return 1; }
@@ -65,13 +108,12 @@ token_sync_check() {
 
 restart_mcp() {
     log "WATCHDOG: mcp-server $1 -- restarting"
+    local variant=$(mcp_variant)
+    log "WATCHDOG: MCP variant=$variant"
     pkill -9 -f 'node dist/http-server.js' 2>/dev/null
+    pkill -9 -f 'matrix-mcp-server-r2' 2>/dev/null
     sleep 2
-    cd "$MCP_DIR" || return
-    > mcp-server.log
-    node dist/http-server.js >> mcp-server.log 2>&1 &
-    echo $! > "$MCP_PIDFILE"
-    log "WATCHDOG: mcp-server restarted PID=$!"
+    start_mcp_variant
     sleep 5
     if mcp_auth_check; then
         log "HEALTH: Auth PASSED after restart"
@@ -81,8 +123,8 @@ restart_mcp() {
 }
 
 # Capture initial PIDs
-BOT_PID=$(ps -eo pid,cmd | grep '[p]ython.*matrix_bot' | awk '{print $1}' | head -1)
-MCP_PID=$(ps -eo pid,cmd | grep '[n]ode.*http-server' | awk '{print $1}' | head -1)
+BOT_PID=$(ps -eo pid,cmd | grep -E '[p]ython.*matrix_bot|[m]atrix-bot-rust' | awk '{print $1}' | head -1)
+MCP_PID=$(ps -eo pid,cmd | grep -E '[n]ode.*http-server|[m]atrix-mcp-server-r2' | awk '{print $1}' | head -1)
 [ -n "$BOT_PID" ] && echo "$BOT_PID" > "$BOT_PIDFILE"
 [ -n "$MCP_PID" ] && echo "$MCP_PID" > "$MCP_PIDFILE"
 
@@ -109,7 +151,7 @@ while true; do
     if ! is_alive "$BOT_PIDFILE"; then
         log "WATCHDOG: matrix-bot DEAD -- restarting"
         cd /a0/usr/workdir/matrix-bot || continue
-        ./run-matrix-bot.sh >> bot.log.prev 2>&1 &
+        ./run-matrix-bot.sh >> bot.log 2>&1 &
         echo $! > "$BOT_PIDFILE"
         log "WATCHDOG: matrix-bot restarted PID=$!"
     fi
