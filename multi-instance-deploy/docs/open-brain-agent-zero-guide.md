@@ -620,9 +620,11 @@ export function createMcpServer(): McpServer {
       title: "Thought Statistics",
       description:
         "Get a summary of all captured thoughts: totals, types, top topics, and people.",
-      inputSchema: {},
+      inputSchema: {
+        verbose: z.boolean().optional().default(false).describe("Include detailed breakdown"),
+      },
     },
-    async () => {
+    async ({ verbose }) => {
       try {
         const countResult = await query(
           "SELECT COUNT(*) AS total FROM thoughts"
@@ -799,7 +801,7 @@ app.use("/mcp", (req, res, next) => {
   next();
 });
 
-app.post("/mcp", async (req, res) => {
+app.all("/mcp", async (req, res) => {
   await handleMcpRequest(req, res);
 });
 
@@ -811,10 +813,6 @@ app.get("/health", async (_req, res) => {
   } catch (err) {
     res.status(503).json({ status: "unhealthy", error: String(err) });
   }
-});
-
-app.all("/mcp", (_req, res) => {
-  res.status(405).json({ error: "Method not allowed. Use POST for MCP." });
 });
 
 const server = app.listen(PORT, "0.0.0.0", () => {
