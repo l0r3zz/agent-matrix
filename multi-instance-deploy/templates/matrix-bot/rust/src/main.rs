@@ -649,7 +649,7 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
             .get("summary")
             .and_then(|s| s.get("m.joined_member_count"))
             .and_then(Value::as_i64);
-        let is_one_on_one = member_count == Some(2);
+        let is_one_on_one = member_count.map(|c| c == 2).unwrap_or(true);
         let timeline = room_obj
             .get("timeline")
             .and_then(|t| t.get("events"))
