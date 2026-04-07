@@ -257,7 +257,6 @@ impl Bot {
             ("timeout", timeout_ms.to_string()),
             ("full_state", full_state.to_string()),
             ("set_presence", "online".to_string()),
-            ("filter", "".to_string()),
         ]);
         if let Some(s) = since {
             req = req.query(&[("since", s.to_string())]);
