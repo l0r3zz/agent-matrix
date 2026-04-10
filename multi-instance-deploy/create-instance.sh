@@ -81,7 +81,7 @@ echo "============================================="
 mkdir -p "${INSTANCE_DIR}/usr/workdir" "${INSTANCE_DIR}/mhs/continuwuity-data"
 
 # --- 1. Compose Generation ---
-echo "[1/8] Generating docker-compose.yml..."
+echo "[1/9] Generating docker-compose.yml..."
 sed -e "s/__INSTANCE_NUM__/${INSTANCE_NUM}/g" \
     -e "s/__MAC_SUFFIX__/${MAC_SUFFIX}/g" \
     -e "s/__WEB_PORT__/${WEB_PORT}/g" \
@@ -89,7 +89,7 @@ sed -e "s/__INSTANCE_NUM__/${INSTANCE_NUM}/g" \
     "${TEMPLATE_DIR}/docker-compose.yml.template" > "${INSTANCE_DIR}/docker-compose.yml"
 
 # --- 2. .env Generation & Key Injection ---
-echo "[2/8] Generating .env file..."
+echo "[2/9] Generating .env file..."
 cp "${TEMPLATE_DIR}/env.template" "${INSTANCE_DIR}/.env"
 for key in "${KEY_LIST[@]}"; do
     if [ -n "${!key:-}" ]; then
@@ -108,12 +108,12 @@ A0_SET_agent_profile=${SELECTED_PROFILE}
 ENV_EXT
 
 # --- 3. Caddyfile Generation ---
-echo "[3/8] Generating Caddyfile for TLS proxy..."
+echo "[3/9] Generating Caddyfile for TLS proxy..."
 sed -e "s/__INSTANCE_NUM__/${INSTANCE_NUM}/g" \
     "${TEMPLATE_DIR}/Caddyfile.template" > "${INSTANCE_DIR}/mhs/Caddyfile"
 
 # --- 4. Self-signed TLS Certs ---
-echo "[4/8] Generating placeholder TLS certificates..."
+echo "[4/9] Generating placeholder TLS certificates..."
 openssl req -x509 -newkey ed25519 -keyout "${INSTANCE_DIR}/mhs/server.key" \
   -out "${INSTANCE_DIR}/mhs/server.crt" -days 365 -nodes \
   -subj "/CN=${MHS_FQDN}" 2>/dev/null
@@ -121,7 +121,7 @@ chmod 600 "${INSTANCE_DIR}/mhs/server.key"
 echo "  (Self-signed — replace with step-ca certs for federation)"
 
 # --- 5. Matrix Account Credentials ---
-echo "[5/8] Generating Matrix account credentials..."
+echo "[5/9] Generating Matrix account credentials..."
 MATRIX_USER="agent0-${INSTANCE_NUM}"
 MATRIX_PASS=$(openssl rand -base64 24)
 A0_API_KEY=$(openssl rand -base64 12 | tr -d '/+=' | head -c 16)
@@ -144,7 +144,7 @@ A0_API_KEY=${A0_API_KEY}
 MATRIX_ENV
 
 # --- 6. Deploy matrix-mcp-server ---
-echo "[6/8] Deploying matrix-mcp-server template..."
+echo "[6/9] Deploying matrix-mcp-server template..."
 MCP_DIR="${INSTANCE_DIR}/usr/workdir/matrix-mcp-server"
 if [ -d "${TEMPLATE_DIR}/matrix-mcp-server" ]; then
     cp -r "${TEMPLATE_DIR}/matrix-mcp-server" "${MCP_DIR}"
@@ -161,7 +161,7 @@ else
 fi
 
 # --- 7. Deploy matrix-bot ---
-echo "[7/8] Deploying matrix-bot template..."
+echo "[7/9] Deploying matrix-bot template..."
 BOT_DIR="${INSTANCE_DIR}/usr/workdir/matrix-bot"
 if [ -d "${TEMPLATE_DIR}/matrix-bot" ]; then
     cp -r "${TEMPLATE_DIR}/matrix-bot" "${BOT_DIR}"
@@ -182,7 +182,7 @@ else
 fi
 
 # --- 8. Deploy service lifecycle scripts ---
-echo "[8/8] Deploying service lifecycle scripts..."
+echo "[8/9] Deploying service lifecycle scripts..."
 SCRIPTS_SRC="${TEMPLATE_DIR}/scripts"
 WORKDIR="${INSTANCE_DIR}/usr/workdir"
 
@@ -228,6 +228,21 @@ if [ -f "${SCRIPTS_SRC}/smoke-test-matrix-bot.sh" ]; then
     echo "  Deployed smoke-test-matrix-bot.sh"
 else
     echo "  WARNING: smoke-test-matrix-bot.sh template not found, skipping"
+fi
+
+# --- 9. Agent Settings (MCP server definitions) ---
+# Generate settings.json with Matrix + open-brain MCP definitions.
+# The __MATRIX_ACCESS_TOKEN__ placeholder will be replaced by
+# sync-mcp-token-into-settings.py on first boot once the MCP .env
+# has a real token from Matrix user registration.
+echo "[9/9] Generating settings.json with MCP definitions..."
+if [ -f "${TEMPLATE_DIR}/settings.json.template" ]; then
+    sed -e "s/__INSTANCE_NUM__/${INSTANCE_NUM}/g" \
+        -e "s/__MATRIX_ACCESS_TOKEN__/PENDING_TOKEN_SYNC/g" \
+        "${TEMPLATE_DIR}/settings.json.template" > "${INSTANCE_DIR}/usr/settings.json"
+    echo "  Generated usr/settings.json"
+else
+    echo "  WARNING: settings.json.template not found, skipping"
 fi
 
 # --- Summary ---
