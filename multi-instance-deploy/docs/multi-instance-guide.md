@@ -275,7 +275,7 @@ sed -i 's/PENDING_REGISTRATION/<actual_access_token>/' \
 docker exec -it agent0-N bash
 cd /a0/usr/workdir/matrix-bot
 /opt/venv-a0/bin/pip install -r requirements.txt
-./run-matrix-bot.sh &
+/opt/venv-a0/bin/python3 matrix_bot.py &
 
 # Check the log
 tail -f bot.log
@@ -300,7 +300,6 @@ tail -f bot.log
 | `BOT_DISPLAY_NAME` | `Agent0-N` | Display name in Matrix rooms |
 | `TRIGGER_PREFIX` | (empty) | Optional prefix to filter messages |
 | `SYNC_TIMEOUT_MS` | `30000` | Matrix sync polling interval |
-| `MATRIX_BOT_RUNTIME` | (unset / `python`) | Optional runtime override (`python` or `rust`) |
 
 #### Verification
 
@@ -355,7 +354,7 @@ FORCE_TLS=true
 After updating `.env`, restart the matrix-bot:
 
 ```bash
-docker exec agent0-N bash -c 'pkill -9 -f "run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust"; sleep 2; cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh > bot.log 2>&1 &'
+docker exec agent0-N bash -c 'pkill -f matrix_bot.py; sleep 2; cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python3 matrix_bot.py > bot.log 2>&1 &'
 ```
 
 #### Verification
@@ -463,18 +462,13 @@ kubectl exec -it -n matrix <synapse-pod> -c matrix -- cat /data/homeserver.yaml 
 Before deploying any containers on **g2s**, the host networking must be configured to allow 'macvlan' traffic to reach the physical network through `eno1`.
 
 ### 7.1 Permanent Bridge Service (Systemd)
-Instead of manual `ip link` commands, use the `agent-bridge.service` to survive reboots.
-
-> ⚠️ **Important**: If `mac0-macvlan.service` exists on the host (legacy service from older deployments), it **must be masked** before enabling `agent-bridge.service` to prevent conflicts. Both services manage `mac0` but only `agent-bridge.service` should run.
+Instead of manual `ip link` commands, use the `agent-bridge.service` to survive reboots:
 
 ```bash
-# Step 1: Install the agent-bridge.service
 cat << 'EOF' | sudo tee /etc/systemd/system/agent-bridge.service
 [Unit]
 Description=Agent-Matrix Host Bridge (mac0)
-After=network-online.target docker.service
-Wants=network-online.target
-Requires=docker.service
+After=network-online.target
 
 [Service]
 Type=oneshot
@@ -486,28 +480,14 @@ ExecStart=/usr/bin/bash -c "\
   ip link set mac0 up && \
   ip route add 172.23.88.0/24 dev mac0 || true && \
   ip route add 172.23.89.0/24 dev mac0 || true"
-ExecStartPost=/usr/bin/bash -c "\
-  sleep 20 && \
-  for i in 1 2 3 4 5; do \
-    curl -s --connect-timeout 2 http://172.23.88.$i/ > /dev/null 2>&1 || true; \
-  done && \
-  echo 'macvlan ARP stimulation complete'"
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Step 2: Mask legacy conflicting service (if present)
-sudo systemctl mask --force mac0-macvlan.service 2>/dev/null || true
-
-# Step 3: Enable and start
-sudo systemctl daemon-reload
 sudo systemctl enable --now agent-bridge.service
 ```
 
-> 💡 **Why `After=docker.service` and `Requires=docker.service`?** This ensures `mac0` is always created after Docker starts, preventing post-reboot ARP warm-up failures where container macvlan interfaces announce themselves before the host bridge is ready to hear them.
->
-> 💡 **Why `ExecStartPost`?** After a reboot, container macvlan interfaces may not send gratuitous ARP probes, leaving g2s unable to reach them by their macvlan IPs. The post-start script curls all agent IPs 20 seconds after boot to stimulate ARP resolution fleet-wide.
 ---
 
 ## 8. Router Configuration (kama.cybertribe.com)
@@ -531,19 +511,91 @@ address=/agent0-N-mhs.cybertribe.com/172.23.89.N
 
 ---
 
-## 9. Fleet Registry
+## 10. Fleet Management Scripts
+
+Utility scripts for fleet-wide operations. All scripts live in:
+```
+/opt/agent-zero/multi-instance-deploy/templates/scripts/
+```
+
+### 10.1 `fleet-models.sh` — LLM Model Configuration Report
+
+Reports which LLM models each agent is currently using. Reads actual runtime configuration from `/a0/usr/plugins/_model_config/config.json` inside each container.
+
+**Usage:**
+```bash
+cd /opt/agent-zero/multi-instance-deploy/templates/scripts
+
+# Standard table view
+./fleet-models.sh
+
+# With provider details and context window sizes
+./fleet-models.sh --verbose
+
+# Diagnostic checks (Change Detection, Config Sync)
+./fleet-models.sh --diagnose
+
+# JSON output (for scripting)
+./fleet-models.sh --json
+
+# Specific agents only
+./fleet-models.sh --instances 2,3
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--verbose` | Show providers, context window sizes, and full model names |
+| `--diagnose` | Run Change Detection and MCP Config Sync Check |
+| `--json` | Machine-readable JSON output |
+| `--instances N,N,...` | Comma-separated instance numbers (default: all) |
+
+**Sample Output:**
+```
+  Agent        Profile      Main Model               Utility Model            Embedding
+  agent0-1     agent0       xiaomi/mimo-v2-pro       openai/gpt-5.4-nano      sentence-transform
+  agent0-2     agent0       perplexity/sonar         google/gemini-3-flash-   sentence-transform
+  agent0-4     hacker       minimax/minimax-m2.7     google/gemini-3-flash-   sentence-transform
+```
+
+### 10.2 `update-fleet.sh` — Fleet Updater
+
+Zero-touch updater that triggers Agent Zero's built-in self-update mechanism across the fleet.
+
+**Usage:**
+```bash
+./update-fleet.sh --status
+./update-fleet.sh --version v1.9
+./update-fleet.sh --cleanup
+```
+
+### 10.3 `sync-fleet.sh` — Fleet Configuration Sync
+
+Synchronizes configuration and templates across all fleet instances.
+
+### 10.4 `check-token-sync.py` — MCP Token Sync Check
+
+Verifies Matrix MCP tokens are consistent between `.env` and `settings.json`.
+
+```bash
+python3 check-token-sync.py
+```
+
+---
+
+## 11. Fleet Registry
 
 | Instance | Host | Agent IP | MHS IP | Profile | Federation | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | agent0-1 | tarnover | 172.23.88.1 | 172.23.89.1 | standard | TBD | Legacy |
 | agent0-2 | g2s | 172.23.88.2 | 172.23.89.2 | standard | ✅ Verified | Sovereign |
 | agent0-3 | g2s | 172.23.88.3 | 172.23.89.3 | standard | ✅ Verified | Sovereign |
-| agent0-4 | g2s | 172.23.88.4 | 172.23.89.4 | — | Pre-wired | Available |
-| agent0-5 | g2s | 172.23.88.5 | 172.23.89.5 | — | Pre-wired | Available |
+| agent0-4 | g2s | 172.23.88.4 | 172.23.89.4 | hacker | Pre-wired | Available |
+| agent0-5 | g2s | 172.23.88.5 | 172.23.89.5 | standard | Pre-wired | Available |
 
 ---
 
-## 10. Troubleshooting
+## 12. Troubleshooting
 
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
@@ -572,37 +624,20 @@ The bot automatically sets this name on startup.
 
 ### Runtime Changes
 
-Use the runtime-aware wrapper to change names without restarting:
+Use the `set_display_name.py` utility to change names without restarting:
 
 ```bash
 # Set global display name (all rooms)
-./run-set-display-name.sh "New Name"
+python3 set_display_name.py "New Name"
 
 # Set per-room display name
-./run-set-display-name.sh "Room Helper" --room '!roomid:server.com'
+python3 set_display_name.py "Room Helper" --room '!roomid:server.com'
 
 # Reset to default
-./run-set-display-name.sh --reset
+python3 set_display_name.py --reset
 
 # Show configuration
-./run-set-display-name.sh --list
-```
-
-### Optional Runtime Switching (Python <-> Rust)
-
-Python remains the default runtime. Switch per instance only when desired:
-
-```bash
-# Inside container
-cd /a0/usr/workdir
-./switch-matrix-bot.sh --restart rust
-./switch-matrix-bot.sh --restart python
-```
-
-You can also validate runtime health quickly:
-
-```bash
-./smoke-test-matrix-bot.sh
+python3 set_display_name.py --list
 ```
 
 ### Technical Details

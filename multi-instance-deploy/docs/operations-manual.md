@@ -1,7 +1,7 @@
 # Agent-Matrix Operations Manual
 
-**Version:** 1.2  
-**Date:** March 29, 2026  
+**Version:** 1.1  
+**Date:** March 5, 2026  
 **Audience:** Operators managing Agent-Matrix agents (create, remove, migrate, troubleshoot)  
 **Companion Documents:** [agent-matrix-design.md](agent-matrix-design.md) | [theory-of-operations.md](theory-of-operations.md)
 
@@ -16,9 +16,6 @@
 5. [Removing an Agent](#5-removing-an-agent)
 6. [Migrating an Agent](#6-migrating-an-agent)
 7. [Common Operational Tasks](#7-common-operational-tasks)
-   - [7.8 Fleet Status & Update Tool](#78-fleet-status--update-tool)
-   - [7.9 Email (SMTP) Configuration](#79-email-smtp-configuration)
-   - [7.10 Token Mismatch Prevention System](#710-token-mismatch-prevention-system)
 8. [Quick Troubleshooting](#8-quick-troubleshooting)
 9. [Reference: Port and IP Allocation](#9-reference-port-and-ip-allocation)
 
@@ -85,43 +82,26 @@ sudo ip link set $NIC promisc on
 
 **Make mac0 persistent** (create a systemd service):
 
-> ⚠️ **Use `agent-bridge.service`** — not `mac0-macvlan.service`. The `mac0-macvlan.service` is a legacy service that conflicts with `agent-bridge.service` and must be **masked** if present. See also: [multi-instance-guide.md § 7.1](./multi-instance-guide.md).
-
 ```bash
-# Install agent-bridge.service (canonical mac0 manager)
-cat << 'EOF' | sudo tee /etc/systemd/system/agent-bridge.service
+NIC=$(ip -o -4 addr show scope global | awk '{print $2}' | head -1)
+cat > /etc/systemd/system/mac0-macvlan.service << EOF
 [Unit]
-Description=Agent-Matrix Host Bridge (mac0)
-After=network-online.target docker.service
+Description=macvlan bridge mac0 for container access
+After=network-online.target
 Wants=network-online.target
-Requires=docker.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/bash -c "\\
-  ip link set eno1 promisc on && \\
-  ip link add mac0 link eno1 type macvlan mode bridge || true && \\
-  ip addr add 172.23.88.254/32 dev mac0 || true && \\
-  ip link set mac0 up && \\
-  ip route add 172.23.88.0/24 dev mac0 || true && \\
-  ip route add 172.23.89.0/24 dev mac0 || true"
-ExecStartPost=/usr/bin/bash -c "\\
-  sleep 20 && \\
-  for i in 1 2 3 4 5; do \\
-    curl -s --connect-timeout 2 http://172.23.88.$i/ > /dev/null 2>&1 || true; \\
-  done && \\
-  echo 'macvlan ARP stimulation complete'"
+ExecStart=/bin/bash -c 'ip link add mac0 link $NIC type macvlan mode bridge; ip addr add 172.23.88.254/32 dev mac0; ip link set mac0 up; ip route add 172.23.88.0/24 dev mac0; ip route add 172.23.89.0/24 dev mac0'
+ExecStop=/bin/bash -c 'ip link del mac0'
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Mask the legacy conflicting service if present
-sudo systemctl mask --force mac0-macvlan.service 2>/dev/null || true
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now agent-bridge.service
+systemctl daemon-reload
+systemctl enable --now mac0-macvlan.service
 ```
 
 **Configure iptables forwarding:**
@@ -322,7 +302,7 @@ bash /a0/usr/workdir/startup-services.sh
 
 > **Note:** When manually starting the bot or installing pip packages, use the virtual environment:
 > - `/opt/venv-a0/bin/pip install -r requirements.txt`
-> - `cd /a0/usr/workdir/matrix-bot && ./run-matrix-bot.sh`
+> - `/opt/venv-a0/bin/python3 matrix_bot.py`
 >
 > The system `python3` and `pip` lack required packages.
 ```
@@ -432,8 +412,8 @@ curl -s -o /dev/null -w "%{http_code}" http://172.23.88.N
 ### 4.2 Internal Services
 
 ```bash
-# Check matrix-mcp-server and matrix-bot runtime are running
-docker exec agent0-N ps aux | grep -E 'http-server.js|run-matrix-bot.sh|matrix-bot-rust|matrix_bot.py' | grep -v grep
+# Check matrix-mcp-server and matrix-bot are running
+docker exec agent0-N ps aux | grep -E 'http-server.js|matrix_bot' | grep -v grep
 
 # MCP endpoint responding
 docker exec agent0-N curl -s -X POST http://localhost:3000/mcp \
@@ -656,37 +636,10 @@ docker logs agent0-N-mhs --tail=50
 ```bash
 docker exec agent0-N bash -c "
   kill \$(pgrep -f http-server.js) 2>/dev/null
-  kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust') 2>/dev/null
+  kill \$(pgrep -f matrix_bot.py) 2>/dev/null
   bash /a0/usr/workdir/startup-services.sh
 "
 ```
-
-### 7.3.1 Switch Bot Runtime (Python ↔ Rust)
-
-The fleet supports two matrix-bot runtimes: **Python** (default) and **Rust**.
-
-**Runtime selection precedence** (used by `run-matrix-bot.sh`):
-1. `MATRIX_BOT_RUNTIME` environment variable in `.env`
-2. `.bot_runtime` file in the matrix-bot directory
-3. Default: `python`
-
-**Switch runtime per instance:**
-
-```bash
-# Switch to Rust
-docker exec -it agent0-N bash -lc 'cd /a0/usr/workdir && ./switch-matrix-bot.sh --restart rust'
-
-# Switch back to Python
-docker exec -it agent0-N bash -lc 'cd /a0/usr/workdir && ./switch-matrix-bot.sh --restart python'
-```
-
-Quick runtime/process/log validation:
-
-```bash
-docker exec agent0-N bash -lc '/a0/usr/workdir/smoke-test-matrix-bot.sh'
-```
-
-> **Note:** The watchdog uses `run-matrix-bot.sh` to restart the bot, so it respects the configured runtime. If you switch runtimes, the watchdog will maintain that choice across restarts.
 
 ### 7.4 Rotate API Tokens
 
@@ -698,8 +651,8 @@ docker exec agent0-N bash /a0/usr/workdir/startup-patch.sh
 
 # Then restart the bot
 docker exec agent0-N bash -c "
-  kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust') 2>/dev/null
-  cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh >> bot.log 2>&1 &
+  kill \$(pgrep -f matrix_bot.py) 2>/dev/null
+  cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &
 "
 ```
 
@@ -741,75 +694,60 @@ docker exec agent0-N curl -s -X POST http://localhost:3000/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list-joined-rooms","arguments":{}}}' | python3 -m json.tool
 ```
 
+### 7.8 Check Fleet Model Configuration
+
+Report which LLM models each agent is currently using (reads actual runtime config from inside each container):
+
+```bash
+cd /opt/agent-zero/multi-instance-deploy/templates/scripts
+
+# Standard table view
+./fleet-models.sh
+
+# With provider details and context window sizes
+./fleet-models.sh --verbose
+
+# Diagnostic checks (Change Detection, Config Sync)
+./fleet-models.sh --diagnose
+
+# JSON output (for scripting)
+./fleet-models.sh --json
+
+# Specific agents only
+./fleet-models.sh --instances 2,3
+```
+
+| Flag | Description |
+|------|-------------|
+| `--verbose` | Show providers, context window sizes, and full model names |
+| `--diagnose` | Run Change Detection and MCP Config Sync Check |
+| `--json` | Machine-readable JSON output |
+| `--instances N,N,...` | Comma-separated instance numbers (default: all) |
+
+**Sample Output:**
+```
+  Agent        Profile      Main Model               Utility Model            Embedding
+  agent0-1     agent0       xiaomi/mimo-v2-pro       openai/gpt-5.4-nano      sentence-transform
+  agent0-2     agent0       perplexity/sonar         google/gemini-3-flash-   sentence-transform
+  agent0-4     hacker       minimax/minimax-m2.7     google/gemini-3-flash-   sentence-transform
+```
+
+> **Note:** This script reads `/a0/usr/plugins/_model_config/config.json` inside each container — the actual runtime configuration, not `.env` template defaults.
 ---
 
 
-### 7.8 Fleet Status & Update Tool
 
-The `update-fleet.sh` script provides fleet-wide status, updates, and cleanup.
-
-**Location:** `/opt/agent-zero/multi-instance-deploy/templates/scripts/update-fleet.sh`
-
-#### Fleet Status
-
-```bash
-./update-fleet.sh --status
-```
-
-Displays a table with per-instance information:
-
-| Column | Description |
-|--------|-------------|
-| Instance | Container name (agent0-N) |
-| Container | Docker container state (up/down) |
-| Version | Deployed version tag |
-| Compose | Docker Compose version tag |
-| **BotRT** | Running bot runtime: `python`, `rust`, `none`, `both!` |
-| **BotVer** | 8-character md5 fingerprint of bot code (⚠ = drift from template) |
-| Bot | Number of bot processes (⚠ if ≠ 1) |
-| MCP | MCP server status (✓/✗) |
-| WD | Watchdog status (✓/✗) |
-| Last Update | Result of most recent fleet update |
-
-**Runtime drift detection:**
-- `python⚠` or `rust⚠` indicates the running runtime doesn't match the configured runtime
-- `both!` indicates multiple bot runtimes running simultaneously (zombie processes)
-- `BotVer` shows `⚠` when the deployed code fingerprint differs from the golden template
-
-Example output:
-```
-  Instance       Container   Version    Compose    BotRT   BotVer   Bot   MCP   WD   Last Update
-  agent0-1       up          v1.3       v1.3       python  515133b4 1     ✓     ✓    none
-  agent0-2       up          v1.3       v1.3       python  515133b4 1     ✓     ✓    success
-  agent0-5       up          v1.3       v1.3       rust    a1b2c3d4 1     ✓     ✓    success
-```
-
-#### Fleet Update
-
-```bash
-./update-fleet.sh --update [--instances N,M,...]
-```
-
-#### Zombie Process Cleanup
-
-```bash
-./update-fleet.sh --cleanup [--instances N,M,...]
-```
-
-Kills stale bot processes, keeping only the active PID from `bot.pid`.
-
-
-### 7.9 Email (SMTP) Configuration
+## 7.5 Email (SMTP) Configuration
 
 Agents can send email via Gmail SMTP. This is an optional per-instance configuration.
 
-#### Prerequisites
+### Prerequisites
 
 - A Gmail account with **2-Step Verification** enabled
 - A **16-character App Password** (regular passwords will NOT work)
 - Generate at: [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
 
-#### Configuration
+### Configuration
 
 Append these variables to the matrix-bot `.env` file:
 
@@ -829,12 +767,12 @@ EOF
 Restart the bot after updating:
 
 ```bash
-kill $(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust') 2>/dev/null
+kill $(pgrep -f matrix_bot.py) 2>/dev/null
 cd /a0/usr/workdir/matrix-bot
-./run-matrix-bot.sh &
+/opt/venv-a0/bin/python3 matrix_bot.py &
 ```
 
-#### Verification
+### Verification
 
 ```bash
 /opt/venv-a0/bin/python3 -c "
@@ -855,7 +793,7 @@ print('Email sent successfully!')
 
 > **⚠️ Common pitfall:** Regular Gmail passwords fail with `535 Username and Password not accepted`. You MUST use an App Password.
 
-### 7.10 Token Mismatch Prevention System
+## 7.6 Token Mismatch Prevention System
 
 The MCP server authenticates to Matrix using an access token. This token exists in **two locations**:
 1. The MCP server's `.env` file (`MATRIX_ACCESS_TOKEN`)
@@ -863,7 +801,7 @@ The MCP server authenticates to Matrix using an access token. This token exists 
 
 If these drift apart (e.g., after a token rotation or re-login), the MCP server receives a stale token from A0 headers and fails with `M_UNKNOWN_TOKEN`. A three-layer prevention system guards against this.
 
-#### Layer 1: Watchdog v2.0 (Boot & Runtime Guard)
+### Layer 1: Watchdog v2.0 (Boot & Runtime Guard)
 
 The watchdog script monitors both the bot and MCP server processes and performs periodic health checks.
 
@@ -876,22 +814,16 @@ Health checks include:
 - Matrix auth validation via `/account/whoami`
 - Token sync comparison between `.env` and `settings.json`
 - Auto-restart of MCP server on auth failure
-- **Auto-sync of settings.json** via `sync-mcp-token-into-settings.py` on token mismatch
-
-When the watchdog detects a token mismatch (initial or periodic auth failure), it:
-1. Logs `WATCHDOG: token mismatch detected; syncing settings.json MCP header token`
-2. Runs `sync-mcp-token-into-settings.py` to copy the authoritative `.env` token into `settings.json`
-3. Restarts the MCP server
 
 Helper script: `check-token-sync.py` (in same directory) compares both token sources.
 
-#### Layer 2: TOKEN-GUARD (Code-Level Fallback)
+### Layer 2: TOKEN-GUARD (Code-Level Fallback)
 
 The MCP server's `getAccessToken()` function (in `src/utils/server-helpers.ts`) treats the `.env` token as **authoritative**. If the header token differs from `.env`, it logs a warning and silently falls back to the `.env` value.
 
 This prevents stale A0 headers from causing authentication failures at runtime.
 
-#### Layer 3: Scheduled Health Probe (Monitoring)
+### Layer 3: Scheduled Health Probe (Monitoring)
 
 A scheduled task runs every 30 minutes and performs:
 1. MCP process alive check
@@ -902,7 +834,7 @@ A scheduled task runs every 30 minutes and performs:
 
 Create via A0 scheduler or verify with `scheduler:list_tasks`.
 
-#### Manual Token Refresh Procedure
+### Manual Token Refresh Procedure
 
 If all three layers fail or tokens need manual rotation:
 
@@ -927,13 +859,12 @@ cd /a0/usr/workdir/matrix-mcp-server && nohup node dist/http-server.js >> mcp-se
 curl -s http://localhost:3000/health
 ```
 
-#### Key Files
+### Key Files
 
 | File | Location | Purpose |
 |------|----------|---------|
 | `watchdog.sh` | `templates/scripts/` | Process monitoring + health checks |
 | `check-token-sync.py` | `templates/scripts/` | Token comparison helper |
-| `sync-mcp-token-into-settings.py` | `templates/scripts/` | Auto-syncs MCP `.env` token → `settings.json` header |
 | `server-helpers.ts` | `templates/matrix-mcp-server/src/utils/` | TOKEN-GUARD fallback logic |
 
 ## 8. Quick Troubleshooting
@@ -963,7 +894,7 @@ kubectl rollout restart deployment matrix-synapse -n matrix
 **Fix:**
 ```bash
 docker exec agent0-N bash /a0/usr/workdir/startup-patch.sh
-docker exec agent0-N bash -c "kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust'); cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh >> bot.log 2>&1 &"
+docker exec agent0-N bash -c "kill \$(pgrep -f matrix_bot.py); cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &"
 ```
 
 ### Continuwuity Not Federating
@@ -989,7 +920,7 @@ docker exec agent0-N bash -c "kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|
 
 **Symptom:** Agent cannot use Matrix tools.
 
-**First:** Check if this is a token mismatch issue (most common cause). See **Section 7.10 Token Mismatch Prevention System**.
+**First:** Check if this is a token mismatch issue (most common cause). See **Section 7.6 Token Mismatch Prevention System**.
 
 ```bash
 # Quick token sync check
@@ -1011,13 +942,13 @@ docker exec agent0-N bash -c "kill \$(pgrep -f http-server.js); cd /a0/usr/workd
 
 ```bash
 # Check if running
-docker exec agent0-N ps aux | grep -E 'run-matrix-bot.sh|matrix-bot-rust|matrix_bot.py'
+docker exec agent0-N ps aux | grep matrix_bot
 
 # Check bot log for errors
 docker exec agent0-N tail -20 /a0/usr/workdir/matrix-bot/bot.log
 
 # Restart bot
-docker exec agent0-N bash -c "kill \$(pgrep -f 'run-matrix-bot.sh|matrix_bot.py|matrix-bot-rust'); cd /a0/usr/workdir/matrix-bot && nohup ./run-matrix-bot.sh >> bot.log 2>&1 &"
+docker exec agent0-N bash -c "kill \$(pgrep -f matrix_bot.py); cd /a0/usr/workdir/matrix-bot && nohup /opt/venv-a0/bin/python matrix_bot.py >> bot.log 2>&1 &"
 ```
 
 ### Room Alias Join Fails (500 Error)
@@ -1106,10 +1037,8 @@ BOT_DISPLAY_NAME=Agent0-N    # How bot appears in Matrix Element
 ```
 
 ### Files
-- `run-matrix-bot.sh` - Runtime launcher (Python default, Rust optional)
-- `matrix_bot.py` - Python bot implementation
-- `run-set-display-name.sh` - Runtime-aware display name utility wrapper
-- `set_display_name.py` - Python display name utility
+- `matrix_bot.py` - Automatically sets name on startup
+- `set_display_name.py` - Runtime display name management utility
 
 ### Usage Examples
 ```bash
@@ -1117,10 +1046,10 @@ BOT_DISPLAY_NAME=Agent0-N    # How bot appears in Matrix Element
 cd /opt/agent-zero/agent0-N/matrix-bot
 
 # Change display name
-./run-set-display-name.sh "Cyber Agent"
+python3 set_display_name.py "Cyber Agent"
 
 # Room-specific alias
-./run-set-display-name.sh "Support Bot" --room '!abc123:v-site.net'
+python3 set_display_name.py "Support Bot" --room '!abc123:v-site.net'
 ```
 
 
@@ -1157,7 +1086,7 @@ No create-account command is used. See finalize-instance.sh for automation. Toke
 ## Service Management
 
 - `startup-services.sh`: Golden 5-phase boot template.
-- `watchdog.sh`: Monitors matrix-bot runtime (`run-matrix-bot.sh` / Python / Rust), MCP, and restarts as needed.
+- `watchdog.sh`: Monitors matrix_bot.py, MCP, and restarts as needed.
 - Bot runs in the agent0-N container with AGENT_IDENTITY context injection.
 
 **All legacy Dendrite, 2-container references, and old registration methods have been superseded by the above.**
@@ -1169,7 +1098,7 @@ No create-account command is used. See finalize-instance.sh for automation. Toke
 ## Current Architecture (3 Containers per Instance)
 
 Each instance N consists of exactly **3 containers**:
-- `agent0-N` (172.23.88.N): Agent Zero runtime + MCP server + matrix-bot runtime + watchdog.
+- `agent0-N` (172.23.88.N): Agent Zero runtime + MCP server + matrix_bot.py + watchdog.
 - `agent0-N-continuwuity`: Continuwuity v0.5.6 homeserver (RocksDB, internal port 6167, bridge-local only).
 - `agent0-N-mhs` (172.23.89.N): Caddy reverse proxy providing TLS termination, client API (8008), federation endpoint (8448).
 
