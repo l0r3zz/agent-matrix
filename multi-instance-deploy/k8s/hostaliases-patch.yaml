@@ -1,0 +1,49 @@
+spec:
+  template:
+    spec:
+      hostAliases:
+      - hostnames:
+        - agent0-1-mhs.cybertribe.com
+        ip: 172.23.89.1
+      - hostnames:
+        - agent0-2-mhs.cybertribe.com
+        ip: 172.23.89.2
+      - hostnames:
+        - agent0-3-mhs.cybertribe.com
+        ip: 172.23.89.3
+      - hostnames:
+        - agent0-4-mhs.cybertribe.com
+        ip: 172.23.89.4
+      - hostnames:
+        - agent0-5-mhs.cybertribe.com
+        ip: 172.23.89.5
+      - hostnames:
+        - agent0-6-mhs.cybertribe.com
+        ip: 172.23.89.6
+      - hostnames:
+        - agent0-7-mhs.cybertribe.com
+        ip: 172.23.89.7
+      - hostnames:
+        - agent0-8-mhs.cybertribe.com
+        ip: 172.23.89.8
+      - hostnames:
+        - agent0-9-mhs.cybertribe.com
+        ip: 172.23.89.9
+      - hostnames:
+        - agent0-10-mhs.cybertribe.com
+        ip: 172.23.89.10
+      - hostnames:
+        - agent0-11-mhs.cybertribe.com
+        ip: 172.23.89.11
+      - hostnames:
+        - agent0-12-mhs.cybertribe.com
+        ip: 172.23.89.12
+      - hostnames:
+        - agent0-13-mhs.cybertribe.com
+        ip: 172.23.89.13
+      - hostnames:
+        - agent0-14-mhs.cybertribe.com
+        ip: 172.23.89.14
+      - hostnames:
+        - agent0-15-mhs.cybertribe.com
+        ip: 172.23.89.15
