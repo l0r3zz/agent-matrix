@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: matrix-synapse
+  namespace: matrix
+  annotations:
+    meta.helm.sh/release-name: matrix-synapse
+    meta.helm.sh/release-namespace: matrix
+  labels:
+    app.kubernetes.io/instance: matrix-synapse
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: matrix
+    app.kubernetes.io/version: 1.147.1
+    helm.sh/chart: matrix-2.9.14
+data:
+  homeserver-defaults.yaml: |
+    pid_file: /tmp/homeserver.pid
+    log_config: "/etc/synapse/config/log.yaml"
+    signing_key_path: "/etc/synapse/secret/signing.key"
+    media_store_path: /data/media_store
+    macaroon_secret_key_path: "/etc/synapse/secret/macaroon_secret_key"
+    registration_shared_secret_path: "/etc/synapse/secret/registration_shared_secret"
+    form_secret_path: "/etc/synapse/secret/form_secret"
+    serve_server_wellknown: true
+    enable_metrics: true
+    listeners:
+      - port: 8008
+        tls: false
+        type: http
+        x_forwarded: true
+        resources:
+          - names: [client, federation]
+            compress: false
+      - port: 8080
+        resources:
+        - compress: false
+          names:
+          - metrics
+        tls: false
+        type: http
+        x_forwarded: false
+    database:
+      name: psycopg2
+      args:
+        cp_min: 5
+        cp_max: 10
+    email:
+      enable_notifs: false
+    auto_join_rooms: []
+    enable_registration: false
+    enable_registration_without_verification: false
+    trusted_key_servers:
+      - server_name: "matrix.org"
+    report_stats: false
+  homeserver.yaml: |
+    allow_device_name_lookup_over_federation: false
+    allow_profile_lookup_over_federation: false
+    allow_public_rooms_over_federation: false
+    allow_public_rooms_without_auth: false
+    auto_join_rooms: []
+    database:
+      args:
+        cp_max: 10
+        cp_min: 5
+      name: psycopg2
+    email:
+      app_name: Matrix
+      client_base_url: https://matrix.v-site.net/
+      enable_notifs: false
+      notif_from: Matrix <admin@v-site.net>
+    enable_registration: false
+    enable_registration_without_verification: false
+    enable_room_list_search: false
+    federation_custom_ca_list:
+    - /etc/synapse/certs/home-lab-ca.pem
+    federation_domain_whitelist:
+    - agent0-1-mhs.cybertribe.com
+    - agent0-2-mhs.cybertribe.com
+    - agent0-3-mhs.cybertribe.com
+    - agent0-4-mhs.cybertribe.com
+    - agent0-5-mhs.cybertribe.com
+    - agent0-6-mhs.cybertribe.com
+    - agent0-7-mhs.cybertribe.com
+    - agent0-8-mhs.cybertribe.com
+    - agent0-9-mhs.cybertribe.com
+    - agent0-10-mhs.cybertribe.com
+    - agent0-11-mhs.cybertribe.com
+    - agent0-12-mhs.cybertribe.com
+    - agent0-13-mhs.cybertribe.com
+    - agent0-14-mhs.cybertribe.com
+    - agent0-15-mhs.cybertribe.com
+    federation_verify_certificates: true
+    ip_range_whitelist:
+    - 172.23.0.0/16
+    - 10.8.0.0/24
+    public_baseurl: https://matrix.v-site.net/
+    report_stats: false
+    room_list_publication_rules:
+    - action: deny
+      alias: '*'
+      room_id: '*'
+      user_id: '*'
+    server_name: v-site.net
+    suppress_key_server_warning: true
+    trusted_key_servers:
+    - server_name: matrix.org
+    web_client_location: https://matrix.v-site.net/
+  log.yaml: |
+    disable_existing_loggers: false
+    formatters:
+      precise:
+        format: '%(asctime)s - %(name)s - %(lineno)d - %(levelname)s - %(request)s - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: precise
+    loggers:
+      synapse.storage.SQL:
+        level: INFO
+    root:
+      handlers:
+      - console
+      level: INFO
+    version: 1
