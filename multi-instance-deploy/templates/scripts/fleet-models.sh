@@ -1,16 +1,23 @@
 #!/bin/bash
 # =============================================================================
-# fleet-models.sh — Agent-Matrix Fleet Model Configuration Report (v1.6)
+# fleet-models.sh — Agent-Matrix Fleet Model Configuration Manager (v2.0)
 # =============================================================================
-# Shows which LLM models each agent is configured to use.
-# Reads actual runtime configuration from /a0/usr/plugins/_model_config/config.json
+# Shows and modifies which LLM models each agent is configured to use.
+# Reads/writes runtime configuration from /a0/usr/plugins/_model_config/config.json
 #
-# Usage:
+# Usage (reporting):
 #   ./fleet-models.sh
 #   ./fleet-models.sh --instances 2,3
+#   ./fleet-models.sh --instances 1-5
 #   ./fleet-models.sh --verbose
 #   ./fleet-models.sh --json
 #   ./fleet-models.sh --diagnose
+#
+# Usage (model management):
+#   ./fleet-models.sh --instances 2,3 --set-chat-model openrouter/moonshotai/kimi-k2.6
+#   ./fleet-models.sh --instances 1-5 --set-utility-model openai/gpt-5.4-nano --yes
+#   ./fleet-models.sh --instances 2 --set-chat-model qwen/qwen3-235b-a22b --dry-run
+#   ./fleet-models.sh --instances 1-5 --set-embedding-model sentence-transformers/all-MiniLM-L6-v2 --yes
 #
 # Requires: docker, python3
 # Runs on: g2s host (172.23.100.121)
@@ -33,38 +40,62 @@ DIM='\033[2m'
 NC='\033[0m'
 
 # --- Parse arguments ---
-INSTANCES="$ALL_INSTANCES"
+RAW_INSTANCES=""       # unparsed, for range expansion
 VERBOSE=false
 OUTPUT_FORMAT="table"  # table, json
 DIAGNOSE=false
+
+# Model setting flags
+SET_CHAT_MODEL=""
+SET_UTILITY_MODEL=""
+SET_EMBEDDING_MODEL=""
+DRY_RUN=false
+YES=false
 
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Options:
+Reporting Options:
   --instances N,N,...    Comma-separated instance numbers (default: all)
+  --instances N-M        Range of instance numbers (e.g., 1-5)
   --verbose              Show provider details, context window sizes, and full model names
   --json                 Output in JSON format
   --diagnose             Run diagnostic checks (Change Detection, Config Sync)
+
+Model Management Options:
+  --set-chat-model ID       Set main/chat model (e.g., openrouter/moonshotai/kimi-k2.6)
+  --set-utility-model ID    Set utility model (e.g., openai/gpt-5.4-nano)
+  --set-embedding-model ID  Set embedding model (e.g., sentence-transformers/all-MiniLM-L6-v2)
+  --dry-run                 Preview changes without applying
+  --yes                     Skip confirmation prompt
+
   -h, --help             Show this help
 
 Examples:
   $(basename "$0")
   $(basename "$0") --instances 2,3
-  $(basename "$0") --verbose
+  $(basename "$0") --instances 1-5 --verbose
   $(basename "$0") --json
   $(basename "$0") --diagnose
+  $(basename "$0") --instances 2,3 --set-chat-model openrouter/moonshotai/kimi-k2.6
+  $(basename "$0") --instances 1-5 --set-utility-model openai/gpt-5.4-nano --yes
+  $(basename "$0") --instances 2 --set-chat-model qwen/qwen3-235b-a22b --dry-run
 EOF
     exit 0
 }
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --instances)   INSTANCES=$(echo "$2" | tr ',' ' '); shift 2 ;;
+        --instances)   RAW_INSTANCES="$2"; shift 2 ;;
         --verbose)     VERBOSE=true; shift ;;
         --json)        OUTPUT_FORMAT="json"; shift ;;
         --diagnose)    DIAGNOSE=true; shift ;;
+        --set-chat-model)      SET_CHAT_MODEL="$2"; shift 2 ;;
+        --set-utility-model)   SET_UTILITY_MODEL="$2"; shift 2 ;;
+        --set-embedding-model) SET_EMBEDDING_MODEL="$2"; shift 2 ;;
+        --dry-run)     DRY_RUN=true; shift ;;
+        --yes)         YES=true; shift ;;
         -h|--help)     usage ;;
         *) echo -e "${RED}Unknown option: $1${NC}"; echo "Use --help for usage."; exit 1 ;;
     esac
@@ -80,10 +111,69 @@ log_header() {
     echo -e "\n${CYAN}${BOLD}$1${NC}" >&2
 }
 
+# Audit log for model changes
+# Format: TIMESTAMP|INSTANCE|MODEL_TYPE|OLD_MODEL|NEW_MODEL|TRIGGER
+audit_log() {
+    local INSTANCE="$1"
+    local MODEL_TYPE="$2"
+    local OLD_MODEL="$3"
+    local NEW_MODEL="$4"
+    local TRIGGER="${5:-fleet-models.sh}"
+    local TIMESTAMP=$(date -Iseconds)
+    local LOG_DIR="/opt/agent-zero/logs"
+    local LOG_FILE="${LOG_DIR}/fleet-models-audit.log"
+    
+    # Create log directory if it doesn't exist
+    if [ ! -d "$LOG_DIR" ]; then
+        mkdir -p "$LOG_DIR" 2>/dev/null || true
+    fi
+    
+    local LOG_LINE="${TIMESTAMP}|${INSTANCE}|${MODEL_TYPE}|${OLD_MODEL}|${NEW_MODEL}|${TRIGGER}"
+    
+    # Try to write to host log path first, fallback to container-local
+    if echo "$LOG_LINE" >> "$LOG_FILE" 2>/dev/null; then
+        return 0
+    fi
+    
+    # Fallback: write inside the container's workdir
+    local FALLBACK_LOG="/a0/usr/workdir/fleet-models-audit.log"
+    echo "$LOG_LINE" >> "$FALLBACK_LOG" 2>/dev/null || true
+}
+
 is_container_running() {
     local N=$1
     docker ps --format '{{.Names}}' | grep -qx "agent0-$N" 2>/dev/null
 }
+
+# Expand instances: "1,2,3" or "1-5" or "1-3,5"
+expand_instances() {
+    local RAW="$1"
+    local RESULT=""
+    
+    if [ -z "$RAW" ]; then
+        echo "$ALL_INSTANCES"
+        return
+    fi
+    
+    # Replace commas with spaces for iteration
+    local PARTS=$(echo "$RAW" | tr ',' ' ')
+    
+    for PART in $PARTS; do
+        if [[ "$PART" == *"-"* ]]; then
+            local START=$(echo "$PART" | cut -d'-' -f1)
+            local END=$(echo "$PART" | cut -d'-' -f2)
+            for ((i=START; i<=END; i++)); do
+                RESULT="$RESULT $i"
+            done
+        else
+            RESULT="$RESULT $PART"
+        fi
+    done
+    
+    echo "$RESULT" | tr ' ' '\n' | sort -n -u | tr '\n' ' '
+}
+
+INSTANCES=$(expand_instances "$RAW_INSTANCES")
 
 # Clean profile value - removes template artifacts like {{PROFILE}}\nhacker
 # and extracts just the actual profile name
@@ -91,6 +181,25 @@ clean_profile_value() {
     local RAW="$1"
     # Replace newlines with spaces, filter out template placeholders, take last word
     echo "$RAW" | tr '\n' ' ' | sed 's/\s\+/ /g' | tr ' ' '\n' | grep -v '{{' | grep -v '^$' | tail -1
+}
+
+# Validate model ID format
+validate_model_id() {
+    local MODEL_ID="$1"
+    local TYPE="$2"
+    
+    if [ -z "$MODEL_ID" ]; then
+        return 0
+    fi
+    
+    # Must contain at least one slash (provider/name format)
+    if [[ "$MODEL_ID" != *"/"* ]]; then
+        echo -e "${RED}Error: Invalid $TYPE model ID '$MODEL_ID'${NC}"
+        echo -e "${RED}       Model IDs must use provider/name format (e.g., openrouter/moonshotai/kimi-k2.6)${NC}"
+        return 1
+    fi
+    
+    return 0
 }
 
 # Get model config from the runtime config file inside the container
@@ -113,13 +222,103 @@ try:
     provider = model_config.get('provider', 'unknown')
     name = model_config.get('name', 'unknown')
     ctx_length = model_config.get('ctx_length', 0)
+    api_base = model_config.get('api_base', '')
+    ctx_history = model_config.get('ctx_history', 0)
+    ctx_input = model_config.get('ctx_input', 0)
+    vision = model_config.get('vision', False)
+    kwargs = model_config.get('kwargs', {})
+    max_tokens = kwargs.get('max_tokens', 0)
     if provider and name and provider != 'unknown' and name != 'unknown':
-        print(f'{provider}/{name}|{ctx_length}')
+        print(f'{provider}/{name}|{ctx_length}|{api_base}|{ctx_history}|{ctx_input}|{vision}|{max_tokens}')
     else:
-        print('unknown|0')
+        print('unknown|0||||False|0')
 except:
-    print('unknown|0')
-" 2>/dev/null || echo "unknown|0"
+    print('unknown|0||||False|0')
+" 2>/dev/null || echo "unknown|0||||False|0"
+}
+
+# Set model config in the runtime config file inside the container
+set_model_config() {
+    local N=$1
+    local MODEL_TYPE="$2"   # chat_model, utility_model, embedding_model
+    local NEW_MODEL_ID="$3" # provider/name
+    
+    if ! is_container_running "$N"; then
+        echo "SKIP"
+        return
+    fi
+    
+    local PROVIDER=$(echo "$NEW_MODEL_ID" | cut -d'/' -f1)
+    local NAME=$(echo "$NEW_MODEL_ID" | cut -d'/' -f2-)
+    
+    docker exec "agent0-$N" python3 -c "
+import json
+
+try:
+    with open('$CONFIG_PATH', 'r') as f:
+        config = json.load(f)
+    
+    if '$MODEL_TYPE' not in config:
+        config['$MODEL_TYPE'] = {}
+    
+    model = config['$MODEL_TYPE']
+    old_name = model.get('name', 'unknown')
+    
+    # Update provider and name
+    model['provider'] = '$PROVIDER'
+    model['name'] = '$NAME'
+    
+    # If api_base is empty and provider is openrouter, leave it empty (uses default)
+    # Otherwise keep existing api_base
+    
+    with open('$CONFIG_PATH', 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    print(f'OK|{old_name}')
+except Exception as e:
+    print(f'ERROR|{str(e)}')
+" 2>/dev/null || echo "ERROR|python execution failed"
+}
+
+# Update .env file on host for persistence across restarts
+update_env_model() {
+    local N=$1
+    local ENV_KEY="$2"
+    local NEW_VALUE="$3"
+    local ENV_FILE="${BASE_DIR}/agent0-${N}/.env"
+    
+    if [ ! -f "$ENV_FILE" ]; then
+        echo "NOENV"
+        return
+    fi
+    
+    # Check if key exists
+    if grep -qE "^[[:space:]]*${ENV_KEY}=" "$ENV_FILE"; then
+        # Update existing key (last occurrence)
+        local TMP_FILE=$(mktemp)
+        local FOUND=false
+        while IFS= read -r line || [ -n "$line" ]; do
+            if [[ "$line" =~ ^[[:space:]]*${ENV_KEY}= ]]; then
+                if [ "$FOUND" = false ]; then
+                    echo "${ENV_KEY}=${NEW_VALUE}" >> "$TMP_FILE"
+                    FOUND=true
+                else
+                    # Comment out duplicates
+                    echo "# ${line}" >> "$TMP_FILE"
+                fi
+            else
+                echo "$line" >> "$TMP_FILE"
+            fi
+        done < "$ENV_FILE"
+        mv "$TMP_FILE" "$ENV_FILE"
+        echo "UPDATED"
+    else
+        # Append new key
+        echo "" >> "$ENV_FILE"
+        echo "# Added by fleet-models.sh on $(date '+%Y-%m-%d %H:%M:%S')" >> "$ENV_FILE"
+        echo "${ENV_KEY}=${NEW_VALUE}" >> "$ENV_FILE"
+        echo "ADDED"
+    fi
 }
 
 # Get current context tokens from Agent Zero API
@@ -274,9 +473,227 @@ except:
     fi
 }
 
-# --- Main Report ---
+# --- Model Setting Mode ---
 
-# Diagnostic mode
+# Validate all requested model changes before proceeding
+if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDING_MODEL" ]; then
+    
+    # Validate model IDs
+    validate_model_id "$SET_CHAT_MODEL" "chat" || exit 1
+    validate_model_id "$SET_UTILITY_MODEL" "utility" || exit 1
+    validate_model_id "$SET_EMBEDDING_MODEL" "embedding" || exit 1
+    
+    # Map model types to env keys
+    declare -A MODEL_TYPE_TO_ENV_KEY=(
+        ["chat_model"]="A0_SET_chat_model"
+        ["utility_model"]="A0_SET_utility_model"
+        ["embedding_model"]="A0_SET_embedding_model"
+    )
+    
+    # Build preview table
+    log_header "═══════════════════════════════════════════════════════════════════════════════"
+    if [ "$DRY_RUN" = true ]; then
+        log_header "  Fleet Model Change Preview (DRY RUN)"
+    else
+        log_header "  Fleet Model Change Preview"
+    fi
+    log_header "═══════════════════════════════════════════════════════════════════════════════"
+    echo ""
+    
+    # Summary of changes
+    echo -e "  ${BOLD}Changes to apply:${NC}"
+    [ -n "$SET_CHAT_MODEL" ] && echo -e "    • Chat model:      ${CYAN}$SET_CHAT_MODEL${NC}"
+    [ -n "$SET_UTILITY_MODEL" ] && echo -e "    • Utility model:   ${CYAN}$SET_UTILITY_MODEL${NC}"
+    [ -n "$SET_EMBEDDING_MODEL" ] && echo -e "    • Embedding model: ${CYAN}$SET_EMBEDDING_MODEL${NC}"
+    echo ""
+    
+    # Target instances
+    echo -e "  ${BOLD}Target instances:${NC} ${CYAN}$INSTANCES${NC}"
+    echo ""
+    
+    # Per-instance preview
+    printf "  ${BOLD}%-12s %-10s %-30s %-30s %-30s${NC}\n" \
+        "Agent" "Status" "Chat" "Utility" "Embedding"
+    printf "  %-12s %-10s %-30s %-30s %-30s\n" \
+        "──────────" "─────────" "──────────────────────────────" "──────────────────────────────" "──────────────────────────────"
+    
+    local CHANGES_COUNT=0
+    local SKIP_COUNT=0
+    
+    for N in $INSTANCES; do
+        if is_container_running "$N"; then
+            local STATUS="${GREEN}online${NC}"
+            
+            # Get current models
+            local CHAT_CURR=$(get_model_config "$N" "chat_model" | cut -d'|' -f1)
+            local UTIL_CURR=$(get_model_config "$N" "utility_model" | cut -d'|' -f1)
+            local EMBED_CURR=$(get_model_config "$N" "embedding_model" | cut -d'|' -f1)
+            
+            # Determine new values
+            local CHAT_NEW="${SET_CHAT_MODEL:-$CHAT_CURR}"
+            local UTIL_NEW="${SET_UTILITY_MODEL:-$UTIL_CURR}"
+            local EMBED_NEW="${SET_EMBEDDING_MODEL:-$EMBED_CURR}"
+            
+            # Highlight changes
+            local CHAT_DISP="$CHAT_CURR"
+            local UTIL_DISP="$UTIL_CURR"
+            local EMBED_DISP="$EMBED_CURR"
+            
+            if [ -n "$SET_CHAT_MODEL" ] && [ "$CHAT_CURR" != "$SET_CHAT_MODEL" ]; then
+                CHAT_DISP="${YELLOW}$CHAT_CURR → $SET_CHAT_MODEL${NC}"
+                CHANGES_COUNT=$((CHANGES_COUNT + 1))
+            fi
+            if [ -n "$SET_UTILITY_MODEL" ] && [ "$UTIL_CURR" != "$SET_UTILITY_MODEL" ]; then
+                UTIL_DISP="${YELLOW}$UTIL_CURR → $SET_UTILITY_MODEL${NC}"
+                CHANGES_COUNT=$((CHANGES_COUNT + 1))
+            fi
+            if [ -n "$SET_EMBEDDING_MODEL" ] && [ "$EMBED_CURR" != "$SET_EMBEDDING_MODEL" ]; then
+                EMBED_DISP="${YELLOW}$EMBED_CURR → $SET_EMBEDDING_MODEL${NC}"
+                CHANGES_COUNT=$((CHANGES_COUNT + 1))
+            fi
+            
+            # Truncate for display
+            local CHAT_SHORT="${CHAT_DISP:0:28}"
+            local UTIL_SHORT="${UTIL_DISP:0:28}"
+            local EMBED_SHORT="${EMBED_DISP:0:28}"
+            
+            printf "  %-12b %-10b %-30b %-30b %-30b\n" \
+                "agent0-$N" "$STATUS" "$CHAT_SHORT" "$UTIL_SHORT" "$EMBED_SHORT"
+        else
+            local STATUS="${DIM}offline${NC}"
+            printf "  %-12b %-10b %-30s %-30s %-30s\n" \
+                "agent0-$N" "$STATUS" "—" "—" "—"
+            SKIP_COUNT=$((SKIP_COUNT + 1))
+        fi
+    done
+    
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        echo -e "  ${BOLD}Dry run complete.${NC} No changes were made."
+        echo -e "  ${DIM}Use without --dry-run to apply changes.${NC}"
+        echo ""
+        log_header "═══════════════════════════════════════════════════════════════════════════════"
+        exit 0
+    fi
+    
+    if [ "$CHANGES_COUNT" -eq 0 ]; then
+        echo -e "  ${YELLOW}No changes needed — all targeted instances already have the requested models.${NC}"
+        echo ""
+        log_header "═══════════════════════════════════════════════════════════════════════════════"
+        exit 0
+    fi
+    
+    # Confirmation prompt
+    if [ "$YES" = false ]; then
+        echo -e "  ${YELLOW}This will modify $CHANGES_COUNT model configuration(s) across $(echo "$INSTANCES" | wc -w) instance(s).${NC}"
+        echo -e "  ${YELLOW}Changes take effect immediately (next message).${NC}"
+        echo ""
+        read -p "  Proceed? [y/N]: " CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+            echo -e "  ${RED}Aborted.${NC}"
+            exit 1
+        fi
+        echo ""
+    fi
+    
+    # Apply changes
+    log_header "Applying Changes..."
+    echo ""
+    
+    local APPLIED=0
+    local FAILED=0
+    
+    for N in $INSTANCES; do
+        if ! is_container_running "$N"; then
+            echo -e "  ${DIM}agent0-$N: Container offline — skipped${NC}"
+            continue
+        fi
+        
+        echo -e "  ${BOLD}agent0-$N${NC}:"
+        
+        # Apply chat model change
+        if [ -n "$SET_CHAT_MODEL" ]; then
+            local RESULT=$(set_model_config "$N" "chat_model" "$SET_CHAT_MODEL")
+            local STATUS=$(echo "$RESULT" | cut -d'|' -f1)
+            local OLD_NAME=$(echo "$RESULT" | cut -d'|' -f2)
+            
+            if [ "$STATUS" = "OK" ]; then
+                echo -e "    ${GREEN}✓${NC} Chat model: ${OLD_NAME} → ${CYAN}$SET_CHAT_MODEL${NC}"
+                APPLIED=$((APPLIED + 1))
+                audit_log "agent0-$N" "chat_model" "$OLD_NAME" "$SET_CHAT_MODEL" "fleet-models-cli"
+            else
+                echo -e "    ${RED}✗${NC} Chat model: $STATUS"
+                FAILED=$((FAILED + 1))
+            fi
+            
+            # Update .env for persistence
+            local ENV_STATUS=$(update_env_model "$N" "A0_SET_chat_model" "$SET_CHAT_MODEL")
+            case "$ENV_STATUS" in
+                "UPDATED") echo -e "      ${DIM}└─ .env updated${NC}" ;;
+                "ADDED")   echo -e "      ${DIM}└─ .env added${NC}" ;;
+                "NOENV")   echo -e "      ${YELLOW}└─ .env not found (runtime only)${NC}" ;;
+            esac
+        fi
+        
+        # Apply utility model change
+        if [ -n "$SET_UTILITY_MODEL" ]; then
+            local RESULT=$(set_model_config "$N" "utility_model" "$SET_UTILITY_MODEL")
+            local STATUS=$(echo "$RESULT" | cut -d'|' -f1)
+            local OLD_NAME=$(echo "$RESULT" | cut -d'|' -f2)
+            
+            if [ "$STATUS" = "OK" ]; then
+                echo -e "    ${GREEN}✓${NC} Utility model: ${OLD_NAME} → ${CYAN}$SET_UTILITY_MODEL${NC}"
+                APPLIED=$((APPLIED + 1))
+                audit_log "agent0-$N" "utility_model" "$OLD_NAME" "$SET_UTILITY_MODEL" "fleet-models-cli"
+            else
+                echo -e "    ${RED}✗${NC} Utility model: $STATUS"
+                FAILED=$((FAILED + 1))
+            fi
+            
+            local ENV_STATUS=$(update_env_model "$N" "A0_SET_utility_model" "$SET_UTILITY_MODEL")
+            case "$ENV_STATUS" in
+                "UPDATED") echo -e "      ${DIM}└─ .env updated${NC}" ;;
+                "ADDED")   echo -e "      ${DIM}└─ .env added${NC}" ;;
+                "NOENV")   echo -e "      ${YELLOW}└─ .env not found (runtime only)${NC}" ;;
+            esac
+        fi
+        
+        # Apply embedding model change
+        if [ -n "$SET_EMBEDDING_MODEL" ]; then
+            local RESULT=$(set_model_config "$N" "embedding_model" "$SET_EMBEDDING_MODEL")
+            local STATUS=$(echo "$RESULT" | cut -d'|' -f1)
+            local OLD_NAME=$(echo "$RESULT" | cut -d'|' -f2)
+            
+            if [ "$STATUS" = "OK" ]; then
+                echo -e "    ${GREEN}✓${NC} Embedding model: ${OLD_NAME} → ${CYAN}$SET_EMBEDDING_MODEL${NC}"
+                APPLIED=$((APPLIED + 1))
+                audit_log "agent0-$N" "embedding_model" "$OLD_NAME" "$SET_EMBEDDING_MODEL" "fleet-models-cli"
+            else
+                echo -e "    ${RED}✗${NC} Embedding model: $STATUS"
+                FAILED=$((FAILED + 1))
+            fi
+            
+            local ENV_STATUS=$(update_env_model "$N" "A0_SET_embedding_model" "$SET_EMBEDDING_MODEL")
+            case "$ENV_STATUS" in
+                "UPDATED") echo -e "      ${DIM}└─ .env updated${NC}" ;;
+                "ADDED")   echo -e "      ${DIM}└─ .env added${NC}" ;;
+                "NOENV")   echo -e "      ${YELLOW}└─ .env not found (runtime only)${NC}" ;;
+            esac
+        fi
+    done
+    
+    echo ""
+    log_header "───────────────────────────────────────────────────────────────────────────────"
+    echo -e "  ${BOLD}Summary:${NC} Applied: ${GREEN}$APPLIED${NC} | Failed: ${RED}$FAILED${NC}"
+    echo -e "  ${DIM}Changes take effect on the next message turn — no restart required.${NC}"
+    echo ""
+    log_header "═══════════════════════════════════════════════════════════════════════════════"
+    exit 0
+fi
+
+# --- Diagnostic Mode ---
+
 if [ "$DIAGNOSE" = true ]; then
     log_header "═══════════════════════════════════════════════════════════════════════════════"
     log_header "  Agent-Matrix Fleet — Diagnostic Report"
@@ -381,7 +798,8 @@ if [ "$DIAGNOSE" = true ]; then
     exit 0
 fi
 
-# Regular model report
+# --- Regular Model Report ---
+
 if [ "$OUTPUT_FORMAT" = "json" ]; then
     echo "{\"fleet_models\": ["
 else
@@ -413,7 +831,7 @@ for N in $INSTANCES; do
         # Get agent profile
         PROFILE=$(get_agent_profile "$N")
         
-        # Get model configurations (pipe-separated: provider/name|ctx_length)
+        # Get model configurations (pipe-separated: provider/name|ctx_length|...)
         CHAT_RAW=$(get_model_config "$N" "chat_model")
         UTILITY_RAW=$(get_model_config "$N" "utility_model")
         EMBEDDING_RAW=$(get_model_config "$N" "embedding_model")
@@ -533,10 +951,10 @@ done
 
 if [ "$OUTPUT_FORMAT" = "json" ]; then
     echo "]"
-    echo ",  "summary": {"
-    echo "    "total": $TOTAL,"
-    echo "    "online": $ONLINE,"
-    echo "    "offline": $OFFLINE"
+    echo ",  \"summary\": {"
+    echo "    \"total\": $TOTAL,"
+    echo "    \"online\": $ONLINE,"
+    echo "    \"offline\": $OFFLINE"
     echo "  }"
     echo "}"
 else
@@ -551,6 +969,7 @@ else
     if [ "$VERBOSE" = false ]; then
         echo -e "  ${DIM}Tip: Use --verbose to see provider details, context windows, and full model names${NC}"
         echo -e "  ${DIM}Tip: Use --diagnose to run Change Detection and Config Sync Check${NC}"
+        echo -e "  ${DIM}Tip: Use --set-chat-model, --set-utility-model, --set-embedding-model to change models${NC}"
         echo ""
     fi
     
