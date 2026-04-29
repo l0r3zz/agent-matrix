@@ -1,0 +1,36 @@
+---
+description: Deployment conventions for agent instances, Docker Compose, and provisioning
+globs: "multi-instance-deploy/**"
+alwaysApply: false
+---
+
+# Deployment Conventions
+
+## Provisioning New Agents
+
+Always use `create-instance.sh` -- never hand-build triplets:
+```bash
+./multi-instance-deploy/create-instance.sh <instance-number>
+```
+
+Instance number determines:
+- IP addresses: 172.23.88.N (agent), 172.23.89.N (homeserver)
+- Port mappings: derived from instance number
+- Container names: agent<N>, continuwuity<N>, caddy<N>
+
+## Templates
+
+Templates in `multi-instance-deploy/templates/` are the source of truth:
+- `docker-compose.yml.template` -- Agent triplet compose
+- `Caddyfile.template` -- Per-agent TLS config
+- `matrix-mcp-server/` -- Has its own package.json and CLAUDE.md
+- `matrix-bot/` -- Rust (primary) and Python (legacy)
+- `scripts/` -- Fleet management, sync, switch, smoke-test
+
+## Host Scripts
+
+`multi-instance-deploy/scripts/` contains host-side helpers:
+- `destroy-and-rebuild.sh` -- Full agent teardown and rebuild
+- `fix-agentX-services.sh` -- Service repair scripts
+
+Never modify templates without considering impact on existing deployed agents.

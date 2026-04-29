@@ -1,0 +1,33 @@
+---
+description: Migration scripts, runbooks, and the collect/restore pattern
+globs: "migration/**"
+alwaysApply: false
+---
+
+# Migration Conventions
+
+## The Collect/Restore Pattern
+
+Migrations follow a strict two-phase approach:
+1. **Collect** -- Inventory/backup from the source system (must run first)
+2. **Restore** -- Apply collected state to the target system
+
+Never run restore without first running the matching collect script.
+
+## Current Migrations
+
+### tarnover-refresh (Host OS refresh)
+- `RUNBOOK.md` -- Step-by-step runbook (read first)
+- `collect-old.sh` -- Inventories running system (online)
+- `restore-new.sh` -- Automates fresh install setup
+
+### agent0-1 relocation (g2s)
+- `README-agent0-1-g2s.md` -- Runbook for moving agent between hosts
+- Covers step-ca cert handoff, volume migration, federation gotchas
+
+## When Writing Migration Scripts
+
+- Always create a RUNBOOK.md companion document
+- Document pre-conditions and post-validation steps
+- Scripts should be idempotent where possible
+- Include rollback steps or at minimum document what to undo

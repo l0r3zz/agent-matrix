@@ -1,0 +1,35 @@
+---
+description: Bash scripting conventions for automation and fleet management
+globs: "**/*.sh"
+alwaysApply: false
+---
+
+# Shell Script Conventions
+
+## Style
+
+- Use `#!/usr/bin/env bash` shebang
+- `set -euo pipefail` at the top of all scripts
+- Quote all variable expansions: `"${var}"` not `$var`
+- Use functions for reusable logic blocks
+- Add a usage/help message for scripts that take arguments
+
+## Error Handling
+
+- Check for required tools/commands at script start
+- Validate arguments before proceeding
+- Use meaningful exit codes (not just 0/1)
+- Log actions before performing them so failures are traceable
+
+## Fleet Scripts
+
+Scripts in `multi-instance-deploy/templates/scripts/` manage the agent fleet:
+- Follow the instance-number convention for agent identification
+- Respect the deterministic IP/port scheme
+- Include smoke-test validation after operations
+
+## Secrets
+
+- Never echo or log credentials, tokens, or keys
+- Use environment variables or mounted secret files
+- If examples show credentials, they must be clearly rotated/fake

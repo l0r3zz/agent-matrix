@@ -1,0 +1,37 @@
+---
+description: Kubernetes, Ansible, and Terraform conventions
+globs: "{ansible/**,terraform/**,kubernetes/**}"
+alwaysApply: false
+---
+
+# Infrastructure Conventions
+
+## Ansible
+
+- Inventory: `ansible/inventory/hosts.ini`
+- Always test with `--check` (dry run) before applying playbooks
+- Roles are per-service under `ansible/roles/` (grafana, k3s_server, keycloak, matrix_synapse, etc.)
+- Playbooks follow pattern: `ansible/playbooks/<service>-<action>.yml`
+
+## Terraform
+
+- Environment configs: `terraform/environments/homelab/`
+- Reusable modules: `terraform/modules/` (k3s, keycloak, matrix, monitoring)
+- Never manually edit Terraform state files
+- Always `terraform plan` before `terraform apply`
+
+## Kubernetes
+
+- Resources organized by namespace function:
+  - `communication/` -- Matrix/Synapse, Element
+  - `identity/` -- Keycloak
+  - `infrastructure/` -- Core infra
+  - `mcp/` -- MCP server deployments
+  - `monitoring/` -- Prometheus, Grafana, Loki
+
+## Key Architectural Choices
+
+- K3s (lightweight) over full K8s for home lab constraints
+- Keycloak as central IAM for all services
+- MetalLB for bare-metal load balancing
+- Longhorn for distributed persistent storage

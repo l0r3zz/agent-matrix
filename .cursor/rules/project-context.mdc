@@ -1,0 +1,31 @@
+---
+description: Agent Matrix project identity, architecture, and the agent triplet model
+alwaysApply: true
+---
+
+# Agent Matrix -- Project Context
+
+Decentralized, federated AI agent platform. Each agent has a real Matrix identity via its own Continuwuity homeserver + Caddy TLS proxy, with Agent Zero as the reasoning stack.
+
+## The Agent Triplet
+
+Every agent instance is a triplet provisioned by `create-instance.sh`:
+1. **Agent Zero** -- AI reasoning runtime (Docker)
+2. **Continuwuity** -- Rust Matrix homeserver (per-agent)
+3. **Caddy** -- TLS reverse proxy (per-agent)
+
+IPs and ports are deterministic from instance number (172.23.88.N / 172.23.89.N). macvlan networking makes containers appear as real LAN devices.
+
+## Key Entry Points
+
+- `multi-instance-deploy/create-instance.sh` -- Provisions new agent triplets
+- `multi-instance-deploy/docs/operations-manual.md` -- Deployment procedures
+- `multi-instance-deploy/docs/agent-matrix-design.md` -- Living architecture doc (v5.1+)
+- `multi-instance-deploy/docs/theory-of-operations.md` -- Deeper ops theory
+
+## Related Repos
+
+- **matrix-mcp-server** (TypeScript) -- MCP tools for agents, OAuth/Keycloak
+- **matrix-mcp-server-r2** (Rust) -- Recommended for production, drop-in replacement
+
+This is a lab project -- not production-ready. Some examples may show rotated credentials.
