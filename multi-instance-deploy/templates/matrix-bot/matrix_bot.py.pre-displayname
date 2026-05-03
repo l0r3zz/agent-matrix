@@ -54,7 +54,6 @@ BOT_START_TIME   = time.time() * 1000  # ms -- skip messages before bot started
 # --- Trigger Prefix Filtering ---------------------------------------------
 # Extract short agent name from USER_ID (e.g., "agent0-3" from "@agent0-3:...")
 _agent_short = USER_ID.split(":")[0].lstrip("@") if USER_ID else "agent"
-_display_name = os.getenv("BOT_DISPLAY_NAME", "").strip()
 TRIGGER_PREFIXES = [
     _agent_short + ":",          # e.g. "agent0-3:"
     _agent_short + ",",          # e.g. "agent0-3,"
@@ -62,13 +61,6 @@ TRIGGER_PREFIXES = [
     "@all-agents:",              # broadcast
     "@all-agents,",              # broadcast variant
 ]
-# Add display name as trigger prefix if set and different from agent short name
-if _display_name and _display_name.lower() != _agent_short.lower():
-    TRIGGER_PREFIXES.extend([
-        _display_name + ":",     # e.g. "Gandalf:"
-        _display_name + ",",     # e.g. "Gandalf,"
-        "@" + _display_name,     # e.g. "@Gandalf"
-    ])
 log_trigger = None  # set after logging init
 
 # --- Built-in Commands (no LLM needed) ------------------------------------
@@ -341,15 +333,6 @@ async def main() -> None:
         config=config,
     )
     client.access_token = ACCESS_TOKEN
-    client.user_id = USER_ID
-
-    # Set bot display name on startup if configured
-    if BOT_DISPLAY_NAME:
-        try:
-            await client.set_displayname(BOT_DISPLAY_NAME)
-            log.info("Set display name to: %s", BOT_DISPLAY_NAME)
-        except Exception as e:
-            log.warning("Failed to set display name: %s", e)
     client.user_id = USER_ID
 
     http_session = aiohttp.ClientSession()

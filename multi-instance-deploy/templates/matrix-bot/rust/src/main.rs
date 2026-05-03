@@ -5,6 +5,8 @@ use pulldown_cmark::{html, Options, Parser};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Sha256, Digest};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -12,6 +14,29 @@ use tokio::fs;
 use tokio::time::timeout;
 
 const MAX_CHARS_PER_MESSAGE: usize = 32000;
+
+
+/// Compute the same deterministic token that Agent Zero's create_auth_token() produces.
+/// Algorithm: sha256(runtime_id:auth_login:auth_password) -> base64url -> first 16 chars
+fn compute_deterministic_token() -> String {
+    // Read the same env vars that Python's runtime.get_persistent_id() and settings use
+    let runtime_id = std::env::var("A0_PERSISTENT_RUNTIME_ID").unwrap_or_default();
+    let username = std::env::var("A0_AUTH_LOGIN").unwrap_or_else(|_|
+        std::env::var("AUTH_LOGIN").unwrap_or_default()
+    );
+    let password = std::env::var("A0_AUTH_PASSWORD").unwrap_or_else(|_|
+        std::env::var("AUTH_PASSWORD").unwrap_or_default()
+    );
+
+    if runtime_id.is_empty() || username.is_empty() || password.is_empty() {
+        return String::new();
+    }
+
+    let input = format!("{}:{}:{}", runtime_id, username, password);
+    let hash_bytes = Sha256::digest(input.as_bytes());
+    let b64_token = URL_SAFE_NO_PAD.encode(hash_bytes);
+    b64_token.chars().take(16).collect()
+}
 
 /// Strip Matrix mention "pills" from plain-text message bodies.
 /// Element sends mentions as `[@user:server](https://matrix.to/#/@user:server)`
@@ -89,6 +114,15 @@ impl Config {
         let a0_api_url =
             std::env::var("A0_API_URL").unwrap_or_else(|_| "http://localhost:80/api/api_message".to_string());
         let a0_api_key = std::env::var("A0_API_KEY").unwrap_or_default();
+        // Auto-compute the deterministic token: used as fallback if .env key is missing/empty.
+        // This prevents 401 loops when mcp_server_token is regenerated on container restart.
+        let deterministic_token = compute_deterministic_token();
+        let a0_api_key = if a0_api_key.is_empty() && !deterministic_token.is_empty() {
+            info!("A0_API_KEY not set in .env, using deterministic token");
+            deterministic_token
+        } else {
+            a0_api_key
+        };
         let bot_display_name = std::env::var("BOT_DISPLAY_NAME").unwrap_or_else(|_| "Agent Zero".to_string());
         let agent_identity = std::env::var("AGENT_IDENTITY").unwrap_or_else(|_| bot_display_name.clone());
         let sync_timeout_ms = std::env::var("SYNC_TIMEOUT_MS")
@@ -257,6 +291,7 @@ impl Bot {
             ("timeout", timeout_ms.to_string()),
             ("full_state", full_state.to_string()),
             ("set_presence", "online".to_string()),
+            ("filter", "".to_string()),
         ]);
         if let Some(s) = since {
             req = req.query(&[("since", s.to_string())]);
@@ -301,6 +336,37 @@ impl Bot {
         match first {
             Ok(resp) if resp.status().is_success() => {
                 return self.handle_a0_success(room_id, resp).await;
+            }
+            Ok(resp) if resp.status().as_u16() == 401 => {
+                // Token may be stale; recompute deterministic token and retry once
+                let new_token = compute_deterministic_token();
+                if !new_token.is_empty() && new_token != self.cfg.a0_api_key {
+                    info!("Got 401 from Agent Zero, retrying with recomputed token");
+                    self.cfg.a0_api_key = new_token.clone();
+                    payload["api_key"] = Value::String(new_token.clone());
+                    let retry_req = self
+                        .a0_client
+                        .post(&self.cfg.a0_api_url)
+                        .header("X-API-KEY", &new_token)
+                        .json(&payload);
+                    match retry_req.send().await {
+                        Ok(retry_resp) if retry_resp.status().is_success() => {
+                            return self.handle_a0_success(room_id, retry_resp).await;
+                        }
+                        Ok(retry_resp) => {
+                            let status = retry_resp.status();
+                            let body = retry_resp.text().await.unwrap_or_default();
+                            error!("Agent Zero 401 retry failed with status {}: {}", status, body);
+                            return format!("Agent Zero auth error after retry (HTTP {}). Check token sync.", status);
+                        }
+                        Err(e) => {
+                            error!("Agent Zero 401 retry call failed: {e}");
+                            return format!("Unexpected error on retry: {e}");
+                        }
+                    }
+                }
+                error!("Agent Zero returned 401, but computed token unchanged");
+                return "Agent Zero authentication failed. Check bot logs.".to_string();
             }
             Ok(resp) if resp.status().as_u16() == 404 && !context_id.is_empty() => {
                 info!("Clearing stale context for room {}, retrying...", room_id);
