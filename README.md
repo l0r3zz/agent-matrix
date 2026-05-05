@@ -12,15 +12,6 @@ The result is a controlled lab environment for exploring agentic architectures, 
 
 ---
 
-## Fleet Memory: OpenBrain (OB1)
-
-> 🟢 **In production since end of February 2026**
-
-Agent-Matrix ships with **OpenBrain (OB1)** — a self-hosted, persistent long-term memory system shared across the entire agent fleet and all AI harnesses in the lab network.
-
-### What It Is
-
-OpenBrain is a **PostgreSQL + pgvector** semantic memory database backed by an MCP (Model Context Protocol) server. Every agent in the fleet, plus any MCP-compatible AI harness (Cursor, Windsurf, Claude Code, Antigravity), can **capture**, **search**, and **recall** knowledge by meaning — not just by keyword.
 
 ### How It Works
 
@@ -45,6 +36,32 @@ OpenBrain is a **PostgreSQL + pgvector** semantic memory database backed by an M
                       └───────────────┘
 ```
 
+## How to Get Started
+
+Clone this repo and dive into the `multi-instance-deploy/docs/` directory. Here's a tour of the documentation:
+
+| Document | Size | What It Covers |
+|----------|------|----------------|
+| **[operations-manual.md](multi-instance-deploy/docs/operations-manual.md)** | 38 KB | **Start here.** Step-by-step deployment instructions. Covers prerequisites, scaffolding with `create-instance.sh`, container startup, TLS certificate generation, Matrix account registration, and verification. The canonical deployment runbook. |
+| **[multi-instance-guide.md](multi-instance-deploy/docs/multi-instance-guide.md)** | 25 KB | **Golden runbook.** Detailed operational reference for the multi-instance deploy toolset. Covers addressing scheme (IP/MAC assignments), Docker networking (macvlan), Dendrite federation on port 8448, and troubleshooting. |
+| **[agent-matrix-design.md](multi-instance-deploy/docs/agent-matrix-design.md)** | 31 KB | **Architecture overview.** The complete system design: one-homeserver-per-agent philosophy, network topology, component relationships, security model, and the step-ca PKI layer. A living document that evolved with the project — some early ideas were explored and abandoned, and those paths are documented here. |
+| **[agent-matrix-open-brain-design.md](multi-instance-deploy/docs/agent-matrix-open-brain-design.md)** | 33 KB | **Memory architecture.** Deep dive into the OpenBrain integration: schema design, embedding strategy, MCP tool surface, search protocol, and the dynamic `get_search_protocol` tool that keeps all connected harnesses aware of current knowledge domains. |
+| **[agent-matrix-project-retrospective.md](multi-instance-deploy/docs/agent-matrix-project-retrospective.md)** | 29 KB | **Lessons learned.** Full project retrospective covering what worked, what didn't, architectural pivots, and key decisions. Invaluable for understanding the *why* behind the design. |
+| **[theory-of-operations.md](multi-instance-deploy/docs/theory-of-operations.md)** | 50 KB | **Operational theory.** Comprehensive reference on how the entire system operates: startup sequences, federation flow, health monitoring, agent lifecycle, and network plumbing. |
+| **[plugin-architecture-research.md](multi-instance-deploy/docs/plugin-architecture-research.md)** | 22 KB | **Extensibility research.** Investigation into Agent Zero plugin architectures, extension hooks, and how external tools (OpenBrain, Matrix MCP server) integrate with the agent framework. |
+| **[decommission-guide.md](multi-instance-deploy/docs/decommission-guide.md)** | 3 KB | **Safe teardown.** How to properly decomission an agent instance, remove its Matrix identity, clean up DNS entries, and free its IP allocations. |
+| **[validate-instance-guide.md](multi-instance-deploy/docs/validate-instance-guide.md)** | 2 KB | **Post-deployment checks.** Quick validation checklist for a newly deployed instance: health endpoints, federation connectivity, Matrix login, and MCP server reachability. |
+| **[rust-matrix-bot-update-runbook.md](multi-instance-deploy/docs/rust-matrix-bot-update-runbook.md)** | 8 KB | **Rust migration.** Runbook for updating the Matrix bot from the legacy Python implementation to the Rust-based `matrix-mcp-server-r2` with full E2EE support. |
+| **[rust-matrix-mcp-server-plan.md](multi-instance-deploy/docs/rust-matrix-mcp-server-plan.md)** | 7 KB | **E2EE roadmap.** Architectural plan for the next-generation Matrix MCP server in Rust with full end-to-end encryption for agent rooms. |
+
+---
+## Fleet Memory: OpenBrain (OB1)
+
+Agent-Matrix ships with **OpenBrain (OB1)** — a self-hosted, persistent long-term memory system shared across the entire agent fleet and all AI harnesses in the lab network.
+
+### What It Is
+
+OpenBrain is a **PostgreSQL + pgvector** semantic memory database backed by an MCP (Model Context Protocol) server. Every agent in the fleet, plus any MCP-compatible AI harness (Cursor, Windsurf, Claude Code, Antigravity), can **capture**, **search**, and **recall** knowledge by meaning — not just by keyword.
 ### Key Features
 
 - **6 MCP tools**: `search_thoughts`, `capture_thought`, `list_thoughts`, `thought_stats`, `search_by_date`, `get_search_protocol`
@@ -90,30 +107,11 @@ Start it with: `cp .env.example .env` (fill in real keys) → `docker compose up
 
 ---
 
-## How to Get Started
-
-Clone this repo and dive into the `multi-instance-deploy/docs/` directory. Here's a tour of the documentation:
-
-| Document | Size | What It Covers |
-|----------|------|----------------|
-| **[operations-manual.md](multi-instance-deploy/docs/operations-manual.md)** | 38 KB | **Start here.** Step-by-step deployment instructions. Covers prerequisites, scaffolding with `create-instance.sh`, container startup, TLS certificate generation, Matrix account registration, and verification. The canonical deployment runbook. |
-| **[multi-instance-guide.md](multi-instance-deploy/docs/multi-instance-guide.md)** | 25 KB | **Golden runbook.** Detailed operational reference for the multi-instance deploy toolset. Covers addressing scheme (IP/MAC assignments), Docker networking (macvlan), Dendrite federation on port 8448, and troubleshooting. |
-| **[agent-matrix-design.md](multi-instance-deploy/docs/agent-matrix-design.md)** | 31 KB | **Architecture overview.** The complete system design: one-homeserver-per-agent philosophy, network topology, component relationships, security model, and the step-ca PKI layer. A living document that evolved with the project — some early ideas were explored and abandoned, and those paths are documented here. |
-| **[agent-matrix-open-brain-design.md](multi-instance-deploy/docs/agent-matrix-open-brain-design.md)** | 33 KB | **Memory architecture.** Deep dive into the OpenBrain integration: schema design, embedding strategy, MCP tool surface, search protocol, and the dynamic `get_search_protocol` tool that keeps all connected harnesses aware of current knowledge domains. |
-| **[agent-matrix-project-retrospective.md](multi-instance-deploy/docs/agent-matrix-project-retrospective.md)** | 29 KB | **Lessons learned.** Full project retrospective covering what worked, what didn't, architectural pivots, and key decisions. Invaluable for understanding the *why* behind the design. |
-| **[theory-of-operations.md](multi-instance-deploy/docs/theory-of-operations.md)** | 50 KB | **Operational theory.** Comprehensive reference on how the entire system operates: startup sequences, federation flow, health monitoring, agent lifecycle, and network plumbing. |
-| **[plugin-architecture-research.md](multi-instance-deploy/docs/plugin-architecture-research.md)** | 22 KB | **Extensibility research.** Investigation into Agent Zero plugin architectures, extension hooks, and how external tools (OpenBrain, Matrix MCP server) integrate with the agent framework. |
-| **[decommission-guide.md](multi-instance-deploy/docs/decommission-guide.md)** | 3 KB | **Safe teardown.** How to properly decomission an agent instance, remove its Matrix identity, clean up DNS entries, and free its IP allocations. |
-| **[validate-instance-guide.md](multi-instance-deploy/docs/validate-instance-guide.md)** | 2 KB | **Post-deployment checks.** Quick validation checklist for a newly deployed instance: health endpoints, federation connectivity, Matrix login, and MCP server reachability. |
-| **[rust-matrix-bot-update-runbook.md](multi-instance-deploy/docs/rust-matrix-bot-update-runbook.md)** | 8 KB | **Rust migration.** Runbook for updating the Matrix bot from the legacy Python implementation to the Rust-based `matrix-mcp-server-r2` with full E2EE support. |
-| **[rust-matrix-mcp-server-plan.md](multi-instance-deploy/docs/rust-matrix-mcp-server-plan.md)** | 7 KB | **E2EE roadmap.** Architectural plan for the next-generation Matrix MCP server in Rust with full end-to-end encryption for agent rooms. |
-
----
-
 ## What's Next
 
 This is an ongoing project. The foundation was laid so that future work around Agentic Engineering can continue. Next on the immediate agenda is bringing full **E2EE support** to the Matrix protocol with respect to agents. The `matrix-mcp-server` packaged here is written in TypeScript and supports client-to-server encryption over the channel, but rooms themselves are not encrypted. The **matrix-mcp-server-r2** project will provide full E2EE encryption — a more secure and robust implementation written in Rust. It will be backward-compatible with the current implementation and is the recommended path for production use.
 
+> 🟢 **In production since end of February 2026**
 ---
 
 ## Why?
