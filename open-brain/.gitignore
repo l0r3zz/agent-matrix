@@ -1,0 +1,10 @@
+# Secrets
+.env
+
+# PostgreSQL runtime data (auto-created by PostgreSQL on first run)
+pgdata/
+
+# Node.js
+server/node_modules/
+server/dist/
+*.tsbuildinfo

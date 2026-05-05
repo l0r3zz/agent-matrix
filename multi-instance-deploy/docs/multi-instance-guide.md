@@ -522,6 +522,8 @@ Utility scripts for fleet-wide operations. All scripts live in:
 
 Reports which LLM models each agent is currently using. Reads actual runtime configuration from `/a0/usr/plugins/_model_config/config.json` inside each container.
 
+As of **v2.0**, you can also **change models fleet-wide** with validation, dry-run, and audit trail support.
+
 **Usage:**
 ```bash
 cd /opt/agent-zero/multi-instance-deploy/templates/scripts
@@ -540,6 +542,15 @@ cd /opt/agent-zero/multi-instance-deploy/templates/scripts
 
 # Specific agents only
 ./fleet-models.sh --instances 2,3
+
+# Fleet-wide model change (preview first)
+./fleet-models.sh --instances 1-5 --set-chat-model moonshotai/kimi-k2.6 --dry-run
+
+# Apply with confirmation
+./fleet-models.sh --instances 1-5 --set-chat-model moonshotai/kimi-k2.6
+
+# Skip confirmation
+./fleet-models.sh --instances 1-5 --set-utility-model openai/gpt-5.4-nano --yes
 ```
 
 **Flags:**
@@ -548,7 +559,12 @@ cd /opt/agent-zero/multi-instance-deploy/templates/scripts
 | `--verbose` | Show providers, context window sizes, and full model names |
 | `--diagnose` | Run Change Detection and MCP Config Sync Check |
 | `--json` | Machine-readable JSON output |
-| `--instances N,N,...` | Comma-separated instance numbers (default: all) |
+| `--instances N,N,...` or `N-M` | Comma-separated list or range (default: all) |
+| `--set-chat-model ID` | Set main/chat model fleet-wide (requires `--instances`) |
+| `--set-utility-model ID` | Set utility model fleet-wide (requires `--instances`) |
+| `--set-embedding-model ID` | Set embedding model fleet-wide (requires `--instances`) |
+| `--dry-run` | Preview changes without applying |
+| `--yes` | Skip confirmation prompt |
 
 **Sample Output:**
 ```
@@ -558,20 +574,47 @@ cd /opt/agent-zero/multi-instance-deploy/templates/scripts
   agent0-4     hacker       minimax/minimax-m2.7     google/gemini-3-flash-   sentence-transform
 ```
 
+> **Note:** This script reads `/a0/usr/plugins/_model_config/config.json` inside each container — the actual runtime configuration, not `.env` template defaults.
+> **Audit Trail:** Every model change is logged to `/opt/agent-zero/logs/fleet-models-audit.log`.
 ### 10.2 `update-fleet.sh` — Fleet Updater
 
-Zero-touch updater that triggers Agent Zero's built-in self-update mechanism across the fleet.
+Zero-touch updater that triggers Agent Zero's built-in self-update mechanism across the fleet. As of **v1.4+**, supports `--json` for structured output and explicitly detects MCP server variant (Rust `r2:X.Y.Z`, TypeScript `ts`, Python `py`).
 
 **Usage:**
 ```bash
+# Human-readable fleet status table
 ./update-fleet.sh --status
+
+# JSON output (for monitoring / dashboards)
+./update-fleet.sh --status --json
+
+# Update fleet to specific version
 ./update-fleet.sh --version v1.9
+
+# Update fleet with JSON report
+./update-fleet.sh --version v1.9 --json
+
+# Clean up stale zombie matrix-bot processes
 ./update-fleet.sh --cleanup
+
+# Cleanup with JSON report
+./update-fleet.sh --cleanup --json
+```
+
+**JSON output fields** (per instance):
+```json
+{
+  "agent": "agent0-2",
+  "container": "up",
+  "version": "v1.9",
+  "mcp_alive": true,
+  "mcp_variant": "rust",
+  "mcp_version": "0.1.1",
+  "watchdog_alive": true
+}
 ```
 
 ### 10.3 `sync-fleet.sh` — Fleet Configuration Sync
-
-Synchronizes configuration and templates across all fleet instances.
 
 ### 10.4 `check-token-sync.py` — MCP Token Sync Check
 

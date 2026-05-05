@@ -696,7 +696,7 @@ docker exec agent0-N curl -s -X POST http://localhost:3000/mcp \
 
 ### 7.8 Check Fleet Model Configuration
 
-Report which LLM models each agent is currently using (reads actual runtime config from inside each container):
+Report which LLM models each agent is currently using (reads actual runtime config from inside each container). As of v2.0, you can also **change models fleet-wide** and audit those changes.
 
 ```bash
 cd /opt/agent-zero/multi-instance-deploy/templates/scripts
@@ -715,6 +715,15 @@ cd /opt/agent-zero/multi-instance-deploy/templates/scripts
 
 # Specific agents only
 ./fleet-models.sh --instances 2,3
+
+# Fleet-wide model change (preview first)
+./fleet-models.sh --instances 1-5 --set-chat-model moonshotai/kimi-k2.6 --dry-run
+
+# Apply with confirmation
+./fleet-models.sh --instances 1-5 --set-chat-model moonshotai/kimi-k2.6
+
+# Skip confirmation
+./fleet-models.sh --instances 1-5 --set-utility-model openai/gpt-5.4-nano --yes
 ```
 
 | Flag | Description |
@@ -722,7 +731,12 @@ cd /opt/agent-zero/multi-instance-deploy/templates/scripts
 | `--verbose` | Show providers, context window sizes, and full model names |
 | `--diagnose` | Run Change Detection and MCP Config Sync Check |
 | `--json` | Machine-readable JSON output |
-| `--instances N,N,...` | Comma-separated instance numbers (default: all) |
+| `--instances N,N,...` or `N-M` | Comma-separated list or range (default: all) |
+| `--set-chat-model ID` | Set main/chat model fleet-wide (requires `--instances`) |
+| `--set-utility-model ID` | Set utility model fleet-wide (requires `--instances`) |
+| `--set-embedding-model ID` | Set embedding model fleet-wide (requires `--instances`) |
+| `--dry-run` | Preview changes without applying |
+| `--yes` | Skip confirmation prompt |
 
 **Sample Output:**
 ```
@@ -733,7 +747,7 @@ cd /opt/agent-zero/multi-instance-deploy/templates/scripts
 ```
 
 > **Note:** This script reads `/a0/usr/plugins/_model_config/config.json` inside each container — the actual runtime configuration, not `.env` template defaults.
----
+> **Audit Trail:** Every model change is logged to `/opt/agent-zero/logs/fleet-models-audit.log`.
 
 
 

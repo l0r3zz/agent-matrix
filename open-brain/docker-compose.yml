@@ -1,0 +1,55 @@
+name: open-brain
+
+services:
+  # --- POSTGRESQL + PGVECTOR ---
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: open-brain-db
+    hostname: open-brain-db
+    mac_address: "02:42:AC:17:5A:01"
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: open_brain
+      POSTGRES_USER: openbrain
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+      - ./pg-conf/pg_hba_custom.conf:/etc/postgresql/pg_hba_custom.conf:ro
+    networks:
+      macvlan-172-23:
+        ipv4_address: 172.23.90.1
+      brain-net:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openbrain -d open_brain"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- OPEN BRAIN MCP SERVER ---
+  open-brain-mcp:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: open-brain-mcp
+    hostname: open-brain-mcp
+    mac_address: "02:42:AC:17:5A:02"
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://openbrain:${POSTGRES_PASSWORD}@open-brain-db:5432/open_brain
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      MCP_ACCESS_KEY: ${MCP_ACCESS_KEY}
+      PORT: "3100"
+    networks:
+      macvlan-172-23:
+        ipv4_address: 172.23.90.2
+      brain-net:
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+networks:
+  brain-net:
+    driver: bridge
+  macvlan-172-23:
+    external: true
