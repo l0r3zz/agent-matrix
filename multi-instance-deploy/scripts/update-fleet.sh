@@ -147,13 +147,31 @@ for N in $INSTANCES; do
     fi
     CUR_VER=$(get_current_version "$N")
     CURRENT_VERSIONS[$N]="$CUR_VER"
-    if [ "$CUR_VER" = "$VERSION" ] && [ "$FORCE" != true ]; then
+    if [ "$SKIP_RESTART" = true ]; then
+        # In skip-restart mode, check compose file tag, not running version
+        COMPOSE="${BASE_DIR}/agent0-${N}/docker-compose.yml"
+        if [ -f "$COMPOSE" ]; then
+            COMPOSE_TAG=$(grep -oP 'agent0ai/agent-zero:\Kv[0-9.]+' "$COMPOSE" | head -1)
+            if [ "$COMPOSE_TAG" = "$VERSION" ]; then
+                log "  ${GREEN}[agent0-$N] Compose file already at $VERSION (skip-restart) — SKIPPING${NC}"
+                INSTANCE_STATUS[$N]="skipped:compose_already_current"
+                SKIPPED=$((SKIPPED + 1))
+                continue
+            fi
+            log "  [agent0-$N] Compose: ${BOLD}$COMPOSE_TAG${NC} → Target: ${BOLD}$VERSION${NC} (running: $CUR_VER)"
+        else
+            log "  ${RED}[agent0-$N] No docker-compose.yml found${NC}"
+            INSTANCE_STATUS[$N]="failed:missing_compose"
+            continue
+        fi
+    elif [ "$CUR_VER" = "$VERSION" ] && [ "$FORCE" != true ]; then
         log "  ${GREEN}[agent0-$N] Already at $VERSION — SKIPPING${NC}"
         INSTANCE_STATUS[$N]="skipped:already_current"
         SKIPPED=$((SKIPPED + 1))
         continue
+    else
+        log "  [agent0-$N] Current: ${BOLD}$CUR_VER${NC} → Target: ${BOLD}$VERSION${NC}"
     fi
-    log "  [agent0-$N] Current: ${BOLD}$CUR_VER${NC} → Target: ${BOLD}$VERSION${NC}"
     INSTANCE_STATUS[$N]="pending"
     TARGETED=$((TARGETED + 1))
 done

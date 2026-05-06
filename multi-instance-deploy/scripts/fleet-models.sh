@@ -114,21 +114,21 @@ log_header() {
 # Audit log for model changes
 # Format: TIMESTAMP|INSTANCE|MODEL_TYPE|OLD_MODEL|NEW_MODEL|TRIGGER
 audit_log() {
-    local INSTANCE="$1"
-    local MODEL_TYPE="$2"
-    local OLD_MODEL="$3"
-    local NEW_MODEL="$4"
-    local TRIGGER="${5:-fleet-models.sh}"
-    local TIMESTAMP=$(date -Iseconds)
-    local LOG_DIR="/opt/agent-zero/logs"
-    local LOG_FILE="${LOG_DIR}/fleet-models-audit.log"
+    INSTANCE="$1"
+    MODEL_TYPE="$2"
+    OLD_MODEL="$3"
+    NEW_MODEL="$4"
+    TRIGGER="${5:-fleet-models.sh}"
+    TIMESTAMP=$(date -Iseconds)
+    LOG_DIR="/opt/agent-zero/logs"
+    LOG_FILE="${LOG_DIR}/fleet-models-audit.log"
     
     # Create log directory if it doesn't exist
     if [ ! -d "$LOG_DIR" ]; then
         mkdir -p "$LOG_DIR" 2>/dev/null || true
     fi
     
-    local LOG_LINE="${TIMESTAMP}|${INSTANCE}|${MODEL_TYPE}|${OLD_MODEL}|${NEW_MODEL}|${TRIGGER}"
+    LOG_LINE="${TIMESTAMP}|${INSTANCE}|${MODEL_TYPE}|${OLD_MODEL}|${NEW_MODEL}|${TRIGGER}"
     
     # Try to write to host log path first, fallback to container-local
     if echo "$LOG_LINE" >> "$LOG_FILE" 2>/dev/null; then
@@ -136,19 +136,19 @@ audit_log() {
     fi
     
     # Fallback: write inside the container's workdir
-    local FALLBACK_LOG="/a0/usr/workdir/fleet-models-audit.log"
+    FALLBACK_LOG="/a0/usr/workdir/fleet-models-audit.log"
     echo "$LOG_LINE" >> "$FALLBACK_LOG" 2>/dev/null || true
 }
 
 is_container_running() {
-    local N=$1
+    N=$1
     docker ps --format '{{.Names}}' | grep -qx "agent0-$N" 2>/dev/null
 }
 
 # Expand instances: "1,2,3" or "1-5" or "1-3,5"
 expand_instances() {
-    local RAW="$1"
-    local RESULT=""
+    RAW="$1"
+    RESULT=""
     
     if [ -z "$RAW" ]; then
         echo "$ALL_INSTANCES"
@@ -156,12 +156,12 @@ expand_instances() {
     fi
     
     # Replace commas with spaces for iteration
-    local PARTS=$(echo "$RAW" | tr ',' ' ')
+    PARTS=$(echo "$RAW" | tr ',' ' ')
     
     for PART in $PARTS; do
         if [[ "$PART" == *"-"* ]]; then
-            local START=$(echo "$PART" | cut -d'-' -f1)
-            local END=$(echo "$PART" | cut -d'-' -f2)
+            START=$(echo "$PART" | cut -d'-' -f1)
+            END=$(echo "$PART" | cut -d'-' -f2)
             for ((i=START; i<=END; i++)); do
                 RESULT="$RESULT $i"
             done
@@ -178,15 +178,15 @@ INSTANCES=$(expand_instances "$RAW_INSTANCES")
 # Clean profile value - removes template artifacts like {{PROFILE}}\nhacker
 # and extracts just the actual profile name
 clean_profile_value() {
-    local RAW="$1"
+    RAW="$1"
     # Replace newlines with spaces, filter out template placeholders, take last word
     echo "$RAW" | tr '\n' ' ' | sed 's/\s\+/ /g' | tr ' ' '\n' | grep -v '{{' | grep -v '^$' | tail -1
 }
 
 # Validate model ID format
 validate_model_id() {
-    local MODEL_ID="$1"
-    local TYPE="$2"
+    MODEL_ID="$1"
+    TYPE="$2"
     
     if [ -z "$MODEL_ID" ]; then
         return 0
@@ -204,8 +204,8 @@ validate_model_id() {
 
 # Get model config from the runtime config file inside the container
 get_model_config() {
-    local N=$1
-    local MODEL_TYPE="$2"  # chat_model, utility_model, embedding_model
+    N=$1
+    MODEL_TYPE="$2"  # chat_model, utility_model, embedding_model
     
     if ! is_container_running "$N"; then
         echo "unknown"
@@ -239,17 +239,17 @@ except:
 
 # Set model config in the runtime config file inside the container
 set_model_config() {
-    local N=$1
-    local MODEL_TYPE="$2"   # chat_model, utility_model, embedding_model
-    local NEW_MODEL_ID="$3" # provider/name
+    N=$1
+    MODEL_TYPE="$2"   # chat_model, utility_model, embedding_model
+    NEW_MODEL_ID="$3" # provider/name
     
     if ! is_container_running "$N"; then
         echo "SKIP"
         return
     fi
     
-    local PROVIDER=$(echo "$NEW_MODEL_ID" | cut -d'/' -f1)
-    local NAME=$(echo "$NEW_MODEL_ID" | cut -d'/' -f2-)
+    PROVIDER=$(echo "$NEW_MODEL_ID" | cut -d'/' -f1)
+    NAME=$(echo "$NEW_MODEL_ID" | cut -d'/' -f2-)
     
     docker exec "agent0-$N" python3 -c "
 import json
@@ -282,10 +282,10 @@ except Exception as e:
 
 # Update .env file on host for persistence across restarts
 update_env_model() {
-    local N=$1
-    local ENV_KEY="$2"
-    local NEW_VALUE="$3"
-    local ENV_FILE="${BASE_DIR}/agent0-${N}/.env"
+    N=$1
+    ENV_KEY="$2"
+    NEW_VALUE="$3"
+    ENV_FILE="${BASE_DIR}/agent0-${N}/.env"
     
     if [ ! -f "$ENV_FILE" ]; then
         echo "NOENV"
@@ -295,8 +295,8 @@ update_env_model() {
     # Check if key exists
     if grep -qE "^[[:space:]]*${ENV_KEY}=" "$ENV_FILE"; then
         # Update existing key (last occurrence)
-        local TMP_FILE=$(mktemp)
-        local FOUND=false
+        TMP_FILE=$(mktemp)
+        FOUND=false
         while IFS= read -r line || [ -n "$line" ]; do
             if [[ "$line" =~ ^[[:space:]]*${ENV_KEY}= ]]; then
                 if [ "$FOUND" = false ]; then
@@ -323,7 +323,7 @@ update_env_model() {
 
 # Get current context tokens from Agent Zero API
 get_current_context_tokens() {
-    local N=$1
+    N=$1
     
     if ! is_container_running "$N"; then
         echo "0"
@@ -357,8 +357,8 @@ except:
 }
 
 get_agent_profile() {
-    local N=$1
-    local PROFILE=""
+    N=$1
+    PROFILE=""
     
     # Primary: try container environment
     if is_container_running "$N"; then
@@ -367,10 +367,10 @@ get_agent_profile() {
     
     # Fallback: try .env file if container env is empty or contains template artifacts
     if [ -z "$PROFILE" ] || [[ "$PROFILE" == *"{{"* ]]; then
-        local ENV_FILE="${BASE_DIR}/agent0-${N}/.env"
+        ENV_FILE="${BASE_DIR}/agent0-${N}/.env"
         if [ -f "$ENV_FILE" ]; then
             # Get all matching lines, take the last one with a real value
-            local ENV_PROFILE=$(grep -E '^A0_SET_agent_profile=' "$ENV_FILE" 2>/dev/null | \
+            ENV_PROFILE=$(grep -E '^A0_SET_agent_profile=' "$ENV_FILE" 2>/dev/null | \
                 tail -1 | \
                 sed 's/^A0_SET_agent_profile=//')
             if [ -n "$ENV_PROFILE" ]; then
@@ -388,7 +388,7 @@ get_agent_profile() {
 }
 
 shorten_model_name() {
-    local FULL_NAME="$1"
+    FULL_NAME="$1"
     # Remove provider prefix if present (e.g., "openrouter/anthropic/claude-sonnet-4" -> "anthropic/claude-sonnet-4")
     if [[ "$FULL_NAME" == *"/"* ]]; then
         echo "$FULL_NAME" | sed 's|^[^/]*/||'
@@ -398,7 +398,7 @@ shorten_model_name() {
 }
 
 format_number() {
-    local NUM="$1"
+    NUM="$1"
     if [ "$NUM" -ge 1000000 ] 2>/dev/null; then
         echo "$((NUM/1000000))M"
     elif [ "$NUM" -ge 1000 ] 2>/dev/null; then
@@ -410,9 +410,9 @@ format_number() {
 
 # Get .env model value for change detection
 get_env_model_value() {
-    local N=$1
-    local KEY="$2"
-    local ENV_FILE="${BASE_DIR}/agent0-${N}/.env"
+    N=$1
+    KEY="$2"
+    ENV_FILE="${BASE_DIR}/agent0-${N}/.env"
     
     if [ ! -f "$ENV_FILE" ]; then
         echo ""
@@ -420,7 +420,7 @@ get_env_model_value() {
     fi
     
     # Try to get the value from .env file
-    local VALUE=$(grep -E "^[[:space:]]*${KEY}=" "$ENV_FILE" 2>/dev/null | \
+    VALUE=$(grep -E "^[[:space:]]*${KEY}=" "$ENV_FILE" 2>/dev/null | \
         tail -1 | \
         sed "s/^[[:space:]]*${KEY}=//" | \
         sed "s/^[\"']//;s/[\"']$//")
@@ -430,9 +430,9 @@ get_env_model_value() {
 
 # Check MCP token sync
 check_mcp_token_sync() {
-    local N=$1
-    local ENV_FILE="${BASE_DIR}/agent0-${N}/matrix-mcp-server/.env"
-    local SETTINGS_FILE="${BASE_DIR}/agent0-${N}/settings.json"
+    N=$1
+    ENV_FILE="${BASE_DIR}/agent0-${N}/matrix-mcp-server/.env"
+    SETTINGS_FILE="${BASE_DIR}/agent0-${N}/settings.json"
     
     # Check if both files exist
     if [ ! -f "$ENV_FILE" ] || [ ! -f "$SETTINGS_FILE" ]; then
@@ -441,10 +441,10 @@ check_mcp_token_sync() {
     fi
     
     # Get token from MCP server .env
-    local ENV_TOKEN=$(grep "MATRIX_ACCESS_TOKEN=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | sed 's/^["'\'']\|["'\'']$//g')
+    ENV_TOKEN=$(grep "MATRIX_ACCESS_TOKEN=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | sed 's/^["'\'']\|["'\'']$//g')
     
     # Get token from Agent Zero settings.json
-    local A0_TOKEN=$(docker exec "agent0-$N" python3 -c "
+    A0_TOKEN=$(docker exec "agent0-$N" python3 -c "
 import json
 try:
     with open('/a0/usr/settings.json', 'r') as f:
@@ -517,27 +517,27 @@ if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDI
     printf "  %-12s %-10s %-30s %-30s %-30s\n" \
         "──────────" "─────────" "──────────────────────────────" "──────────────────────────────" "──────────────────────────────"
     
-    local CHANGES_COUNT=0
-    local SKIP_COUNT=0
+    CHANGES_COUNT=0
+    SKIP_COUNT=0
     
     for N in $INSTANCES; do
         if is_container_running "$N"; then
-            local STATUS="${GREEN}online${NC}"
+            STATUS="${GREEN}online${NC}"
             
             # Get current models
-            local CHAT_CURR=$(get_model_config "$N" "chat_model" | cut -d'|' -f1)
-            local UTIL_CURR=$(get_model_config "$N" "utility_model" | cut -d'|' -f1)
-            local EMBED_CURR=$(get_model_config "$N" "embedding_model" | cut -d'|' -f1)
+            CHAT_CURR=$(get_model_config "$N" "chat_model" | cut -d'|' -f1)
+            UTIL_CURR=$(get_model_config "$N" "utility_model" | cut -d'|' -f1)
+            EMBED_CURR=$(get_model_config "$N" "embedding_model" | cut -d'|' -f1)
             
             # Determine new values
-            local CHAT_NEW="${SET_CHAT_MODEL:-$CHAT_CURR}"
-            local UTIL_NEW="${SET_UTILITY_MODEL:-$UTIL_CURR}"
-            local EMBED_NEW="${SET_EMBEDDING_MODEL:-$EMBED_CURR}"
+            CHAT_NEW="${SET_CHAT_MODEL:-$CHAT_CURR}"
+            UTIL_NEW="${SET_UTILITY_MODEL:-$UTIL_CURR}"
+            EMBED_NEW="${SET_EMBEDDING_MODEL:-$EMBED_CURR}"
             
             # Highlight changes
-            local CHAT_DISP="$CHAT_CURR"
-            local UTIL_DISP="$UTIL_CURR"
-            local EMBED_DISP="$EMBED_CURR"
+            CHAT_DISP="$CHAT_CURR"
+            UTIL_DISP="$UTIL_CURR"
+            EMBED_DISP="$EMBED_CURR"
             
             if [ -n "$SET_CHAT_MODEL" ] && [ "$CHAT_CURR" != "$SET_CHAT_MODEL" ]; then
                 CHAT_DISP="${YELLOW}$CHAT_CURR → $SET_CHAT_MODEL${NC}"
@@ -553,14 +553,14 @@ if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDI
             fi
             
             # Truncate for display
-            local CHAT_SHORT="${CHAT_DISP:0:28}"
-            local UTIL_SHORT="${UTIL_DISP:0:28}"
-            local EMBED_SHORT="${EMBED_DISP:0:28}"
+            CHAT_SHORT="${CHAT_DISP:0:28}"
+            UTIL_SHORT="${UTIL_DISP:0:28}"
+            EMBED_SHORT="${EMBED_DISP:0:28}"
             
             printf "  %-12b %-10b %-30b %-30b %-30b\n" \
                 "agent0-$N" "$STATUS" "$CHAT_SHORT" "$UTIL_SHORT" "$EMBED_SHORT"
         else
-            local STATUS="${DIM}offline${NC}"
+            STATUS="${DIM}offline${NC}"
             printf "  %-12b %-10b %-30s %-30s %-30s\n" \
                 "agent0-$N" "$STATUS" "—" "—" "—"
             SKIP_COUNT=$((SKIP_COUNT + 1))
@@ -601,8 +601,8 @@ if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDI
     log_header "Applying Changes..."
     echo ""
     
-    local APPLIED=0
-    local FAILED=0
+    APPLIED=0
+    FAILED=0
     
     for N in $INSTANCES; do
         if ! is_container_running "$N"; then
@@ -614,9 +614,9 @@ if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDI
         
         # Apply chat model change
         if [ -n "$SET_CHAT_MODEL" ]; then
-            local RESULT=$(set_model_config "$N" "chat_model" "$SET_CHAT_MODEL")
-            local STATUS=$(echo "$RESULT" | cut -d'|' -f1)
-            local OLD_NAME=$(echo "$RESULT" | cut -d'|' -f2)
+            RESULT=$(set_model_config "$N" "chat_model" "$SET_CHAT_MODEL")
+            STATUS=$(echo "$RESULT" | cut -d'|' -f1)
+            OLD_NAME=$(echo "$RESULT" | cut -d'|' -f2)
             
             if [ "$STATUS" = "OK" ]; then
                 echo -e "    ${GREEN}✓${NC} Chat model: ${OLD_NAME} → ${CYAN}$SET_CHAT_MODEL${NC}"
@@ -628,7 +628,7 @@ if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDI
             fi
             
             # Update .env for persistence
-            local ENV_STATUS=$(update_env_model "$N" "A0_SET_chat_model" "$SET_CHAT_MODEL")
+            ENV_STATUS=$(update_env_model "$N" "A0_SET_chat_model" "$SET_CHAT_MODEL")
             case "$ENV_STATUS" in
                 "UPDATED") echo -e "      ${DIM}└─ .env updated${NC}" ;;
                 "ADDED")   echo -e "      ${DIM}└─ .env added${NC}" ;;
@@ -638,9 +638,9 @@ if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDI
         
         # Apply utility model change
         if [ -n "$SET_UTILITY_MODEL" ]; then
-            local RESULT=$(set_model_config "$N" "utility_model" "$SET_UTILITY_MODEL")
-            local STATUS=$(echo "$RESULT" | cut -d'|' -f1)
-            local OLD_NAME=$(echo "$RESULT" | cut -d'|' -f2)
+            RESULT=$(set_model_config "$N" "utility_model" "$SET_UTILITY_MODEL")
+            STATUS=$(echo "$RESULT" | cut -d'|' -f1)
+            OLD_NAME=$(echo "$RESULT" | cut -d'|' -f2)
             
             if [ "$STATUS" = "OK" ]; then
                 echo -e "    ${GREEN}✓${NC} Utility model: ${OLD_NAME} → ${CYAN}$SET_UTILITY_MODEL${NC}"
@@ -651,7 +651,7 @@ if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDI
                 FAILED=$((FAILED + 1))
             fi
             
-            local ENV_STATUS=$(update_env_model "$N" "A0_SET_utility_model" "$SET_UTILITY_MODEL")
+            ENV_STATUS=$(update_env_model "$N" "A0_SET_utility_model" "$SET_UTILITY_MODEL")
             case "$ENV_STATUS" in
                 "UPDATED") echo -e "      ${DIM}└─ .env updated${NC}" ;;
                 "ADDED")   echo -e "      ${DIM}└─ .env added${NC}" ;;
@@ -661,9 +661,9 @@ if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDI
         
         # Apply embedding model change
         if [ -n "$SET_EMBEDDING_MODEL" ]; then
-            local RESULT=$(set_model_config "$N" "embedding_model" "$SET_EMBEDDING_MODEL")
-            local STATUS=$(echo "$RESULT" | cut -d'|' -f1)
-            local OLD_NAME=$(echo "$RESULT" | cut -d'|' -f2)
+            RESULT=$(set_model_config "$N" "embedding_model" "$SET_EMBEDDING_MODEL")
+            STATUS=$(echo "$RESULT" | cut -d'|' -f1)
+            OLD_NAME=$(echo "$RESULT" | cut -d'|' -f2)
             
             if [ "$STATUS" = "OK" ]; then
                 echo -e "    ${GREEN}✓${NC} Embedding model: ${OLD_NAME} → ${CYAN}$SET_EMBEDDING_MODEL${NC}"
@@ -674,7 +674,7 @@ if [ -n "$SET_CHAT_MODEL" ] || [ -n "$SET_UTILITY_MODEL" ] || [ -n "$SET_EMBEDDI
                 FAILED=$((FAILED + 1))
             fi
             
-            local ENV_STATUS=$(update_env_model "$N" "A0_SET_embedding_model" "$SET_EMBEDDING_MODEL")
+            ENV_STATUS=$(update_env_model "$N" "A0_SET_embedding_model" "$SET_EMBEDDING_MODEL")
             case "$ENV_STATUS" in
                 "UPDATED") echo -e "      ${DIM}└─ .env updated${NC}" ;;
                 "ADDED")   echo -e "      ${DIM}└─ .env added${NC}" ;;

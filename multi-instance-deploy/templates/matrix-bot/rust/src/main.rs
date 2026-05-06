@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use sha2::{Sha256, Digest};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use std::collections::HashMap;
+ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::fs;
@@ -102,6 +103,7 @@ struct Bot {
     matrix_client: reqwest::Client,
     a0_client: reqwest::Client,
     state: RoomState,
+    processed_events: HashSet<String>,
 }
 
 impl Config {
@@ -204,6 +206,7 @@ impl Bot {
             matrix_client,
             a0_client,
             state,
+            processed_events: HashSet::new(),
         })
     }
 
@@ -727,12 +730,19 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
             if event_type != "m.room.message" {
                 continue;
             }
+            // Event dedup: skip if already processed
+            let event_id = event.get("event_id").and_then(Value::as_str).unwrap_or("").to_string();
+            if !event_id.is_empty() && !bot.processed_events.insert(event_id) {
+                continue;
+            }
             let sender = event.get("sender").and_then(Value::as_str).unwrap_or("");
             if sender == bot.cfg.user_id {
                 continue;
             }
             let ts = event.get("origin_server_ts").and_then(Value::as_i64).unwrap_or(0);
-            if ts < bot.cfg.bot_start_time_ms.saturating_sub(10_000) {
+            // Skip events older than 5 minutes (300,000 ms) to prevent replaying stale alerts
+            let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as i64;
+            if now_ms - ts > 300_000 {
                 continue;
             }
             let content = event.get("content").unwrap_or(&Value::Null);
