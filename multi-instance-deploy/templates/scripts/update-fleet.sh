@@ -130,7 +130,7 @@ if [ "$STATUS_MODE" = true ]; then
                 COMPOSE_CLR="${YELLOW}"
                 COMPOSE_DRIFT=" ⚠"
             fi
-            BOT_CNT=$(docker exec "agent0-$N" pgrep -c -f matrix-bot-rust 2>/dev/null || echo 0)
+            BOT_CNT=$(docker exec "agent0-$N" pgrep -f matrix-bot-rust 2>/dev/null | wc -l)
             # --- Drift detection: bot count != 1 ---
             if [ "$BOT_CNT" -ne 1 ]; then
                 BOT_CLR="${YELLOW}"
@@ -190,7 +190,7 @@ if [ "$CLEANUP_MODE" = true ]; then
             echo "  [agent0-$N] Container not running — skipping"
             continue
         fi
-        BOT_CNT=$(docker exec "agent0-$N" pgrep -c -f matrix-bot-rust 2>/dev/null || echo 0)
+        BOT_CNT=$(docker exec "agent0-$N" pgrep -f matrix-bot-rust 2>/dev/null | wc -l)
         if [ "$BOT_CNT" -le 1 ]; then
             echo "  [agent0-$N] Bot count $BOT_CNT — clean, skipping"
         else
@@ -205,7 +205,7 @@ if [ "$CLEANUP_MODE" = true ]; then
                 echo $NEW_PID
             ' 2>/dev/null
             sleep 3
-            NEW_CNT=$(docker exec "agent0-$N" pgrep -c -f matrix-bot-rust 2>/dev/null || echo 0)
+            NEW_CNT=$(docker exec "agent0-$N" pgrep -f matrix-bot-rust 2>/dev/null | wc -l)
             if [ "$NEW_CNT" -eq 1 ]; then
                 echo "  [agent0-$N] ✓ Cleaned — now 1 bot"
                 CLEANED=$((CLEANED + 1))
