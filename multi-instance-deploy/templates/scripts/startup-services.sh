@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# startup-services.sh — Golden Template (v3.16)
+# startup-services.sh — Golden Template (v3.17)
 # =============================================================================
 # Persistent auto-start script for Matrix services on Agent Zero containers.
 # Launched via docker-compose command: runs in background alongside supervisord.
@@ -33,3 +33,24 @@ if [ -x /a0/usr/workdir/watchdog.sh ]; then
 else
     log "Phase 5: WARNING — watchdog.sh not found or not executable"
 fi
+
+# -------------------------------------------------------
+# PHASE 6: Setup weekly git gc for Time Travel repos
+# Runs every Sunday at 03:00 to prevent repo bloat and
+# stale index.lock issues.
+# -------------------------------------------------------
+GIT_DIR="/a0/usr/.time_travel/workspaces/975eb797fc68061b3d6b10289d5e8eba/repo.git"
+if [ -d "$GIT_DIR" ]; then
+    # Append cron job if not already present
+    if ! crontab -l 2>/dev/null | grep -q "$GIT_DIR"; then
+        (crontab -l 2>/dev/null; echo "0 3 * * 0 git --git-dir=$GIT_DIR gc --auto >> $LOG 2>&1") | crontab -
+        log "Phase 6: Weekly git gc cron job installed for $GIT_DIR"
+    else
+        log "Phase 6: Git gc cron job already present"
+    fi
+else
+    log "Phase 6: Time Travel repo not found at $GIT_DIR, skipping git gc cron"
+fi
+
+# Phase 6 complete marker
+log "========== startup-services.sh phases 0-6 complete =========="
