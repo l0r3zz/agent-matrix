@@ -420,6 +420,17 @@ Implementation readiness is reached only when all checks pass.
 
 The following contracts MUST be completed before implementation begins. They convert the design intent into buildable work packages.
 
+### 14.0 Phase 0 Implementation Decisions
+
+These decisions are accepted for the first implementation pass and SHOULD be copied into the implementation plan.
+
+- **Profile path:** implement a dedicated `galadriel` Agent Zero profile, derived from a Researcher base but not left as a generic Researcher profile.
+- **Research model path:** use an MCP-accessible Perplexity research tool as the preferred task-scoped research mechanism.
+- **Research mode defaults:** base the research behavior on `Cursor-Writing-Assistant-repo/agents/research-agent.mdc`, extended for Galadriel's broader historical, scientific, geopolitical, archival, and fleet-memory responsibilities.
+- **Open Brain contract:** target the 6-tool profile, where the optional extensions beyond the core 4 are `search_by_date` and `get_search_protocol`.
+- **Wiki storage:** store compiled wiki pages at `/a0/usr/workdir/galadriel-workspace/wiki/`.
+- **Long-running research state:** start with file-backed JSON job manifests before building a database-backed scheduler.
+
 ### 14.1 Profile Contract
 
 Define the concrete Agent Zero profile artifacts for Galadriel.
@@ -749,6 +760,15 @@ No implementation yet defines logs, metrics, or cost attribution for model calls
 - **Status:** Accepted for v2.1 design.
 - **Source of truth:** Open Brain and source artifacts remain authoritative; compiled wiki pages are read-optimized synthesis artifacts.
 - **Rationale:** The hybrid architecture combines durable structured memory with human-readable synthesis, reducing repeated query-time re-derivation while preserving provenance.
+
+### A.8 Phase 0 Implementation Direction
+
+- **Decision:** Capture implementation details in a separate `galadriel-implementation-plan.md` document rather than overloading this design specification.
+- **Decision:** Build Galadriel as a dedicated profile derived from Researcher behavior.
+- **Decision:** Use MCP-accessible Perplexity research as the first task-scoped model route.
+- **Decision:** Store compiled wiki pages under `/a0/usr/workdir/galadriel-workspace/wiki/`.
+- **Status:** Accepted.
+- **Rationale:** The design doc remains the architectural contract; the implementation plan can evolve as concrete commands, file paths, and sequencing are discovered.
 
 ---
 
