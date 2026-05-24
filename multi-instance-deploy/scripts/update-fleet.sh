@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# update-fleet.sh — Docker Image Replacement Fleet Updater (v2.1)
+# update-fleet.sh — Docker Image Replacement Fleet Updater (v2.2)
 # =============================================================================
 # Replaces the git-based self-update mechanism with direct docker image tag
 # replacement and container recreation.  This avoids dependency on the
@@ -14,6 +14,14 @@
 #   ./update-fleet.sh --dry-run --version v1.11
 #   ./update-fleet.sh --json --version v1.11
 #   ./update-fleet.sh --force --version v1.11
+#   ./update-fleet.sh --skip-restart --version v1.11  # update compose only
+# =============================================================================
+# v2.2 changes:
+#   - Detect service name dynamically from compose file (fixes 'no such service'
+#     errors when service name != instance name, e.g. 'agent-zero' vs 'agent0-N')
+#   - When not using --skip-restart, compose update and container recreate are
+#     now tightly coupled per-instance (eliminates drift on partial failure)
+#   - --skip-restart retains original batch compose-update-only behavior
 # =============================================================================
 
 set -euo pipefail
@@ -65,6 +73,15 @@ resolve_latest_tag() {
         python3 -c "import sys,json; tags=json.load(sys.stdin); print(tags[0]['name'] if tags else 'v1.0')" 2>/dev/null || echo "v1.0"
 }
 
+# Detect the first service name declared in a docker-compose.yml.
+# Compose files in this fleet use 'agent-zero' (instances 2-5) or
+# 'agent0-N' (instance 1) as the service name — never rely on the
+# instance number alone.
+get_service_name() {
+    local compose_file=$1
+    awk '/^services:/{found=1; next} found && /^  [a-zA-Z]/{gsub(/:.*$/,""); gsub(/^  /,""); print; exit}' "$compose_file"
+}
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -77,7 +94,7 @@ Options:
   --dry-run             Show planned changes without executing
   --force               Update even if already at target version
   --json                JSON output
-  --skip-restart        Update compose files without restarting containers
+  --skip-restart        Update compose files only; do NOT recreate containers
   -h, --help            This help
 EOF
     exit 0
@@ -233,7 +250,7 @@ if [ "$VERSION" = "latest" ]; then
 fi
 
 log_header "═══════════════════════════════════════════════════"
-log_header "  Docker Image Replacement Fleet Updater v2.0"
+log_header "  Docker Image Replacement Fleet Updater v2.2"
 log_header "═══════════════════════════════════════════════════"
 echo ""
 log "  Target version:  ${BOLD}${VERSION}${NC}"
@@ -299,66 +316,97 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
-# Phase 2: Update docker-compose.yml files
-log_header "Phase 2: Update docker-compose.yml files"
-UPDATED=0
-FAILED=0
-
-for N in $INSTANCES; do
-    if [ "${INSTANCE_STATUS[$N]}" != "target" ] && [ "$SKIP_RESTART" != true ]; then
-        continue
-    fi
-
-    COMPOSE_FILE="${BASE_DIR}/agent0-${N}/docker-compose.yml"
-    if [ ! -f "$COMPOSE_FILE" ]; then
-        log "  ${RED}[agent0-$N] Missing ${COMPOSE_FILE}${NC}"
-        FAILED=$((FAILED + 1))
-        continue
-    fi
-
-    # Backup
-    cp "$COMPOSE_FILE" "${COMPOSE_FILE}.bak.$(date +%s)" 2>/dev/null || true
-
-    # Replace image tag
-    sed -i "s|agent0ai/agent-zero:.*|agent0ai/agent-zero:${VERSION}|" "$COMPOSE_FILE"
-
-    # Verify
-    NEW_TAG=$(grep 'image: agent0ai/agent-zero:' "$COMPOSE_FILE" 2>/dev/null | grep -oP 'v[0-9.]+' | head -1 || echo "?")
-    if [ "$NEW_TAG" = "$VERSION" ]; then
-        log "  ${GREEN}[agent0-$N] Updated compose to ${VERSION}${NC}"
-        UPDATED=$((UPDATED + 1))
-    else
-        log "  ${RED}[agent0-$N] Compose tag mismatch after sed: ${NEW_TAG}${NC}"
-        FAILED=$((FAILED + 1))
-    fi
-done
-
-log "  Updated: ${UPDATED} | Failed: ${FAILED}"
-
+# =============================================================================
+# --skip-restart mode: batch-update compose files only, no container restart.
+# This is the only mode where compose update runs as a separate upfront phase.
+# =============================================================================
 if [ "$SKIP_RESTART" = true ]; then
+    log_header "Phase 2 (skip-restart): Update docker-compose.yml files only"
+    UPDATED=0
+    FAILED=0
+    for N in $INSTANCES; do
+        if [ "${INSTANCE_STATUS[$N]}" != "target" ]; then
+            continue
+        fi
+        COMPOSE_FILE="${BASE_DIR}/agent0-${N}/docker-compose.yml"
+        if [ ! -f "$COMPOSE_FILE" ]; then
+            log "  ${RED}[agent0-$N] Missing ${COMPOSE_FILE}${NC}"
+            FAILED=$((FAILED + 1))
+            continue
+        fi
+        cp "$COMPOSE_FILE" "${COMPOSE_FILE}.bak.$(date +%s)" 2>/dev/null || true
+        sed -i "s|agent0ai/agent-zero:.*|agent0ai/agent-zero:${VERSION}|" "$COMPOSE_FILE"
+        NEW_TAG=$(grep 'image: agent0ai/agent-zero:' "$COMPOSE_FILE" 2>/dev/null | grep -oP 'v[0-9.]+' | head -1 || echo "?")
+        if [ "$NEW_TAG" = "$VERSION" ]; then
+            log "  ${GREEN}[agent0-$N] Updated compose to ${VERSION}${NC}"
+            UPDATED=$((UPDATED + 1))
+        else
+            log "  ${RED}[agent0-$N] Compose tag mismatch after sed: ${NEW_TAG}${NC}"
+            FAILED=$((FAILED + 1))
+        fi
+    done
+    log "  Updated: ${UPDATED} | Failed: ${FAILED}"
     log_header "SKIP-RESTART mode — compose files updated, containers NOT restarted."
     echo ""
     exit 0
 fi
 
-# Phase 3: Recreate containers
-log_header "Phase 3: Recreate containers with new image"
+# =============================================================================
+# Normal mode: update compose + recreate are tightly coupled per-instance.
+# The compose file is updated immediately before recreating that container,
+# so a failure mid-fleet never leaves compose/container versions out of sync.
+# Service name is detected dynamically from the compose file — do NOT assume
+# it matches the instance name (e.g. instances 2-5 use 'agent-zero', not
+# 'agent0-N').
+# =============================================================================
+log_header "Phase 2+3: Update compose and recreate containers (per-instance)"
+UPDATED=0
 RECREATED=0
-RECREATE_FAILED=0
+FAILED=0
 
 for N in $INSTANCES; do
     if [ "${INSTANCE_STATUS[$N]}" != "target" ]; then
         continue
     fi
 
+    CUR_VER="${CURRENT_VERSIONS[$N]}"
+    COMPOSE_FILE="${BASE_DIR}/agent0-${N}/docker-compose.yml"
     COMPOSE_DIR="${BASE_DIR}/agent0-${N}"
-    log "  [agent0-$N] docker compose up -d --no-deps --force-recreate agent0-${N}"
-    if (cd "$COMPOSE_DIR" && docker compose up -d --no-deps --force-recreate "agent0-${N}" 2>&1); then
+
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        log "  ${RED}[agent0-$N] Missing ${COMPOSE_FILE} — skipping${NC}"
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+
+    # Detect the actual service name from the compose file
+    SERVICE_NAME=$(get_service_name "$COMPOSE_FILE")
+    if [ -z "$SERVICE_NAME" ]; then
+        log "  ${RED}[agent0-$N] Could not detect service name in ${COMPOSE_FILE} — skipping${NC}"
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+
+    # Update compose file
+    cp "$COMPOSE_FILE" "${COMPOSE_FILE}.bak.$(date +%s)" 2>/dev/null || true
+    sed -i "s|agent0ai/agent-zero:.*|agent0ai/agent-zero:${VERSION}|" "$COMPOSE_FILE"
+    NEW_TAG=$(grep 'image: agent0ai/agent-zero:' "$COMPOSE_FILE" 2>/dev/null | grep -oP 'v[0-9.]+' | head -1 || echo "?")
+    if [ "$NEW_TAG" != "$VERSION" ]; then
+        log "  ${RED}[agent0-$N] Compose tag mismatch after sed: ${NEW_TAG} — skipping recreate${NC}"
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+    log "  ${GREEN}[agent0-$N] Compose updated to ${VERSION} (service: ${SERVICE_NAME})${NC}"
+    UPDATED=$((UPDATED + 1))
+
+    # Recreate container using the detected service name
+    log "  [agent0-$N] docker compose up -d --no-deps --force-recreate ${SERVICE_NAME}"
+    if (cd "$COMPOSE_DIR" && docker compose up -d --no-deps --force-recreate "$SERVICE_NAME" 2>&1); then
         log "  ${GREEN}[agent0-$N] Container recreated${NC}"
         RECREATED=$((RECREATED + 1))
     else
         log "  ${RED}[agent0-$N] Failed to recreate${NC}"
-        RECREATE_FAILED=$((RECREATE_FAILED + 1))
+        FAILED=$((FAILED + 1))
         continue
     fi
 
