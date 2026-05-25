@@ -79,15 +79,16 @@ mcp_auth_check() {
 }
 
 mcp_tool_check() {
+    # v2.1: Use /health endpoint instead of JSON-RPC tool call.
+    # matrix-mcp-server-r2 uses Streamable HTTP (SSE) for MCP protocol,
+    # which returns empty/SSE responses to plain curl JSON-RPC calls.
+    # The /health endpoint returns plain JSON and validates server+auth.
     local RESULT
-    RESULT=$(curl -sf --max-time 15 -X POST http://localhost:3000/mcp \
-        -H 'Content-Type: application/json' \
-        -H 'Accept: application/json, text/event-stream' \
-        -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list-joined-rooms","arguments":{}}}' 2>/dev/null)
-    if echo "$RESULT" | grep -q text; then
+    RESULT=$(curl -sf --max-time 10 http://localhost:3000/health 2>/dev/null)
+    if echo "$RESULT" | grep -q healthy; then
         return 0
     else
-        log "HEALTH: Tool check FAILED"
+        log "HEALTH: Tool check FAILED (health endpoint)"
         return 1
     fi
 }
