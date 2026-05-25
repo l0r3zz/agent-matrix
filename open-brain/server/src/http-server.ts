@@ -7,6 +7,7 @@ import { shutdown as shutdownDb } from "./db.js";
 const app = express();
 const PORT = parseInt(process.env.PORT || "3100");
 const MCP_ACCESS_KEY = process.env.MCP_ACCESS_KEY!;
+const CITATION_BASE_URL = process.env.OPEN_BRAIN_CITATION_BASE_URL || "https://openbrain.local/thoughts";
 
 app.use(express.json());
 app.use(cors());
@@ -47,6 +48,7 @@ const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`Open Brain MCP server listening on port ${PORT}`);
   console.log(`MCP endpoint: http://0.0.0.0:${PORT}/mcp`);
   console.log(`Health check: http://0.0.0.0:${PORT}/health`);
+  console.log(`Citation base URL: ${CITATION_BASE_URL}`);
 });
 
 const gracefulShutdown = (signal: string) => {

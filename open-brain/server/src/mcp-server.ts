@@ -3,6 +3,19 @@ import { z } from "zod";
 import { query } from "./db.js";
 import { getEmbedding, extractMetadata } from "./openrouter.js";
 
+const CITATION_BASE_URL =
+  process.env.OPEN_BRAIN_CITATION_BASE_URL || "https://openbrain.local/thoughts";
+
+function thoughtTitle(content: string, createdAt?: string): string {
+  const firstLine = content.replace(/\s+/g, " ").trim().slice(0, 80);
+  const datePrefix = createdAt ? new Date(createdAt).toLocaleDateString() : "Open Brain";
+  return firstLine ? `${datePrefix} - ${firstLine}` : `${datePrefix} thought`;
+}
+
+function thoughtUrl(id: string): string {
+  return `${CITATION_BASE_URL.replace(/\/$/, "")}/${id}`;
+}
+
 export function createMcpServer(): McpServer {
   const server = new McpServer({
     name: "open-brain",
@@ -16,6 +29,9 @@ export function createMcpServer(): McpServer {
       title: "Search Thoughts",
       description:
         "Search captured thoughts by meaning. Use this when the user asks about a topic, person, or idea they've previously captured.",
+      annotations: {
+        readOnlyHint: true,
+      },
       inputSchema: {
         query: z.string().describe("What to search for"),
         limit: z.number().optional().default(10),
@@ -47,6 +63,9 @@ export function createMcpServer(): McpServer {
           const m = t.metadata || {};
           const parts = [
             `--- Result ${i + 1} (${(t.similarity * 100).toFixed(1)}% match) ---`,
+            `ID: ${t.id}`,
+            `URL: ${thoughtUrl(t.id)}`,
+            `Title: ${thoughtTitle(t.content, t.created_at)}`,
             `Captured: ${new Date(t.created_at).toLocaleDateString()}`,
             `Type: ${m.type || "unknown"}`,
           ];
@@ -86,6 +105,9 @@ export function createMcpServer(): McpServer {
       title: "List Recent Thoughts",
       description:
         "List recently captured thoughts with optional filters by type, topic, person, or time range.",
+      annotations: {
+        readOnlyHint: true,
+      },
       inputSchema: {
         limit: z.number().optional().default(10),
         type: z
@@ -134,7 +156,7 @@ export function createMcpServer(): McpServer {
 
         params.push(limit);
         const sql = `
-          SELECT content, metadata, created_at
+          SELECT id, content, metadata, created_at
           FROM thoughts
           ${whereClause}
           ORDER BY created_at DESC
@@ -152,7 +174,7 @@ export function createMcpServer(): McpServer {
         const results = rows.map((t, i) => {
           const m = t.metadata || {};
           const tags = Array.isArray(m.topics) ? m.topics.join(", ") : "";
-          return `${i + 1}. [${new Date(t.created_at).toLocaleDateString()}] (${m.type || "??"}${tags ? " - " + tags : ""})\n   ${t.content}`;
+          return `${i + 1}. [${new Date(t.created_at).toLocaleDateString()}] (${m.type || "??"}${tags ? " - " + tags : ""})\n   ${thoughtTitle(t.content, t.created_at)}\n   ${thoughtUrl(t.id)}\n   ${t.content}`;
         });
 
         return {
@@ -181,6 +203,9 @@ export function createMcpServer(): McpServer {
       title: "Thought Statistics",
       description:
         "Get a summary of all captured thoughts: totals, types, top topics, and people.",
+      annotations: {
+        readOnlyHint: true,
+      },
       inputSchema: {
         verbose: z.boolean().optional().default(false).describe("Include detailed breakdown"),
       },
@@ -193,7 +218,7 @@ export function createMcpServer(): McpServer {
         const total = parseInt(countResult.rows[0].total, 10);
 
         const { rows } = await query(
-          "SELECT metadata, created_at FROM thoughts ORDER BY created_at DESC"
+          "SELECT id, content, metadata, created_at FROM thoughts ORDER BY created_at DESC"
         );
 
         const types: Record<string, number> = {};
@@ -238,6 +263,10 @@ export function createMcpServer(): McpServer {
           for (const [k, v] of sort(people)) lines.push(`  ${k}: ${v}`);
         }
 
+        if (verbose) {
+          lines.push("", `Citation base URL: ${CITATION_BASE_URL}`);
+        }
+
         return { content: [{ type: "text" as const, text: lines.join("\n") }] };
       } catch (err: unknown) {
         return {
@@ -257,6 +286,12 @@ export function createMcpServer(): McpServer {
       title: "Capture Thought",
       description:
         "Save a new thought to the Open Brain. Generates an embedding and extracts metadata automatically. Use this when the user wants to save something to their brain -- notes, insights, decisions, or migrated content from other systems.",
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
       inputSchema: {
         content: z
           .string()

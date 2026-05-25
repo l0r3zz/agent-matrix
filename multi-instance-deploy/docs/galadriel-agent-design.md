@@ -1,10 +1,11 @@
-# Galadriel Agent Design Specification v2.1
+# Galadriel Agent Design Specification v2.2
 
-**Version:** 2.1  
-**Date:** 2026-05-14  
-**Target Instance:** `agent0-2` (sovereign node on `g2s.cybertribe.com`)  
-**Status:** Specification only -- no implementation in this document  
+**Version:** 2.2
+**Date:** 2026-05-24
+**Target Instance:** `agent0-2` (sovereign node on `g2s.cybertribe.com`)
+**Status:** Specification only — no implementation in this document
 **Primary Audience:** Frontier-model implementer + human operators
+**Companion Document:** `galadriel-implementation-plan.md` (execution phases and concrete file paths)
 
 ---
 
@@ -17,22 +18,21 @@ Define an implementation-ready specification for **Galadriel** as a specialized 
 - Current Agent Zero connectivity options beyond Matrix
 - Mature Agent Zero platform features (A2A, MCP, projects, profiles, external API)
 
-This document supersedes v2.0 intent and serves as the new baseline for implementation planning.
+This document supersedes v2.1 and serves as the baseline for implementation planning.
 
 ---
 
-## 2. Changes Since v1.1
+## 2. Changes Since v2.1
 
-1. **Open Brain is now first-class infrastructure**, not optional future enhancement.
-2. **Communication architecture is broadened** from Matrix-only to multi-channel:
-   - Matrix protocol
-   - Agent Zero A2A (FastA2A)
-   - Agent Zero external API endpoints
-   - MCP-mediated coordination and shared tools
-3. **Specification language is tightened** into MUST/SHOULD requirements.
-4. **Frontier model execution policy** is explicit: core implementation and deep reasoning paths default to frontier-tier models.
-5. **Coverage holes are called out** with prioritized action items.
-6. **v2.1 adds a compiled wiki layer**: Galadriel maintains curated, human-readable synthesis artifacts derived from Open Brain and source material.
+1. **Open Brain tool surface updated** to reflect deployed enhancements:
+   - Tool annotations (`readOnlyHint`, `destructiveHint`, etc.) now deployed on fleet OB1
+   - Citation helpers (`thoughtTitle`, `thoughtUrl`, `CITATION_BASE_URL`) now deployed on fleet OB1
+   - Deployed OB1 MCP server runs **Node.js + direct PostgreSQL**, not upstream Deno/Supabase
+2. **OB1 architecture clarified**: deployed version is a custom self-hosted Node.js implementation
+3. **Homeserver technology corrected**: fleet runs **conduwuite/continuwuity**, not Dendrite
+4. **Implementation phasing updated** to reflect completed OB1 enhancements and remaining work
+5. **Inspection findings incorporated** from the agent0-2 system audit performed 2026-05-23
+6. **Three prior documents consolidated** into two: this design spec and a single implementation plan
 
 ---
 
@@ -49,7 +49,7 @@ This document supersedes v2.0 intent and serves as the new baseline for implemen
 
 ### 3.2 Out of Scope
 
-- Performing implementation changes now
+- Performing implementation changes (see companion implementation plan)
 - Rewriting core Agent Zero internals
 - Replacing Matrix with A2A (Matrix remains foundational in Agent-Matrix)
 
@@ -65,13 +65,20 @@ Galadriel runs as a sovereign Agent Zero instance in the existing Agent-Matrix t
 - Shared Open Brain memory fabric (`open-brain-db` + `open-brain-mcp`)
 - Optional A2A direct delegation with other Agent Zero instances
 
-### 4.2 Memory Layers (Authoritative Model)
+### 4.2 Infrastructure Notes
+
+- **Homeservers** run **conduwuite/continuwuity** (not Dendrite)
+- **OB1 MCP** is a self-hosted Node.js + Express + pgvector implementation at `172.23.90.2:3100`
+- **agent0-2** runs Agent Zero v1.17 with macvlan networking at `172.23.88.2`
+- **agent0-2 homeserver** is `agent0-2-continuwuity` with Caddy reverse proxy (`agent0-2-mhs`)
+
+### 4.3 Memory Layers (Authoritative Model)
 
 Galadriel MUST treat memory as a layered system:
 
-1. **Context window (ephemeral)** -- current conversation only
-2. **Agent Zero local memory (per-agent)** -- personal memory for `agent0-2`
-3. **Open Brain collective memory (fleet-wide)** -- durable shared memory across agents and IDE harnesses
+1. **Context window (ephemeral)** — current conversation only
+2. **Agent Zero local memory (per-agent)** — personal memory for `agent0-2`
+3. **Open Brain collective memory (fleet-wide)** — durable shared memory across agents and IDE harnesses
 
 Open Brain is the long-lived organizational memory of record. Local memory is not a substitute for fleet memory.
 
@@ -79,13 +86,13 @@ Open Brain is the long-lived organizational memory of record. Local memory is no
 
 ## 5. Communication Architecture
 
-Galadriel is no longer specified as Matrix-only. It supports multiple communication planes with different roles.
+Galadriel supports multiple communication planes with different roles.
 
 | Channel | Protocol | Primary Use | State/Context | Notes |
 |---|---|---|---|---|
-| Matrix rooms | Matrix CS + federation | Human-agent and agent-agent chat in Agent-Matrix | Conversational, asynchronous | Core platform channel |
-| A2A | FastA2A via Agent Zero `/a2a/...` | Direct Agent Zero to Agent Zero delegation | Full delegated chat context | Best for specialist delegation, file transfer, and large structured JSON payloads |
-| External API | Agent Zero REST (`/api_message`, etc.) | Programmatic orchestration and bridges (bots/services) | Request/response + logs | Already used by matrix-bot pattern |
+| Matrix rooms | Matrix CS + federation | Human-agent and agent-agent chat | Conversational, asynchronous | Core platform channel |
+| A2A | FastA2A via Agent Zero `/a2a/...` | Direct Agent Zero to Agent Zero delegation | Full delegated chat context | Best for specialist delegation, file transfer, large JSON |
+| External API | Agent Zero REST (`/api_message`, etc.) | Programmatic orchestration and bridges | Request/response + logs | Used by matrix-bot pattern |
 | MCP tools | MCP (HTTP/command) | Tool/function access, shared services | Tool call context, not chat | Includes Open Brain access |
 | In-instance multi-agent | Agent Zero subordinate agents | Parallel decomposition within one instance | Shared parent task scope | Not network communication |
 
@@ -113,11 +120,11 @@ Galadriel is a high-rigor research, archival, and synthesis agent specializing i
 
 Galadriel also acts as:
 
-- **Researcher** -- conducts long-duration research at the request of humans or agents.
-- **Archivist** -- preserves important findings, decisions, sources, and synthesized artifacts.
-- **Fleet community memory maintainer** -- curates Open Brain as shared institutional memory.
-- **Knowledgeable librarian** -- helps humans and agents find, understand, and reuse what the fleet already knows.
-- **Sub-agent manager** -- coordinates spawned or delegated specialist agents for research, critique, validation, and synthesis.
+- **Researcher** — conducts long-duration research at the request of humans or agents.
+- **Archivist** — preserves important findings, decisions, sources, and synthesized artifacts.
+- **Fleet community memory maintainer** — curates Open Brain as shared institutional memory.
+- **Knowledgeable librarian** — helps humans and agents find, understand, and reuse what the fleet already knows.
+- **Sub-agent manager** — coordinates spawned or delegated specialist agents for research, critique, validation, and synthesis.
 
 ### 6.2 Quality Priorities
 
@@ -133,13 +140,13 @@ Galadriel MUST prioritize:
 
 For substantial writing tasks, Galadriel MUST execute the following states:
 
-1. **Scope** -- requirements, audience, constraints, deliverables
-2. **Research** -- source gathering, credibility scoring, perspective balancing
-3. **Outline** -- section architecture and argument flow
-4. **Draft** -- first complete pass
-5. **Critique** -- quality review (accuracy, bias, clarity, omissions)
-6. **Revise** -- issue resolution and strengthening
-7. **Finalize** -- final formatting, citations, metadata
+1. **Scope** — requirements, audience, constraints, deliverables
+2. **Research** — source gathering, credibility scoring, perspective balancing
+3. **Outline** — section architecture and argument flow
+4. **Draft** — first complete pass
+5. **Critique** — quality review (accuracy, bias, clarity, omissions)
+6. **Revise** — issue resolution and strengthening
+7. **Finalize** — final formatting, citations, metadata
 
 Each state MUST emit an artifact in the working directory with deterministic naming.
 
@@ -156,32 +163,45 @@ Open Brain is the durable memory system for:
 
 Galadriel MUST be designed assuming Open Brain availability for shared recall and write-back.
 
-### 7.2 Tool Contract Requirement
+### 7.2 Deployed OB1 Architecture (as of 2026-05-24)
 
-The specification currently references two tool surfaces in existing docs:
+The fleet OB1 is a **custom self-hosted implementation**, not the upstream Deno/Supabase version:
 
-- **4-tool surface** (`search_thoughts`, `list_thoughts`, `thought_stats`, `capture_thought`)
-- **6-tool surface** (adds `search_by_date`, `get_search_protocol`)
+| Aspect | Deployed Fleet OB1 |
+|---|---|
+| Runtime | Node.js 20+ |
+| Web framework | Express |
+| Database | Direct PostgreSQL + pgvector |
+| Container | `open-brain-mcp` at `172.23.90.2:3100` |
+| Auth | `MCP_ACCESS_KEY` via header or URL param |
+| Transport | Custom HTTP request/response (not StreamableHTTPTransport) |
 
-#### Trade-Off Analysis
+### 7.3 Tool Contract (Current Deployed Surface)
 
-- **4-tool surface (minimal contract)**
-  - Pros: simpler implementation, lower compatibility risk, easier test matrix
-  - Cons: weaker temporal retrieval and weaker discoverability of domain/search behavior
-- **6-tool surface (extended contract)**
-  - Pros: better temporal workflows (`search_by_date`) and better protocol/domain introspection (`get_search_protocol`)
-  - Cons: larger test surface and tighter coupling to extended server behavior
+The deployed OB1 exposes **4 core tools** with enhancements:
 
-#### Recommended Decision
+| Tool | Type | Annotations | Citation Output |
+|---|---|---|---|
+| `search_thoughts` | Read | `readOnlyHint: true` | ID, URL, Title per result |
+| `list_thoughts` | Read | `readOnlyHint: true` | Title, URL per result |
+| `thought_stats` | Read | `readOnlyHint: true` | Citation base URL in verbose mode |
+| `capture_thought` | Write | `readOnlyHint: false, destructiveHint: false` | N/A |
 
-Adopt a **versioned 6-tool contract** with a compatibility profile:
+**Extended tools not yet implemented:**
+
+| Tool | Purpose | Status |
+|---|---|---|
+| `search_by_date` | Temporal retrieval | Design-phase only |
+| `get_search_protocol` | Dynamic domain/search protocol generation | Design-phase only |
+
+#### Versioned Compatibility Contract
 
 - **MUST support core 4 tools**
-- **SHOULD support `search_by_date`**
-- **SHOULD support `get_search_protocol`**
-- If an environment is core-only, clients MUST degrade gracefully and continue operating on the core 4
+- **SHOULD support `search_by_date`** when available
+- **SHOULD support `get_search_protocol`** when available
+- **MUST degrade gracefully** when only core 4 is available
 
-### 7.3 Memory Write Policy
+### 7.4 Memory Write Policy
 
 Galadriel MUST persist high-value outputs to Open Brain with provenance metadata:
 
@@ -191,7 +211,7 @@ Galadriel MUST persist high-value outputs to Open Brain with provenance metadata
 - `source_context` (task/project scope)
 - `source` (client/orchestrator path)
 
-### 7.4 Memory Read Policy
+### 7.5 Memory Read Policy
 
 Galadriel SHOULD query memory in this order:
 
@@ -208,8 +228,6 @@ For cross-agent or institutional questions, Open Brain query is mandatory.
 ### 8.1 Purpose
 
 Galadriel MUST maintain a Karpathy-style compiled wiki layer on top of Open Brain. Open Brain remains the durable structured memory system; the wiki layer is a curated, human-readable synthesis surface generated from that memory and supporting sources.
-
-This follows the hybrid direction described by Nate's Open Brain writing: database-backed memory for durable storage, plus compiled wiki artifacts for reusable synthesis and human navigation.
 
 ### 8.2 Architecture
 
@@ -237,7 +255,7 @@ Each compiled wiki page MUST include:
 - Scope statement
 - Executive summary
 - Key facts and claims
-- Source list with URLs or local artifact references
+- Source list with URLs or local artifact references (using OB1 citation URLs when available)
 - Known contradictions or disputed claims
 - Open questions / research gaps
 - Related Open Brain topics
@@ -299,20 +317,20 @@ Galadriel SHOULD be able to call task-specific models independently of the curre
 Examples:
 
 - Historical and current-events research MAY use Perplexity `sonar-pro` for citation-rich web research.
-- Deep scientific research MAY use Perplexity, Gemini Pro, Claude Opus-class, or another frontier/research model selected by policy.
+- Deep scientific research MAY use Perplexity, Gemini Pro, Claude Opus-class, or another frontier/research model.
 - Drafting MAY use a prose-strong model.
 - Critique MAY use a different reviewer model from the main Galadriel chat model.
 
 ### 10.2 Agent Zero Model Boundary
 
-Agent Zero model presets select the main and utility models for a chat. They are useful for coarse chat-level routing, but they are not sufficient by themselves for fine-grained per-task routing inside one Galadriel workflow.
+Agent Zero model presets select the main and utility models for a chat. They are not sufficient for fine-grained per-task routing inside one Galadriel workflow.
 
-Therefore, per-task model routing MUST be implemented through one of these mechanisms:
+Per-task model routing MUST be implemented through one of these mechanisms:
 
-1. **Model preset switch** -- coarse manual or operator-approved switch for the whole chat.
-2. **External MCP tool** -- preferred for model-specific capabilities such as Perplexity search.
-3. **Custom Agent Zero skill/tool** -- wrapper that calls a provider API directly using scoped environment secrets.
-4. **A2A delegation** -- delegate to another Agent Zero instance configured with a different model/profile.
+1. **Model preset switch** — coarse manual or operator-approved switch for the whole chat.
+2. **External MCP tool** — preferred for model-specific capabilities such as Perplexity search.
+3. **Custom Agent Zero skill/tool** — wrapper that calls a provider API directly using scoped environment secrets.
+4. **A2A delegation** — delegate to another Agent Zero instance configured with a different model/profile.
 
 ### 10.3 API Key Policy
 
@@ -350,9 +368,7 @@ Galadriel borrows the conceptual roles from `Cursor-Writing-Assistant-repo/agent
 
 ### 11.2 Exposure to Users
 
-Galadriel SHOULD expose these roles to users as named workflow modes, not as raw implementation details.
-
-Supported user-facing phrases:
+Galadriel SHOULD expose these roles as named workflow modes:
 
 - "Run research mode on this topic."
 - "Draft this from the research notes."
@@ -367,9 +383,7 @@ Initial implementation SHOULD coordinate role usage through Galadriel's system p
 1. Galadriel selects the appropriate role based on task intent.
 2. Galadriel loads or follows the corresponding role instructions.
 3. If a role requires a different model, Galadriel uses task-scoped model routing from Section 10.
-4. If the role requires long-running isolated context, Galadriel delegates through A2A to a specialized Agent Zero instance.
-
-Future implementation MAY expose each role as a first-class Agent Zero profile or separate sovereign Agent-Matrix agent.
+4. If the role requires long-running isolated context, Galadriel delegates through A2A.
 
 ---
 
@@ -381,9 +395,9 @@ Galadriel deployment on `agent0-2` MUST include:
 2. Prompt include for stable behavior constraints
 3. Open Brain MCP connectivity test
 4. Matrix connectivity test
-5. Optional A2A server enablement for direct inter-agent delegation
+5. A2A server enablement for direct inter-agent delegation
 6. External API token validation (for automation/bridge use cases)
-7. Optional task-scoped model tool configuration (`PERPLEXITY_API_KEY`, `OPENROUTER_API_KEY`, or provider-specific secrets)
+7. Optional task-scoped model tool configuration
 
 All secrets/tokens MUST be sourced from environment or secret management, never hardcoded in prompts or docs.
 
@@ -405,7 +419,7 @@ Implementation readiness is reached only when all checks pass.
 - A2A delegated task round-trip between two Agent Zero instances
 - Open Brain read/write round-trip
 - API-triggered message round-trip via `/api_message`
-- Task-scoped model/API call round-trip (for example Perplexity `sonar-pro`)
+- Task-scoped model/API call round-trip (e.g., Perplexity `sonar-pro`)
 
 ### 13.3 Memory Checks
 
@@ -413,299 +427,128 @@ Implementation readiness is reached only when all checks pass.
 - Cross-agent recall succeeds
 - Local-memory-only fallback behavior documented when Open Brain unavailable
 - Compiled wiki page generated from Open Brain memories with source provenance
+- Citation URLs present in search/list results (OB1 enhancement verified 2026-05-24)
 
 ---
 
-## 14. Implementation Contracts Still Required
+## 14. Implementation Contracts
 
-The following contracts MUST be completed before implementation begins. They convert the design intent into buildable work packages.
-
-### 14.0 Phase 0 Implementation Decisions
-
-These decisions are accepted for the first implementation pass and SHOULD be copied into the implementation plan.
-
-- **Profile path:** implement a dedicated `galadriel` Agent Zero profile, derived from a Researcher base but not left as a generic Researcher profile.
-- **Research model path:** use an MCP-accessible Perplexity research tool as the preferred task-scoped research mechanism.
-- **Research mode defaults:** base the research behavior on `Cursor-Writing-Assistant-repo/agents/research-agent.mdc`, extended for Galadriel's broader historical, scientific, geopolitical, archival, and fleet-memory responsibilities.
-- **Open Brain contract:** target the 6-tool profile, where the optional extensions beyond the core 4 are `search_by_date` and `get_search_protocol`.
-- **Wiki storage:** store compiled wiki pages at `/a0/usr/workdir/galadriel-workspace/wiki/`.
-- **Long-running research state:** start with file-backed JSON job manifests before building a database-backed scheduler.
+Detailed execution steps are in the companion `galadriel-implementation-plan.md`.
 
 ### 14.1 Profile Contract
-
-Define the concrete Agent Zero profile artifacts for Galadriel.
-
-Required decisions:
 
 - Profile directory path and file layout
 - System prompt file contents
 - Promptinclude file names and injection order
-- Default enabled skills
-- Default model preset, if any
+- Default enabled skills and model preset
 - Required project context and secrets
 - Upgrade procedure when the profile changes
 
-Acceptance criteria:
-
-- A fresh `agent0-2` instance can load the Galadriel profile without manual prompt editing.
-- Galadriel can state its mission, communication policy, memory policy, and role modes from the loaded profile.
-
 ### 14.2 Task-Scoped Model Tool Contract
 
-Define the mechanism Galadriel uses to call models outside the active Agent Zero main, utility, or embedding settings.
-
-Required decisions:
-
-- Mechanism: external MCP tool, custom Agent Zero skill/tool, A2A delegate, or model preset switch
+- Mechanism: external MCP tool, custom skill/tool, A2A delegate, or model preset switch
 - Tool names and input/output schemas
 - Supported providers and model IDs
 - Required environment variables and secret names
-- Citation return format
-- Error and fallback behavior
-- Cost/rate-limit policy
-- Audit log format for model/tool provenance
-
-Acceptance criteria:
-
-- Galadriel can run a Perplexity `sonar-pro` research call while its main Agent Zero model remains unchanged.
-- Saved research artifacts record model/tool name, timestamp, query, citations, and provenance.
+- Citation return format and error/fallback behavior
 
 ### 14.3 Long-Running Research Job Contract
 
-Define how Galadriel performs durable research tasks that may span multiple sessions.
-
-Required decisions:
-
 - Job states: `queued`, `scoping`, `researching`, `synthesizing`, `validating`, `wiki-compiling`, `completed`, `paused`, `failed`, `cancelled`
-- Job metadata schema
-- Checkpoint interval and storage path
-- Progress reporting cadence
-- Human approval gates
-- Resume and cancellation behavior
-- Failure recovery and partial-result handling
-
-Acceptance criteria:
-
-- A research job can be paused, resumed, and completed without losing source inventory or intermediate notes.
-- A human or agent can query job status through the chosen interface.
+- Job metadata schema, checkpoint interval, progress reporting
+- Resume, cancellation, and failure recovery behavior
 
 ### 14.4 Sub-Agent Delegation Contract
 
-Define how Galadriel delegates work to spawned or remote specialist agents.
-
-Required decisions:
-
 - Delegation channel: in-instance sub-agent, A2A, Matrix room, or API bridge
-- Task packet schema
-- Required output schema
-- Timeout and retry policy
-- Budget/model constraints
+- Task packet schema, output schema, timeout/retry policy
 - Merge strategy for multiple sub-agent outputs
-- Provenance format for delegated findings
-
-Acceptance criteria:
-
-- Galadriel can delegate a research, critique, or validation task and merge the result into a final artifact with source attribution.
-- Failed or partial sub-agent work is represented explicitly instead of silently dropped.
 
 ### 14.5 Compiled Wiki Compiler Contract
 
-Define the compiler that turns Open Brain memories and source artifacts into wiki pages.
-
-Required decisions:
-
 - Wiki page naming and topic ID scheme
 - Page template and required frontmatter
-- Source selection and clustering algorithm
-- Staleness threshold
-- Conflict and contradiction handling
+- Source selection, staleness threshold, conflict handling
 - Link-back format to Open Brain IDs and source artifacts
-- Refresh triggers and schedule
-- Human review policy for high-impact wiki pages
-
-Acceptance criteria:
-
-- Given a topic query, Galadriel can produce or refresh a wiki page with citations, provenance, contradictions, gaps, and related topics.
-- Wiki pages clearly identify their source memories and last compilation time.
 
 ### 14.6 Memory Governance Contract
 
-Define what Galadriel may store in Open Brain and the compiled wiki.
-
-Required decisions:
-
 - Promotion criteria for fleet-wide memory
-- Redaction rules for secrets, credentials, private keys, access tokens, and sensitive personal data
-- Retention and deletion policy
-- Update/correction policy for stale or wrong memories
-- Human approval threshold for sensitive or high-impact memory writes
-- Ownership and provenance fields
-
-Acceptance criteria:
-
-- Galadriel refuses or redacts obvious secrets before saving to Open Brain.
-- A stale or incorrect memory can be corrected with provenance preserved.
+- Redaction rules for secrets and sensitive data
+- Retention, deletion, and correction policy
 
 ### 14.7 Channel Payload Contract
 
-Define when to use Matrix, A2A, MCP, or API for specific payload types.
-
-Required decisions:
-
 - Size threshold for "large JSON"
 - File transfer limits and preferred path
-- Pointer/reference format for large artifacts
 - Sensitive data channel restrictions
-- Matrix room archival rules
-
-Acceptance criteria:
-
-- Galadriel chooses Matrix for multi-party discussion and A2A or artifact pointers for large structured payloads.
-- Large data is not pasted into Matrix rooms unless explicitly requested.
 
 ### 14.8 Observability Contract
 
-Define logging and metrics for Galadriel's work.
-
-Required decisions:
-
-- Events to log: model calls, Open Brain writes, wiki compiles, sub-agent delegations, Matrix decisions, A2A transfers
-- Log destination and retention
-- Cost accounting fields
-- Failure and retry visibility
-- Human-readable audit summary format
-
-Acceptance criteria:
-
-- An operator can reconstruct which models, tools, agents, sources, and memories contributed to a final answer.
-
-### 14.9 Acceptance Test Contract
-
-Define the canonical tests used to accept a Galadriel implementation.
-
-Required decisions:
-
-- Test prompt corpus
-- Expected artifacts
-- Scoring rubric for source quality, citation completeness, wiki quality, and memory hygiene
-- Required pass/fail thresholds
-- Regression test cadence
-
-Acceptance criteria:
-
-- A new implementation can be tested without subjective hand-waving.
-- Failures produce actionable remediation items.
+- Events to log: model calls, Open Brain writes, wiki compiles, sub-agent delegations
+- Log destination, retention, cost accounting
 
 ---
 
 ## 15. Identified Specification Holes
 
-The following holes block clean implementation if left unresolved.
-
-### Hole 1 -- Open Brain Tool Surface Drift
-
-The docs currently imply inconsistent Open Brain tool counts (4 vs 6).  
-**Risk:** implementer targets wrong API contract.
-
-### Hole 2 -- Promotion Policy Ambiguity
-
-No strict rules define what must be promoted from local memory to collective memory.  
-**Risk:** memory noise or missing institutional knowledge.
-
-### Hole 3 -- Channel Arbitration Rules
-
-No deterministic rule-set for when Galadriel should choose Matrix vs A2A vs API orchestration.  
-**Risk:** inconsistent collaboration behavior.
-
-### Hole 4 -- Failure Semantics
-
-No defined degraded-mode behavior for Open Brain outage, A2A outage, or Matrix outage.  
-**Risk:** fragile runtime behavior and operator confusion.
-
-### Hole 5 -- Security Boundary Detail
-
-Token rotation cadence, TLS expectations for Open Brain MCP access, and least-privilege policy are not fully specified.  
-**Risk:** avoidable security exposure.
-
-### Hole 6 -- Test Corpus Definition
-
-No canonical benchmark prompt set and scoring rubric for Galadriel quality gates.  
-**Risk:** subjective acceptance criteria.
-
-### Hole 7 -- Task-Scoped Model Tooling
-
-No implementation yet defines the exact API wrapper, MCP server, or skill that lets Galadriel call Perplexity or other task-specific models independently of Agent Zero's active main/utility model.  
-**Risk:** model-routing policy exists on paper but cannot be exercised reliably.
-
-### Hole 8 -- Compiled Wiki Compiler
-
-No implementation yet defines the wiki compiler, staleness rules, output schema, or conflict handling for Open Brain-derived wiki pages.  
-**Risk:** Galadriel can accumulate memories but cannot reliably turn them into reusable human-readable knowledge.
-
-### Hole 9 -- Long-Running Job Lifecycle
-
-No implementation yet defines durable job state, checkpointing, pause/resume, cancellation, or progress reporting for long-duration research.  
-**Risk:** research can sprawl across sessions and lose state.
-
-### Hole 10 -- Sub-Agent Delegation Semantics
-
-No implementation yet defines task packets, output schemas, timeouts, retries, or merge rules for spawned/delegated agents.  
-**Risk:** Galadriel can ask other agents for help but cannot manage their work predictably.
-
-### Hole 11 -- Memory Governance
-
-No implementation yet defines redaction, retention, correction, deletion, or human approval rules for Open Brain and wiki writes.  
-**Risk:** the fleet memory accumulates stale, unsafe, or sensitive material.
-
-### Hole 12 -- Observability and Cost Accounting
-
-No implementation yet defines logs, metrics, or cost attribution for model calls, tool calls, wiki compiles, and delegated work.  
-**Risk:** operators cannot debug behavior or control spend.
+| # | Hole | Risk | Status |
+|---|---|---|---|
+| 1 | Open Brain tool surface drift | Implementer targets wrong API contract | **Partially resolved** — core 4 with annotations/citations deployed; extended 2 remain design-phase |
+| 2 | Promotion policy ambiguity | Memory noise or missing institutional knowledge | Open |
+| 3 | Channel arbitration rules | Inconsistent collaboration behavior | Open |
+| 4 | Failure semantics | Fragile runtime behavior | Open |
+| 5 | Security boundary detail | Avoidable security exposure | Open |
+| 6 | Test corpus definition | Subjective acceptance criteria | Open |
+| 7 | Task-scoped model tooling | Model-routing policy on paper only | Open — no Perplexity key/MCP found |
+| 8 | Compiled wiki compiler | Cannot turn memories into reusable knowledge | Open |
+| 9 | Long-running job lifecycle | Research can lose state across sessions | Open |
+| 10 | Sub-agent delegation semantics | Cannot manage delegated work predictably | Open |
+| 11 | Memory governance | Fleet memory accumulates stale/unsafe material | Open |
+| 12 | Observability and cost accounting | Cannot debug behavior or control spend | Open |
 
 ---
 
-## 16. Action Items to Improve This Spec
+## 16. Action Items
 
 ### P0 (Required Before Implementation)
 
-1. **Lock Open Brain API contract** (authoritative tool list + schema + version pin).
-2. **Define memory promotion rubric** (what gets promoted, who can promote, required metadata).
-3. **Define channel arbitration matrix** (Matrix vs A2A vs API decision tree).
-4. **Define degraded-mode behavior** for each channel/memory dependency.
-5. **Publish security profile** (token handling, rotation, TLS posture, audit logging requirements).
-6. **Choose task-scoped model mechanism** (MCP tool, custom skill/tool, preset switch, or A2A delegation).
-7. **Define compiled wiki schema and compiler behavior** (page template, staleness rules, conflict handling, storage path).
-8. **Complete implementation contracts in Section 14**.
+1. Lock Open Brain API contract (authoritative tool list + schema + version pin).
+2. Define memory promotion rubric.
+3. Define channel arbitration matrix.
+4. Define degraded-mode behavior for each dependency.
+5. Publish security profile.
+6. Choose task-scoped model mechanism.
+7. Define compiled wiki schema and compiler behavior.
 
 ### P1 (Strongly Recommended)
 
-1. Add an explicit **acceptance test suite** with pass/fail thresholds.
-2. Add **task class to model class mapping** for frontier vs utility model routing.
-3. Define **cross-agent provenance reporting format** for delegation chains.
-4. Add **Open Brain outage playbook** for operators.
+1. Acceptance test suite with pass/fail thresholds.
+2. Task class to model class mapping.
+3. Cross-agent provenance reporting format.
+4. Open Brain outage playbook.
 5. Convert borrowed Cursor agent roles into Agent Zero skills or profiles.
-6. Add an acceptance test for "what do we know about X?" using Open Brain + compiled wiki refresh.
 
 ### P2 (Future Hardening)
 
-1. Add event-driven memory promotion hooks.
-2. Add automated quality drift detection for Galadriel outputs.
-3. Add structured telemetry dashboard for channel usage and failure rates.
+1. Event-driven memory promotion hooks.
+2. Automated quality drift detection.
+3. Structured telemetry dashboard.
 
 ---
 
 ## 17. References
 
-- [Source A - Agent Zero docs hub](https://github.com/agent0ai/agent-zero/tree/main/docs)
-- [Source B - Agent Zero A2A setup](https://raw.githubusercontent.com/agent0ai/agent-zero/main/docs/guides/a2a-setup.md)
-- [Source C - Agent Zero MCP setup](https://raw.githubusercontent.com/agent0ai/agent-zero/main/docs/guides/mcp-setup.md)
-- [Source D - Agent Zero connectivity](https://raw.githubusercontent.com/agent0ai/agent-zero/main/docs/developer/connectivity.md)
-- [Source E - Open Brain (OB1)](https://github.com/NateBJones-Projects/OB1)
-- [Source F - Agent-Matrix Open Brain design](agent-matrix-open-brain-design.md)
-- [Source G - Open Brain Agent Zero guide](../../open-brain/docs/open-brain-agent-zero-guide.md)
-- [Source H - Open Brain self-hosted guide](../../open-brain/docs/open-brain-self-hosted-guide.md)
-- [Source I - Nate's Substack: Karpathy's Memory System](https://natesnewsletter.substack.com/p/your-ai-re-derives-everything-it)
-- [Source J - Nate's Substack: The Hybrid I'd Actually Build Next](https://natesnewsletter.substack.com/i/194981463/the-hybrid-id-actually-build-next)
+- [Agent Zero docs hub](https://github.com/agent0ai/agent-zero/tree/main/docs)
+- [Agent Zero A2A setup](https://raw.githubusercontent.com/agent0ai/agent-zero/main/docs/guides/a2a-setup.md)
+- [Agent Zero MCP setup](https://raw.githubusercontent.com/agent0ai/agent-zero/main/docs/guides/mcp-setup.md)
+- [Agent Zero connectivity](https://raw.githubusercontent.com/agent0ai/agent-zero/main/docs/developer/connectivity.md)
+- [Open Brain (OB1)](https://github.com/NateBJones-Projects/OB1)
+- [Agent-Matrix Open Brain design](agent-matrix-open-brain-design.md)
+- [Open Brain Agent Zero guide](../../open-brain/docs/open-brain-agent-zero-guide.md)
+- [Open Brain self-hosted guide](../../open-brain/docs/open-brain-self-hosted-guide.md)
+- [Nate's Substack: Karpathy's Memory System](https://natesnewsletter.substack.com/p/your-ai-re-derives-everything-it)
+- [Nate's Substack: The Hybrid I'd Actually Build Next](https://natesnewsletter.substack.com/i/194981463/the-hybrid-id-actually-build-next)
 
 ---
 
@@ -713,63 +556,56 @@ No implementation yet defines logs, metrics, or cost attribution for model calls
 
 ### A.1 Canonical Specification File
 
-- **Decision:** `multi-instance-deploy/docs/galadriel-agent-design.md` is the canonical v2.1 specification.
+- **Decision:** `multi-instance-deploy/docs/galadriel-agent-design.md` is the canonical design specification.
 - **Status:** Accepted.
-- **Rationale:** Single source of truth for implementation and review.
 
 ### A.2 Communication Channel Arbitration
 
-- **Decision:** Use **Matrix-first** for multi-entity collaboration (human + multiple agents).
-- **Decision:** Use **A2A-preferred** for inter-agent file transfer and large structured JSON payload handoff.
+- **Decision:** Matrix-first for multi-entity collaboration; A2A-preferred for inter-agent file transfer and large structured JSON.
 - **Status:** Accepted.
-- **Rationale:** Matrix is strongest for shared collaboration context; A2A is better for targeted agent-to-agent transfer/delegation payloads.
 
 ### A.3 Open Brain Tool Contract Target
 
-- **Decision:** Adopt a **versioned 6-tool target** with mandatory core-4 compatibility.
-- **Status:** Provisional (pending final explicit lock in implementation kickoff).
+- **Decision:** Versioned 6-tool target with mandatory core-4 compatibility.
+- **Status:** Provisional — core 4 deployed with enhancements; extended 2 remain unimplemented.
 - **Required profile:**
   - MUST: `search_thoughts`, `list_thoughts`, `thought_stats`, `capture_thought`
   - SHOULD: `search_by_date`, `get_search_protocol`
   - MUST: graceful fallback when only core-4 is available
-- **Rationale:** Preserves deployment compatibility while enabling richer temporal/protocol-aware retrieval.
 
 ### A.4 Frontier Model Policy
 
-- **Decision:** Frontier-tier model is primary for architecture and final reasoning paths; utility models are limited to bounded subtasks.
+- **Decision:** Frontier-tier model is primary for architecture and final reasoning; utility models limited to bounded subtasks.
 - **Status:** Accepted.
-- **Rationale:** Maximizes implementation quality for high-impact design and synthesis decisions.
 
 ### A.5 Task-Scoped Model Routing
 
-- **Decision:** Galadriel may use task-specific models independently of the active Agent Zero main, utility, or embedding models.
+- **Decision:** Galadriel may use task-specific models independently of the active Agent Zero main/utility/embedding models.
 - **Status:** Accepted as design goal; implementation mechanism still open.
-- **Preferred implementation order:** external MCP tool, custom Agent Zero skill/tool, A2A delegation, then manual model preset switch.
-- **Rationale:** Research, critique, validation, and drafting benefit from different model strengths; tying every phase to one chat model would blunt Galadriel's usefulness.
+- **Preferred order:** external MCP tool, custom skill/tool, A2A delegation, then manual preset switch.
 
 ### A.6 Borrowed Cursor Agent Roles
 
-- **Decision:** Cursor-Writing-Assistant `.mdc` agents are borrowed as role definitions, not assumed to be directly executable Agent Zero subagents.
+- **Decision:** Cursor `.mdc` agents are borrowed as role definitions, not directly executable Agent Zero subagents.
 - **Status:** Accepted.
-- **Initial exposure:** user-facing workflow modes coordinated by Galadriel's system prompt and skills.
-- **Future exposure:** first-class Agent Zero profiles, skills, or dedicated Agent-Matrix agents if the workflow justifies the extra infrastructure.
 
 ### A.7 Open Brain Compiled Wiki Layer
 
-- **Decision:** Galadriel maintains a Karpathy-style compiled wiki layer generated from Open Brain memories and source artifacts.
-- **Status:** Accepted for v2.1 design.
-- **Source of truth:** Open Brain and source artifacts remain authoritative; compiled wiki pages are read-optimized synthesis artifacts.
-- **Rationale:** The hybrid architecture combines durable structured memory with human-readable synthesis, reducing repeated query-time re-derivation while preserving provenance.
-
-### A.8 Phase 0 Implementation Direction
-
-- **Decision:** Capture implementation details in a separate `galadriel-implementation-plan.md` document rather than overloading this design specification.
-- **Decision:** Build Galadriel as a dedicated profile derived from Researcher behavior.
-- **Decision:** Use MCP-accessible Perplexity research as the first task-scoped model route.
-- **Decision:** Store compiled wiki pages under `/a0/usr/workdir/galadriel-workspace/wiki/`.
+- **Decision:** Galadriel maintains a Karpathy-style compiled wiki layer generated from Open Brain and source artifacts.
 - **Status:** Accepted.
-- **Rationale:** The design doc remains the architectural contract; the implementation plan can evolve as concrete commands, file paths, and sequencing are discovered.
+
+### A.8 Document Consolidation (v2.2)
+
+- **Decision:** Three prior documents consolidated into two: this design spec and a single implementation plan.
+- **Supersedes:** `galadriel-agent0-2-inspection-implementation-plan.md` (retired — findings absorbed into implementation plan).
+- **Status:** Accepted.
+
+### A.9 OB1 Enhancements (v2.2)
+
+- **Decision:** Tool annotations and citation helpers deployed to fleet OB1 on 2026-05-24.
+- **Status:** Completed and verified. All fleet agents receive enhancements automatically.
+- **Backup:** `/opt/agent-zero/backups/open-brain-pre-enhance-20260525T002358Z`
 
 ---
 
-*Prepared as v2.1 implementation specification coverage update for Galadriel.*
+*Prepared as v2.2 design specification for Galadriel. Companion implementation plan: `galadriel-implementation-plan.md`.*
