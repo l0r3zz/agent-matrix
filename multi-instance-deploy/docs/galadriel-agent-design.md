@@ -511,17 +511,21 @@ Detailed execution steps are in the companion `galadriel-implementation-plan.md`
 
 ## 16. Action Items
 
-### P0 (Required Before Implementation)
+### P0 — Phase-Gated Prerequisites
 
-1. Lock Open Brain API contract (authoritative tool list + schema + version pin).
-2. Define memory promotion rubric.
-3. Define channel arbitration matrix.
-4. Define degraded-mode behavior for each dependency.
-5. Publish security profile.
-6. Choose task-scoped model mechanism.
-7. Define compiled wiki schema and compiler behavior.
+These items were originally marked as blanket "required before implementation" gates. They are now scoped to the specific phase that requires them. **Phase 1 (Profile Scaffold) has no unresolved P0 blockers.**
 
-### P1 (Strongly Recommended)
+| # | Action Item | Blocks Phase | Current Status |
+|---|---|---|---|
+| 1 | Lock Open Brain API contract | — | **Done for Phase 1** — core 4 deployed with annotations/citations. Extended 2 remain design-phase (Phase 5+). |
+| 2 | Define memory promotion rubric | Phase 3+ | Open — not needed for profile scaffold |
+| 3 | Define channel arbitration matrix | — | **Sufficient** — design spec Section 5.1 provides adequate policy for all phases |
+| 4 | Define degraded-mode behavior | Phase 3+ | Open — helpful but not blocking |
+| 5 | Publish security profile | Phase 3+ | **Sufficient** — existing secret/env patterns work for Phase 1-2 |
+| 6 | Choose task-scoped model mechanism | **Phase 3** | **Open — primary Phase 3 blocker** (no Perplexity key/MCP found) |
+| 7 | Define compiled wiki schema and compiler behavior | **Phase 5** | Open — not needed until wiki compiler implementation |
+
+### P1 — Strongly Recommended (Phase 3+)
 
 1. Acceptance test suite with pass/fail thresholds.
 2. Task class to model class mapping.

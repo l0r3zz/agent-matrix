@@ -637,6 +637,18 @@ Sequence after Phase 3 is stable.
 
 ## 15. Frontier-Model Assignment
 
+### 15.1 P0 Action Item Scoping
+
+The design spec (Section 16) lists P0 action items. These are now **phase-gated**, not blanket prerequisites:
+
+- **Phase 1 has NO unresolved P0 blockers.** The Open Brain API contract is locked for core 4 tools, and the communication policy in design spec Section 5.1 is sufficient.
+- **Phase 3 is blocked** by: task-scoped model mechanism choice + Perplexity API key availability.
+- **Phase 5 is blocked** by: compiled wiki schema definition.
+
+Do not delay Phase 1 waiting for Phase 3+ prerequisites.
+
+### 15.2 Frontier-Model Assignment
+
 Give the implementer this instruction:
 
 ```text
@@ -646,7 +658,7 @@ Read these two documents:
 - galadriel-agent-design.md (v2.2 design specification)
 - galadriel-implementation-plan.md (this plan, v1.0)
 
-Execute Phase 1 only:
+Phase 1 has no unresolved P0 blockers. Execute Phase 1 only:
 1. Take backup per Section 4.1.
 2. Update profile files per Section 4.2.
 3. Create workspace directories per Section 4.3.
@@ -659,6 +671,8 @@ Constraints:
 - Do NOT implement Phase 3+ until blockers in Section 13 are resolved.
 - Use existing Agent-Matrix patterns; do not invent new deployment layouts.
 - Record all changes made for review.
+- P0 action items in the design spec Section 16 are phase-gated, not blanket
+  prerequisites. Phase 1 has no unresolved P0 blockers.
 ```
 
 ---
