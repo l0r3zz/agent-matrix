@@ -14,7 +14,7 @@ You have 4–6 hours/day and AI will do most of the coding. Your time should foc
 - Architectural decisions:
   - Crypto model, device identity, key storage, rollout strategy.
 - Code review and debugging:
-  - Integration with Agent‑Matrix, Dendrite, networking, and federation.
+  - Integration with Agent‑Matrix, Continuwuity, networking, and federation.
 
 **AI focuses on:**
 
@@ -56,7 +56,7 @@ Focus your daily time on capturing intent and constraints, not code.
 ### Day 5: Align with Agent‑Matrix design
 
 - Cross‑check both specs against the Agent‑Matrix design document:
-  - Per‑agent Dendrite homeserver.
+  - Per‑agent Continuwuity homeserver.
   - VPN and TLS/PKI constraints.
   - Phase‑2 requirement “E2EE support, Olm crypto store in matrix-mcp-server.”
 - Make these constraints explicit in the specs as non‑functional requirements.
@@ -78,7 +78,7 @@ Now your time is mostly review and integration.
 
 - Scaffold a Rust MCP server:
   - Use the official Rust MCP SDK and reference examples.
-- Integrate `matrix-sdk` as a Matrix client talking to your Dendrite homeserver:
+- Integrate `matrix-sdk` as a Matrix client talking to your Continuwuity homeserver:
   - Initially handle **only unencrypted** rooms.
 - Implement a **core v1 subset**:
   - `list_joined_rooms`
@@ -92,9 +92,9 @@ Now your time is mostly review and integration.
   - Names, parameters, responses, error patterns.
 - Integrate the Rust MCP server into a single Agent Zero instance:
   - Replace or run alongside the TS `matrix-mcp-server`.
-  - Keep existing macvlan networking and Dendrite topology.
+  - Keep existing macvlan networking and Continuwuity topology.
 - Run the **Phase‑1 unencrypted flows** end‑to‑end:
-  - Human in Element → Synapse → Dendrite → Rust MCP → Agent Zero → back.
+  - Human in Element → Synapse → Continuwuity → Rust MCP → Agent Zero → back.
 
 **Outcome by end of Week 2**
 

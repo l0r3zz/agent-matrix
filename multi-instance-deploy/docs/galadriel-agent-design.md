@@ -29,7 +29,7 @@ This document supersedes v2.1 and serves as the baseline for implementation plan
    - Citation helpers (`thoughtTitle`, `thoughtUrl`, `CITATION_BASE_URL`) now deployed on fleet OB1
    - Deployed OB1 MCP server runs **Node.js + direct PostgreSQL**, not upstream Deno/Supabase
 2. **OB1 architecture clarified**: deployed version is a custom self-hosted Node.js implementation
-3. **Homeserver technology corrected**: fleet runs **conduwuite/continuwuity**, not Dendrite
+3. **Homeserver technology corrected**: fleet runs **conduwuite/continuwuity**, not Continuwuity
 4. **Implementation phasing updated** to reflect completed OB1 enhancements and remaining work
 5. **Inspection findings incorporated** from the agent0-2 system audit performed 2026-05-23
 6. **Three prior documents consolidated** into two: this design spec and a single implementation plan
@@ -67,7 +67,7 @@ Galadriel runs as a sovereign Agent Zero instance in the existing Agent-Matrix t
 
 ### 4.2 Infrastructure Notes
 
-- **Homeservers** run **conduwuite/continuwuity** (not Dendrite)
+- **Homeservers** run **conduwuite/continuwuity** (not Continuwuity)
 - **OB1 MCP** is a self-hosted Node.js + Express + pgvector implementation at `172.23.90.2:3100`
 - **agent0-2** runs Agent Zero v1.17 with macvlan networking at `172.23.88.2`
 - **agent0-2 homeserver** is `agent0-2-continuwuity` with Caddy reverse proxy (`agent0-2-mhs`)

@@ -32,7 +32,7 @@ Agent-Matrix already provides the lateral communication layer via Matrix rooms -
 - The exact steps for Continuwuity-to-Synapse federation troubleshooting
 - TLS certificate renewal procedures with step-ca (the equals-syntax gotcha in `--not-after=8760h`)
 - How to configure DD-WRT static routes for new agent instances
-- Migration procedures from Dendrite to Continuwuity
+- Migration procedures from Continuwuity to Continuwuity
 - The DHCP Option 121 trap where `systemd-networkd` ignores Option 3
 
 Without Open Brain, this knowledge is locked in Gandalf's personal memory. If Gandalf's container is destroyed, it is gone. Other agents cannot access it.
@@ -585,7 +585,7 @@ Agent0-1 (Gandalf) has participated in months of agent-matrix development. Its l
 - The exact steps for Continuwuity-to-Synapse federation troubleshooting (hostAliases, CA bundle with root + intermediate, ip_range_whitelist)
 - TLS certificate renewal procedures with step-ca (the `--not-after=8760h` equals-syntax requirement)
 - How to configure DD-WRT static routes for new agent instances (/32 routes via g2s)
-- Migration procedures from Dendrite to Continuwuity (environment variables vs YAML, registration token flow)
+- Migration procedures from Continuwuity to Continuwuity (environment variables vs YAML, registration token flow)
 - The DHCP Option 121 gotcha where `systemd-networkd` ignores Option 3
 
 This knowledge is trapped. If a new operator asks agent0-3 "how do I troubleshoot federation?", agent0-3 has no answer -- it has never done federation troubleshooting. The operator must either ask Gandalf directly (synchronous, requires Gandalf to be available) or read the documentation (which may not capture every nuance Gandalf learned through trial and error).

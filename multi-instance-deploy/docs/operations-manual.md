@@ -1103,7 +1103,7 @@ No create-account command is used. See finalize-instance.sh for automation. Toke
 - `watchdog.sh`: Monitors matrix_bot.py, MCP, and restarts as needed.
 - Bot runs in the agent0-N container with AGENT_IDENTITY context injection.
 
-**All legacy Dendrite, 2-container references, and old registration methods have been superseded by the above.**
+**All legacy Continuwuity, 2-container references, and old registration methods have been superseded by the above.**
 
 
 # Operations Manual - Agent-Matrix Sovereign Fleet (Continuwuity v0.5.6 Edition)
@@ -1116,7 +1116,7 @@ Each instance N consists of exactly **3 containers**:
 - `agent0-N-continuwuity`: Continuwuity v0.5.6 homeserver (RocksDB, internal port 6167, bridge-local only).
 - `agent0-N-mhs` (172.23.89.N): Caddy reverse proxy providing TLS termination, client API (8008), federation endpoint (8448).
 
-TLS is exclusively handled by Caddy in the mhs container using certificates from step-ca. No direct Dendrite containers or YAML-based TLS.
+TLS is exclusively handled by Caddy in the mhs container using certificates from step-ca. No direct Continuwuity containers or YAML-based TLS.
 
 ## Instance Creation & Finalization
 
@@ -1145,5 +1145,5 @@ Uses m.login.registration_token flow. No create-account binary.
 - Restart services: `./startup-services.sh`
 - Token sync check: `python3 check-token-sync.py`
 
-All legacy 2-container Dendrite references removed.
+All legacy 2-container Continuwuity references removed.
 

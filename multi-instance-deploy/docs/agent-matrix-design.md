@@ -131,7 +131,7 @@ Every agent is deployed as a set of three Docker containers that always live on 
 
 Giving each agent its own homeserver means the agent has a real Matrix identity that other participants (human or AI) can interact with using standard Matrix clients. The agent isn't "pretending" to be a Matrix user through someone else's server -- it *is* a Matrix user on its own server.
 
-**Continuwuity** replaced the original Dendrite homeserver across the entire fleet. It is a Rust-based Matrix homeserver (Conduit/Conduwuit fork) that uses roughly 20-50 MB of RAM with a RocksDB backend, compared to Dendrite's 200-400 MB or Synapse's 300 MB+. It is actively developed (unlike Dendrite, stalled since August 2025) and provides stable federation with clean sync behavior. Configuration is via environment variables (`CONTINUWUITY_` prefix), not YAML files.
+**Continuwuity** replaced the original Continuwuity homeserver across the entire fleet. It is a Rust-based Matrix homeserver (Conduit/Conduwuit fork) that uses roughly 20-50 MB of RAM with a RocksDB backend, compared to Continuwuity's 200-400 MB or Synapse's 300 MB+. It is actively developed (unlike Continuwuity, stalled since August 2025) and provides stable federation with clean sync behavior. Configuration is via environment variables (`CONTINUWUITY_` prefix), not YAML files.
 
 Continuwuity does not handle TLS itself. **Caddy** sits in front as a reverse proxy, holding the macvlan IP (172.23.89.N) and the step-ca TLS certificates. The Continuwuity container is on a bridge-local Docker network only -- it is not directly LAN-routable.
 
@@ -408,7 +408,7 @@ The Agent-Matrix design provides:
 | Term | Definition |
 |------|------------|
 | **Agent Zero** | An open-source AI agent framework that provides LLM reasoning, tool use, memory, and a web interface |
-| **Continuwuity** | A Rust-based Matrix homeserver (Conduit/Conduwuit fork) used here as the lightweight per-agent homeserver. Replaced Dendrite across the fleet in March 2026 |
+| **Continuwuity** | A Rust-based Matrix homeserver (Conduit/Conduwuit fork) used here as the lightweight per-agent homeserver. Replaced Continuwuity across the fleet in March 2026 |
 | **Caddy** | A Go-based web server and reverse proxy used here as the TLS termination layer for agent homeservers |
 | **Synapse** | The reference Matrix homeserver implementation (Python/Twisted), used here as the public federation gateway |
 | **MCP** | Model Context Protocol -- a standard for exposing tools to AI agents |
@@ -421,7 +421,7 @@ The Agent-Matrix design provides:
 | **matrix-mcp-server** | The Node.js component that exposes Matrix operations as MCP tools for Agent Zero |
 | **E2EE** | End-to-End Encryption -- encrypting messages so only sender and recipients can read them |
 | **Olm/Megolm** | The cryptographic protocols used by Matrix for E2EE (Olm for 1:1, Megolm for group) |
-| **Dendrite** | The original per-agent Matrix homeserver (Go). Replaced by Continuwuity across the fleet; retained in documentation for historical context |
+| **Continuwuity** | The original per-agent Matrix homeserver (Go). Replaced by Continuwuity across the fleet; retained in documentation for historical context |
 
 ---
 
@@ -429,7 +429,7 @@ The Agent-Matrix design provides:
 
 - [operations-manual.md](operations-manual.md) -- Agent lifecycle procedures, including migration (Section 6).
 - [theory-of-operations.md](theory-of-operations.md) -- Deep technical reference for networking, K8s, certs, Continuwuity, and troubleshooting.
-- [continuwuity-migration.md](continuwuity-migration.md) -- Migration guide from Dendrite to Continuwuity.
+- [continuwuity-migration.md](continuwuity-migration.md) -- Migration guide from Continuwuity to Continuwuity.
 - [rust-matrix-mcp-server-plan.md](../../docs/rust-matrix-mcp-server-plan.md) -- Roadmap for the Rust MCP server (E2EE Phase 2).
 
 ---

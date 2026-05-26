@@ -7,7 +7,7 @@ Usage: $(basename "$0") [--room-id ROOM_ID] <instance-number>
 
 Checks:
   1) Containers running (agent0-N and agent0-N-mhs)
-  2) Dendrite endpoints healthy (:8008 client versions, :8448 server key)
+  2) Continuwuity endpoints healthy (:8008 client versions, :8448 server key)
   3) startup-services completed latest cycle
   4) Processes up (run_ui.py, http-server.js, matrix-bot runtime)
   5) Env invariants:
@@ -43,16 +43,16 @@ info() { echo "[INFO] $*"; }
 if docker ps --format '{{.Names}}' | grep -qx "$AGENT"; then pass "$AGENT running"; else fail "$AGENT not running"; fi
 if docker ps --format '{{.Names}}' | grep -qx "$MHS"; then pass "$MHS running"; else fail "$MHS not running"; fi
 
-# 2) Dendrite endpoints
+# 2) Continuwuity endpoints
 if curl -fsS "http://${MHS_IP}:8008/_matrix/client/versions" >/tmp/v.json 2>/dev/null; then
-  pass "Dendrite client endpoint healthy"
+  pass "Continuwuity client endpoint healthy"
 else
-  fail "Dendrite client endpoint failed"
+  fail "Continuwuity client endpoint failed"
 fi
 if curl -kfsS "https://${MHS_IP}:8448/_matrix/key/v2/server" >/tmp/k.json 2>/dev/null; then
-  pass "Dendrite federation key endpoint healthy"
+  pass "Continuwuity federation key endpoint healthy"
 else
-  fail "Dendrite federation key endpoint failed"
+  fail "Continuwuity federation key endpoint failed"
 fi
 
 # 3) startup latest cycle

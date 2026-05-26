@@ -16,7 +16,7 @@ A comprehensive **Model Context Protocol (MCP) server** that provides secure acc
 ### Prerequisites
 
 - **Node.js 20+** and npm
-- **Matrix homeserver** access (Synapse, Dendrite, etc.)
+- **Matrix homeserver** access (Synapse, Continuwuity, etc.)
 - **MCP client** (Claude Desktop, VS Code with MCP extension, etc.)
 
 ### Installation

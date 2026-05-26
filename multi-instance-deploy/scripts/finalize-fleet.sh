@@ -91,9 +91,9 @@ sleep 25
 
 for N in 1 2 3; do
     echo "=== agent0-$N ==="
-    # Dendrite health
+    # Homeserver health
     HTTP=$(curl -s -o /dev/null -w '%{http_code}' http://172.23.89.$N:8008/_matrix/client/versions 2>/dev/null || echo 'FAIL')
-    echo "  Dendrite: $HTTP"
+    echo "  Homeserver: $HTTP"
     # Bot health
     docker exec agent0-$N tail -2 /a0/usr/workdir/matrix-bot/bot.log 2>/dev/null || echo "  Bot: no log"
     echo ""

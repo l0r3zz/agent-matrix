@@ -222,7 +222,7 @@ Add missing v2.2 requirements to the existing prompt:
 - Deterministic writing workflow artifact naming
 - Provenance policy for research notes and OpenBrain writes
 - Current-events live-search requirement
-- Conduwuite wording (not Dendrite)
+- Conduwuite wording (not Continuwuity)
 - Citation URL format using OB1 citation helpers
 
 #### 4.2.3 `galadriel.promptinclude.md`

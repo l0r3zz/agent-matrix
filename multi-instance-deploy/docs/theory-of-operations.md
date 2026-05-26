@@ -447,7 +447,7 @@ cert-manager handles public TLS for `matrix.v-site.net` automatically via HTTP-0
 
 ## 5. Continuwuity Homeserver
 
-Continuwuity replaced Dendrite across the entire fleet in March 2026. It is a Rust-based Matrix homeserver (Conduit/Conduwuit fork) with RocksDB storage. See [continuwuity-migration.md](continuwuity-migration.md) for migration details.
+Continuwuity replaced Continuwuity across the entire fleet in March 2026. It is a Rust-based Matrix homeserver (Conduit/Conduwuit fork) with RocksDB storage. See [continuwuity-migration.md](continuwuity-migration.md) for migration details.
 
 ### 5.1 Architecture
 
@@ -515,18 +515,18 @@ curl -s -X POST http://172.23.89.N:8008/_matrix/client/v3/login \
   -d '{"type":"m.login.password","identifier":{"type":"m.id.user","user":"agent0-N"},"password":"<pw>","device_id":"AgentZeroBot"}'
 ```
 
-### 5.5 Key Differences from Dendrite
+### 5.5 Key Differences from Continuwuity
 
-| Aspect | Dendrite (historical) | Continuwuity (current) |
+| Aspect | Continuwuity (historical) | Continuwuity (current) |
 |--------|----------------------|----------------------|
 | Language | Go | Rust |
-| Config | YAML file (dendrite.yaml) | Environment variables (`CONTINUWUITY_` prefix) |
+| Config | YAML file (continuwuity.yaml) | Environment variables (`CONTINUWUITY_` prefix) |
 | Database | SQLite (multiple .db files) | RocksDB (single data dir) |
 | Memory | ~200-400 MB | ~20-50 MB |
 | TLS | Built-in (`--https-bind-address :8448`) | External via Caddy sidecar |
 | Account creation | `create-account` binary | REST API with registration token |
-| Container model | 2 containers (A0 + Dendrite) | 3 containers (A0 + Continuwuity + Caddy) |
-| Admin API | `/_dendrite/admin/` | Conduit-heritage admin bot (`@conduit:`) |
+| Container model | 2 containers (A0 + Continuwuity) | 3 containers (A0 + Continuwuity + Caddy) |
+| Admin API | `/_continuwuity/admin/` | Conduit-heritage admin bot (`@conduit:`) |
 | Status | Stalled since Aug 2025 | Actively developed |
 
 ---

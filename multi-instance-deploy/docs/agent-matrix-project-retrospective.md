@@ -83,7 +83,7 @@ The project ran from approximately February 10 to March 13, 2026 -- roughly 30 c
 ### Phase 1-2: Foundation (Days 1-14)
 **Scope:** Stand up a single AI agent with its own messaging server. Establish basic federation (server-to-server communication).
 
-- Deployed first Agent Zero instance with a Dendrite homeserver
+- Deployed first Agent Zero instance with a Continuwuity homeserver
 - Attempted federation with the gateway server
 - Encountered persistent TLS certificate and protocol-level failures
 - Established the macvlan networking architecture (dedicated IP per container)
@@ -105,7 +105,7 @@ The project ran from approximately February 10 to March 13, 2026 -- roughly 30 c
 ### Phase 4: The Pivot -- Continuwuity Edition (Days 21-30)
 **Scope:** Replace the homeserver software entirely after stability issues proved unfixable.
 
-- Migrated from Dendrite (Go) to Continuwuity (Rust) across the entire fleet
+- Migrated from Continuwuity (Go) to Continuwuity (Rust) across the entire fleet
 - Redesigned container architecture from 2 containers to 3 (added Caddy TLS reverse proxy)
 - Built watchdog auto-recovery system with token synchronization
 - Implemented crash hardening with persistent logging
@@ -114,7 +114,7 @@ The project ran from approximately February 10 to March 13, 2026 -- roughly 30 c
 - Completed soak testing
 - Produced comprehensive documentation suite (design, theory of operations, operations manual)
 
-**Key Decision:** The decision to abandon Dendrite after three weeks of investment was the project's most consequential call. Gandalf conducted a systematic evaluation of seven alternative homeserver implementations, producing a research report with clear recommendations. The human made the final go/no-go decision based on that analysis. Total time from "Dendrite is broken" to "Continuwuity fleet operational": approximately one week.
+**Key Decision:** The decision to abandon Continuwuity after three weeks of investment was the project's most consequential call. Gandalf conducted a systematic evaluation of seven alternative homeserver implementations, producing a research report with clear recommendations. The human made the final go/no-go decision based on that analysis. Total time from "Continuwuity is broken" to "Continuwuity fleet operational": approximately one week.
 
 ---
 {::pagebreak /}
@@ -216,7 +216,7 @@ Work happened in focused sessions of 2-6 hours. A typical session followed this 
 - **Systematic debugging:** When something failed, the AI followed a methodical diagnostic process -- checking logs, testing connectivity, isolating variables -- rather than guessing.
 - **Context retention:** Agent Zero's memory system allowed Gandalf to persist critical knowledge across sessions (architecture decisions, known issues, configuration details), partially compensating for the context window limitations of individual conversations.
 - **Documentation as a byproduct:** Because the AI generated all artifacts through text, documentation was a natural output rather than an afterthought. The project has a design document, operations manual, theory of operations, migration guide, and research reports -- all written during the build, not after.
-- **Research depth:** When a technology decision was needed (e.g., replacing Dendrite), the AI evaluated seven alternatives across multiple dimensions and produced a structured comparison -- work that would take a human engineer several days of reading.
+- **Research depth:** When a technology decision was needed (e.g., replacing Continuwuity), the AI evaluated seven alternatives across multiple dimensions and produced a structured comparison -- work that would take a human engineer several days of reading.
 
 ### What the AI Did Poorly
 
@@ -260,9 +260,9 @@ Traditional project management would flag this as rework and waste. In this cont
 
 This only worked because the team had invested in deployment automation. Without `create-instance.sh` and the template system, each rebuild would have been a multi-hour manual process.
 
-### The Dendrite-to-Continuwuity Pivot
+### The Continuwuity-to-Continuwuity Pivot
 
-The largest setback was discovering -- after three weeks -- that the chosen homeserver software (Dendrite) had fundamental stability issues that could not be resolved through configuration or workarounds. Dendrite had been stalled since August 2025 with no updates.
+The largest setback was discovering -- after three weeks -- that the chosen homeserver software (Continuwuity) had fundamental stability issues that could not be resolved through configuration or workarounds. Continuwuity had been stalled since August 2025 with no updates.
 
 The recovery process:
 1. AI conducted systematic research on seven alternative homeserver implementations (1-2 hours)
@@ -321,7 +321,7 @@ Per the [agent-matrix-design.md](agent-matrix-design.md) (v5.0):
 | Automation scripts created | 10+ |
 | Documentation artifacts | 7+ comprehensive documents |
 | Architecture versions | 4 major (v1 through v5.0) |
-| Major pivots | 2 (Dendrite to Continuwuity; 2-container to 3-container) |
+| Major pivots | 2 (Continuwuity to Continuwuity; 2-container to 3-container) |
 | Database wipes | 4+ |
 | Mean time to recovery (watchdog) | <30 seconds |
 | Top model spend | Claude Opus 4.6: $281 (52% of total) |
