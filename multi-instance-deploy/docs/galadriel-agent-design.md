@@ -500,7 +500,7 @@ Detailed execution steps are in the companion `galadriel-implementation-plan.md`
 | 4 | Failure semantics | Fragile runtime behavior | Open |
 | 5 | Security boundary detail | Avoidable security exposure | Open |
 | 6 | Test corpus definition | Subjective acceptance criteria | Open |
-| 7 | Task-scoped model tooling | Model-routing policy on paper only | Open — no Perplexity key/MCP found |
+| 7 | Task-scoped model tooling | Model-routing policy on paper only | ✅ RESOLVED — MCP deployed, key validated (2026-05-26) |
 | 8 | Compiled wiki compiler | Cannot turn memories into reusable knowledge | Open |
 | 9 | Long-running job lifecycle | Research can lose state across sessions | Open |
 | 10 | Sub-agent delegation semantics | Cannot manage delegated work predictably | Open |
@@ -522,7 +522,7 @@ These items were originally marked as blanket "required before implementation" g
 | 3 | Define channel arbitration matrix | — | **Sufficient** — design spec Section 5.1 provides adequate policy for all phases |
 | 4 | Define degraded-mode behavior | Phase 3+ | Open — helpful but not blocking |
 | 5 | Publish security profile | Phase 3+ | **Sufficient** — existing secret/env patterns work for Phase 1-2 |
-| 6 | Choose task-scoped model mechanism | **Phase 3** | **Open — primary Phase 3 blocker** (no Perplexity key/MCP found) |
+| 6 | Choose task-scoped model mechanism | **Phase 3** | ✅ RESOLVED — MCP path chosen, deployed (2026-05-26) |
 | 7 | Define compiled wiki schema and compiler behavior | **Phase 5** | Open — not needed until wiki compiler implementation |
 
 ### P1 — Strongly Recommended (Phase 3+)

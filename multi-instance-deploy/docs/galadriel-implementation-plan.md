@@ -103,9 +103,12 @@ agent0-2-continuwuity | ghcr.io/continuwuity  | Up
 
 ### 2.8 Perplexity / Research Model
 
-- No `PERPLEXITY_API_KEY` found
-- No Perplexity MCP server or wrapper found
-- No direct Perplexity tooling in agent0-2
+- **COMPLETED 2026-05-26** — MCP server deployed to agent0-2
+- `PERPLEXITY_API_KEY` present and validated
+- MCP server at `/a0/usr/workdir/mcp-perplexity/mcp_server_perplexity.py`
+- Two tools: `perplexity_deep_research` (sonar-pro) and `perplexity_quick_search` (sonar)
+- Registered in `/a0/usr/settings.json` under `mcpServers.perplexity`
+- Live API test returned 200 OK with valid citations
 
 ---
 
@@ -126,7 +129,7 @@ agent0-2-continuwuity | ghcr.io/continuwuity  | Up
    +-- CITATION_BASE_URL env var — DONE
 
 3. GALADRIEL PHASE 2 — Research Mode (blockers must be resolved first)
-   +-- Perplexity secret & routing decision
+   +-- Perplexity secret & routing decision → RESOLVED (MCP chosen, deployed 2026-05-26)
    +-- Implement research tool/skill
    +-- Test citation-rich research -> OpenBrain -> wiki flow
 
@@ -349,9 +352,9 @@ These enhancements were deployed and verified:
 
 ---
 
-## 6. Phase 3 — Research Mode + Perplexity Routing
+## 6. Phase 3 — Research Mode + Perplexity Routing ✅ COMPLETED (2026-05-26)
 
-**Goal:** Add task-scoped research capability using Perplexity `sonar-pro` or approved equivalent.
+**Goal:** Add task-scoped research capability using Perplexity `sonar-pro` or approved equivalent. **Status: Deployed and validated.**
 
 ### 6.0 Blockers (Must Resolve Before Implementation)
 
@@ -594,8 +597,8 @@ docker exec agent0-2 sh -lc 'python3 -c "import json; d=json.load(open(\"/a0/usr
 |---|---|---|---|
 | 1 | Does Agent Zero v1.17 hot-reload `agent_profile` changes? | Determines whether restart needed | Unknown |
 | 2 | Should Galadriel auto-write to OpenBrain or ask before every write? | Memory governance | Decision needed |
-| 3 | Is there an approved Perplexity API key? | Blocks Phase 3 | Unknown |
-| 4 | Use direct Perplexity MCP, skill wrapper, or OpenRouter routing? | Blocks Phase 3 | Decision needed |
+| 3 | Is there an approved Perplexity API key? | Blocks Phase 3 | ✅ YES — key present and validated (2026-05-26) |
+| 4 | Use direct Perplexity MCP, skill wrapper, or OpenRouter routing? | Blocks Phase 3 | ✅ MCP chosen and deployed (2026-05-26) |
 | 5 | Should wiki artifacts mirror into the git repo? | Storage policy | Decision needed |
 | 6 | Matrix display name change to "Galadriel"? | Past evidence says unreliable | Defer |
 | 7 | Should Galadriel become a reusable fleet template? | Template propagation | After validation |
@@ -627,7 +630,7 @@ Do not implement Research Mode until:
 - MCP vs skill wrapper decision made
 - No-leak logging/artifact policy defined
 
-**Rationale:** No Perplexity key, MCP, or wrapper exists. Implementing without clarity would be speculative plumbing.
+**Rationale:** ~~No Perplexity key, MCP, or wrapper exists. Implementing without clarity would be speculative plumbing.~~ **RESOLVED 2026-05-26:** MCP server built, API key validated, Phase 3 deployed.
 
 ### Phases 4-6: DEFERRED
 
@@ -642,7 +645,7 @@ Sequence after Phase 3 is stable.
 The design spec (Section 16) lists P0 action items. These are now **phase-gated**, not blanket prerequisites:
 
 - **Phase 1 has NO unresolved P0 blockers.** The Open Brain API contract is locked for core 4 tools, and the communication policy in design spec Section 5.1 is sufficient.
-- **Phase 3 is blocked** by: task-scoped model mechanism choice + Perplexity API key availability.
+- **Phase 3 is COMPLETE** ✅ — MCP server deployed, API key validated, Sonar Pro connectivity confirmed.
 - **Phase 5 is blocked** by: compiled wiki schema definition.
 
 Do not delay Phase 1 waiting for Phase 3+ prerequisites.
