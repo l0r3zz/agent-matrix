@@ -123,6 +123,21 @@ restart_mcp() {
     fi
 }
 
+
+# Clean up stale PID files from previous sessions.
+# Bind-mounted workdir keeps PID files across container restarts;
+# if the recorded PID no longer exists, remove the stale file
+# so is_alive() does not falsely report the service as running.
+for pidfile in "$BOT_PIDFILE" "$MCP_PIDFILE"; do
+    if [ -f "$pidfile" ]; then
+        OLD_PID=$(cat "$pidfile" 2>/dev/null)
+        if [ -n "$OLD_PID" ] && ! kill -0 "$OLD_PID" 2>/dev/null; then
+            log "WATCHDOG: Removing stale $pidfile (PID $OLD_PID no longer exists)"
+            rm -f "$pidfile"
+        fi
+    fi
+done
+
 # Capture initial PIDs
 BOT_PID=$(ps -eo pid,cmd | grep -E '[p]ython.*matrix_bot|[m]atrix-bot-rust' | awk '{print $1}' | head -1)
 MCP_PID=$(ps -eo pid,cmd | grep -E '[n]ode.*http-server|[m]atrix-mcp-server-r2' | awk '{print $1}' | head -1)
