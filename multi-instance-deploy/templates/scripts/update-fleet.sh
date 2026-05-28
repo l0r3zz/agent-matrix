@@ -325,7 +325,7 @@ if [ "$SKIP_RESTART" = true ]; then
     UPDATED=0
     FAILED=0
     for N in $INSTANCES; do
-        if [ "${INSTANCE_STATUS[$N]}" != "target" ]; then
+        if [ "${INSTANCE_STATUS[$N]}" != "target" ] && [ "${INSTANCE_STATUS[$N]}" != "current" ]; then
             continue
         fi
         COMPOSE_FILE="${BASE_DIR}/agent0-${N}/docker-compose.yml"
@@ -365,7 +365,7 @@ RECREATED=0
 FAILED=0
 
 for N in $INSTANCES; do
-    if [ "${INSTANCE_STATUS[$N]}" != "target" ]; then
+    if [ "${INSTANCE_STATUS[$N]}" != "target" ] && [ "${INSTANCE_STATUS[$N]}" != "current" ]; then
         continue
     fi
 
