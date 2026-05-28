@@ -152,12 +152,14 @@ if [ "$STATUS_MODE" = true ]; then
             if [ "$BOT_CNT" -ne 1 ]; then
                 BOT_CLR="${YELLOW}"
             fi
-            # MCP detection: process-based (original behavior)
+            # MCP detection: check for bot process first, then MCP server as fallback
             MCP_PID=$(docker exec "agent0-$N" pgrep -f matrix-bot-rust 2>/dev/null | head -1) || true
             if [ -n "$MCP_PID" ]; then
                 MCP_TXT="r2:0.1.1"
             elif docker exec "agent0-$N" pgrep -f python3.*matrix_bot 2>/dev/null >/dev/null; then
                 MCP_TXT="py"
+            elif docker exec "agent0-$N" pgrep -f matrix-mcp-server 2>/dev/null >/dev/null; then
+                MCP_TXT="r2:0.1.1"
             elif docker exec "agent0-$N" pgrep -f http-server 2>/dev/null >/dev/null; then
                 MCP_TXT="ts"
             fi
