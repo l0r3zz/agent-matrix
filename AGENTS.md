@@ -55,9 +55,7 @@ ENABLE_OAUTH=true npm run dev  # Dev with OAuth
 # Rust bot build
 cd multi-instance-deploy/templates/matrix-bot/rust && cargo build --release
 
-# Migration
-./migration/tarnover-refresh/collect-old.sh    # Inventory from old host
-./migration/tarnover-refresh/restore-new.sh    # Restore on fresh host
+
 ```
 
 ## Architecture Decisions
