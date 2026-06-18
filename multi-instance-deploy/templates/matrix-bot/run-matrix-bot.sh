@@ -1,101 +1,45 @@
 #!/bin/bash
-
-# ============================================================================
-# Agent-Matrix run-matrix-bot.sh (Golden Template)
-# ============================================================================
-#
-# Usage: ./run-matrix-bot.sh [--restart]
-#
-# This script handles the lifecycle of matrix-bot-rust for a sovereign agent.
-#
-# Features:
-#   - Pre-start duplicate guard (pkill existing matrix-bot-rust before launch)
-#   - Reads .bot_runtime from the bot directory to switch between Python/Rust
-#   - Falls back to Rust if .bot_runtime is not set or invalid
-#   - Supports --restart flag to kill existing and restart
-# ============================================================================
-
 set -euo pipefail
 
-# Resolve script directory (the bot working directory)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# Pre-start dedup guard: kill any existing bot processes to prevent duplicates
+# pkill removed: watchdog sole authority (storm fix)
+# pkill removed: watchdog sole authority (storm fix)
+sleep 2
 
-# ------------------------------------------------------------
-# Helper: load environment
-# ------------------------------------------------------------
-load_env() {
-    if [ -f .env ]; then
-        set -a
-        source .env
-        set +a
-    fi
-}
+BOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MODE_FILE="${BOT_DIR}/.bot_runtime"
 
-# ------------------------------------------------------------
-# Determine runtime (.bot_runtime file or default to rust)
-# ------------------------------------------------------------
-get_runtime() {
-    local runtime="rust"
-    if [ -f ".bot_runtime" ]; then
-        runtime="$(head -n1 .bot_runtime | tr '[:upper:]' '[:lower:]' | xargs)"
-    fi
-    # Validate; fall back to rust if unknown
-    case "$runtime" in
-        python|rust) ;;
-        *) runtime="rust" ;;
-    esac
-    echo "$runtime"
-}
+# Runtime selection precedence:
+# 1) MATRIX_BOT_RUNTIME env var
+# 2) .bot_runtime file
+# 3) default: python
+MODE="${MATRIX_BOT_RUNTIME:-}"
+if [ -z "$MODE" ] && [ -f "$MODE_FILE" ]; then
+    MODE="$(tr -d '[:space:]' < "$MODE_FILE" || true)"
+fi
+[ -z "$MODE" ] && MODE="python"
 
-# ------------------------------------------------------------
-# Pre-start duplicate guard: kill any existing matrix-bot-rust
-# ------------------------------------------------------------
-kill_existing() {
-    echo "Checking for existing matrix-bot-rust processes..."
-    if pkill -f "matrix-bot-rust" 2>/dev/null; then
-        echo "Killed existing matrix-bot-rust process(es)."
-        sleep 1
-    else
-        echo "No existing matrix-bot-rust found."
-    fi
-}
-
-# ------------------------------------------------------------
-# Main
-# ------------------------------------------------------------
-main() {
-    local restart_flag=false
-    if [ "${1:-}" = "--restart" ]; then
-        restart_flag=true
-    fi
-
-    load_env
-
-    if $restart_flag; then
-        kill_existing
-    fi
-
-    local runtime="$(get_runtime)"
-    echo "Selected runtime: $runtime"
-
-    if [ "$runtime" = "rust" ]; then
-        # Pre-start guard: kill any existing matrix-bot-rust (only if not already done by --restart)
-        if ! $restart_flag; then
-            kill_existing
-        fi
-
-        if [ ! -x ./matrix-bot-rust ]; then
-            echo "ERROR: matrix-bot-rust binary not found or not executable"
+case "$MODE" in
+    python)
+        exec /opt/venv-a0/bin/python "${BOT_DIR}/matrix_bot.py"
+        ;;
+    rust)
+        if [ -x "${BOT_DIR}/matrix-bot-rust" ]; then
+            exec "${BOT_DIR}/matrix-bot-rust"
+        elif [ -x "${BOT_DIR}/rust/target/release/matrix-bot-rust" ]; then
+            exec "${BOT_DIR}/rust/target/release/matrix-bot-rust"
+        else
+            echo "ERROR: Rust runtime selected but no executable found." >&2
+            echo "Expected one of:" >&2
+            echo "  ${BOT_DIR}/matrix-bot-rust" >&2
+            echo "  ${BOT_DIR}/rust/target/release/matrix-bot-rust" >&2
+            echo "Build with: ${BOT_DIR}/build-rust.sh" >&2
             exit 1
         fi
-
-        echo "Starting matrix-bot-rust..."
-        exec ./matrix-bot-rust
-    else
-        echo "Python bot started via matrix_bot.py – ensure dependencies are installed"
-        exec python3 matrix_bot.py
-    fi
-}
-
-main "$@"
+        ;;
+    *)
+        echo "ERROR: Unsupported bot runtime mode: ${MODE}" >&2
+        echo "Valid modes: python | rust" >&2
+        exit 1
+        ;;
+esac
