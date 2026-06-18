@@ -146,7 +146,7 @@ restart_bot() {
     sleep 2
     cd "$BOT_DIR" || return
     if [ -x "${BOT_DIR}/run-matrix-bot.sh" ]; then
-        ./run-matrix-bot.sh >> bot.log 2>&1 &
+        setsid ./matrix-bot-rust </dev/null >> bot.log 2>&1 &
     else
         setsid ./matrix-bot-rust </dev/null >> bot.log 2>&1 &
     fi
