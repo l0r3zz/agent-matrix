@@ -1,0 +1,7 @@
+
+# PHASE 7: Install Time Travel aggressive GC cron (weekly)
+TT_REPO="/a0/usr/.time_travel/workspaces/975eb797fc68061b3d6b10289d5e8eba/repo.git"
+if [ -d "$TT_REPO" ]; then
+    (crontab -l 2>/dev/null | grep -v git.*gc || true; echo "0 3 * * 0 git --git-dir=/a0/usr/.time_travel/workspaces/975eb797fc68061b3d6b10289d5e8eba/repo.git gc --prune=now --aggressive >> /a0/usr/workdir/startup-services.log 2>&1") | crontab - 2>/dev/null
+    echo "[TT-GC] Aggressive weekly gc cron installed"
+fi
