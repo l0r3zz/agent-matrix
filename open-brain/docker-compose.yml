@@ -3,6 +3,7 @@ name: open-brain
 services:
   # --- POSTGRESQL + PGVECTOR ---
   postgres:
+    user: "1000:1000"
     image: pgvector/pgvector:pg16
     container_name: open-brain-db
     hostname: open-brain-db
