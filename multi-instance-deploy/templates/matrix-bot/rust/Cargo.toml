@@ -22,5 +22,3 @@ serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "fs"] }
 urlencoding = "2.1"
 pulldown-cmark = "0.12"
- sha2 = "0.10"
- base64 = "0.21"

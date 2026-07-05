@@ -23,8 +23,6 @@ from pathlib import Path
 
 import aiohttp
 import markdown
-import hashlib
-import base64
 from dotenv import load_dotenv
 from nio import (
     AsyncClient,
@@ -44,51 +42,8 @@ HOMESERVER_URL   = os.getenv("MATRIX_HOMESERVER_URL", "http://localhost:8008")
 USER_ID          = os.getenv("MATRIX_USER_ID", "")
 ACCESS_TOKEN     = os.getenv("MATRIX_ACCESS_TOKEN", "")
 DEVICE_ID        = os.getenv("MATRIX_DEVICE_ID", "AgentZeroBot")
-A0_API_URL       = os.getenv("A0_API_URL", "http://localhost:80/api_message")
+A0_API_URL       = os.getenv("A0_API_URL", "http://localhost:80/api/api_message")
 A0_API_KEY       = os.getenv("A0_API_KEY", "")
-# Deterministic token fallback: reads the Docker runtime .env file, matching Agent Zero's create_auth_token()
-def _compute_deterministic_token() -> str:
-    # Read the same .env file the runtime uses
-    env_file = Path('/a0/usr/.env')
-    rid = ''
-    user = ''
-    pw = ''
-    if env_file.exists():
-        try:
-            for line in env_file.read_text().splitlines():
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, _, value = line.partition('=')
-                    key = key.strip()
-                    value = value.strip()
-                    if key == 'A0_PERSISTENT_RUNTIME_ID':
-                        rid = value
-                    elif key == 'AUTH_LOGIN':
-                        user = value
-                    elif key == 'AUTH_PASSWORD':
-                        pw = value
-        except Exception:
-            pass
-    # Fallback to environment variables if file missing or values empty
-    if not rid:
-        rid = os.getenv('A0_PERSISTENT_RUNTIME_ID', '')
-    if not user:
-        user = os.getenv('AUTH_LOGIN', '')
-    if not pw:
-        pw = os.getenv('AUTH_PASSWORD', '')
-    if not rid:
-        return ''
-    raw = f"{rid}:{user}:{pw}"
-    h = hashlib.sha256(raw.encode()).digest()
-    b64 = base64.urlsafe_b64encode(h).decode().rstrip('=')
-    return b64[:16]
-
-_DET_TOKEN = _compute_deterministic_token()
-if not A0_API_KEY and _DET_TOKEN:
-    logging.info("A0_API_KEY not set in .env, using deterministic token")
-    A0_API_KEY = _DET_TOKEN  # override the global
-
-
 BOT_DISPLAY_NAME = os.getenv("BOT_DISPLAY_NAME", "Agent Zero")
 AGENT_IDENTITY  = os.getenv("AGENT_IDENTITY", BOT_DISPLAY_NAME)
 STATE_FILE       = BOT_DIR / "room_contexts.json"
@@ -186,7 +141,6 @@ async def ask_agent_zero(
     room_id: str,
     sender: str,
 ) -> str:
-    global A0_API_KEY
     context_id = room_contexts.get(room_id, "")
 
     # Prepend agent identity context
@@ -218,33 +172,6 @@ async def ask_agent_zero(
                     save_state(room_contexts)
                     log.info("Context saved | room=%s | ctx=%s", room_id, new_ctx)
                 return reply or "(Agent Zero returned an empty response)"
-            elif resp.status == 401:
-                # Token may be stale; recompute deterministic token and retry once
-                new_token = _compute_deterministic_token()
-                if new_token and new_token != A0_API_KEY:
-                    log.info("Got 401 from Agent Zero, retrying with recomputed token")
-                    A0_API_KEY = new_token
-                    payload["api_key"] = new_token
-                    headers["X-API-KEY"] = new_token
-                    async with session.post(
-                        A0_API_URL, json=payload, headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=300),
-                    ) as retry:
-                        if retry.status == 200:
-                            data = await retry.json()
-                            reply = data.get("response", "").strip()
-                            new_ctx = data.get("context_id", "")
-                            if new_ctx and new_ctx != context_id:
-                                room_contexts[room_id] = new_ctx
-                                save_state(room_contexts)
-                                log.info("Context saved | room=%s | ctx=%s", room_id, new_ctx)
-                            return reply or "(Agent Zero returned an empty response)"
-                        else:
-                            log.error("Agent Zero 401 retry failed with status %s", retry.status)
-                            return f"Agent Zero auth error after retry (HTTP {retry.status}). Check token sync."
-                else:
-                    log.error("Agent Zero returned 401, but computed token unchanged")
-                    return "Agent Zero authentication failed. Check bot logs."
             elif resp.status == 404 and context_id:
                 log.info("Clearing stale context for room %s, retrying...", room_id)
                 del room_contexts[room_id]
@@ -275,6 +202,7 @@ async def ask_agent_zero(
     except Exception as e:
         log.exception("Unexpected error calling Agent Zero: %s", e)
         return "Unexpected error: %s" % e
+
 # --- Event Handlers -------------------------------------------------------
 
 async def on_invite(room: MatrixRoom, event: InviteMemberEvent, client: AsyncClient) -> None:
@@ -321,10 +249,13 @@ async def on_message(
     if not body:
         return
 
+    # Check if this is a one-on-one room (exactly 2 members)
+    is_one_on_one = room.member_count == 2 if room else False
+
     # --- Trigger prefix check (prevent crosstalk) ---
     body_lower = body.lower()
     triggered = any(body_lower.startswith(p.lower()) for p in TRIGGER_PREFIXES)
-    if not triggered:
+    if not is_one_on_one and not triggered:
         log.debug("Ignoring (no trigger prefix): %s", body[:80])
         return
 

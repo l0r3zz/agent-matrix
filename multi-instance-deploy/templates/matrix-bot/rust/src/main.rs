@@ -5,13 +5,39 @@ use pulldown_cmark::{html, Options, Parser};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Sha256, Digest};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use std::collections::HashMap;
+ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::time::timeout;
 
 const MAX_CHARS_PER_MESSAGE: usize = 32000;
+
+
+/// Compute the same deterministic token that Agent Zero's create_auth_token() produces.
+/// Algorithm: sha256(runtime_id:auth_login:auth_password) -> base64url -> first 16 chars
+fn compute_deterministic_token() -> String {
+    // Read the same env vars that Python's runtime.get_persistent_id() and settings use
+    let runtime_id = std::env::var("A0_PERSISTENT_RUNTIME_ID").unwrap_or_default();
+    let username = std::env::var("A0_AUTH_LOGIN").unwrap_or_else(|_|
+        std::env::var("AUTH_LOGIN").unwrap_or_default()
+    );
+    let password = std::env::var("A0_AUTH_PASSWORD").unwrap_or_else(|_|
+        std::env::var("AUTH_PASSWORD").unwrap_or_default()
+    );
+
+    if runtime_id.is_empty() || username.is_empty() || password.is_empty() {
+        return String::new();
+    }
+
+    let input = format!("{}:{}:{}", runtime_id, username, password);
+    let hash_bytes = Sha256::digest(input.as_bytes());
+    let b64_token = URL_SAFE_NO_PAD.encode(hash_bytes);
+    b64_token.chars().take(16).collect()
+}
 
 /// Strip Matrix mention "pills" from plain-text message bodies.
 /// Element sends mentions as `[@user:server](https://matrix.to/#/@user:server)`
@@ -77,6 +103,7 @@ struct Bot {
     matrix_client: reqwest::Client,
     a0_client: reqwest::Client,
     state: RoomState,
+    processed_events: HashSet<String>,
 }
 
 impl Config {
@@ -89,6 +116,15 @@ impl Config {
         let a0_api_url =
             std::env::var("A0_API_URL").unwrap_or_else(|_| "http://localhost:80/api/api_message".to_string());
         let a0_api_key = std::env::var("A0_API_KEY").unwrap_or_default();
+        // Auto-compute the deterministic token: used as fallback if .env key is missing/empty.
+        // This prevents 401 loops when mcp_server_token is regenerated on container restart.
+        let deterministic_token = compute_deterministic_token();
+        let a0_api_key = if a0_api_key.is_empty() && !deterministic_token.is_empty() {
+            info!("A0_API_KEY not set in .env, using deterministic token");
+            deterministic_token
+        } else {
+            a0_api_key
+        };
         let bot_display_name = std::env::var("BOT_DISPLAY_NAME").unwrap_or_else(|_| "Agent Zero".to_string());
         let agent_identity = std::env::var("AGENT_IDENTITY").unwrap_or_else(|_| bot_display_name.clone());
         let sync_timeout_ms = std::env::var("SYNC_TIMEOUT_MS")
@@ -170,6 +206,7 @@ impl Bot {
             matrix_client,
             a0_client,
             state,
+            processed_events: HashSet::new(),
         })
     }
 
@@ -302,6 +339,37 @@ impl Bot {
         match first {
             Ok(resp) if resp.status().is_success() => {
                 return self.handle_a0_success(room_id, resp).await;
+            }
+            Ok(resp) if resp.status().as_u16() == 401 => {
+                // Token may be stale; recompute deterministic token and retry once
+                let new_token = compute_deterministic_token();
+                if !new_token.is_empty() && new_token != self.cfg.a0_api_key {
+                    info!("Got 401 from Agent Zero, retrying with recomputed token");
+                    self.cfg.a0_api_key = new_token.clone();
+                    payload["api_key"] = Value::String(new_token.clone());
+                    let retry_req = self
+                        .a0_client
+                        .post(&self.cfg.a0_api_url)
+                        .header("X-API-KEY", &new_token)
+                        .json(&payload);
+                    match retry_req.send().await {
+                        Ok(retry_resp) if retry_resp.status().is_success() => {
+                            return self.handle_a0_success(room_id, retry_resp).await;
+                        }
+                        Ok(retry_resp) => {
+                            let status = retry_resp.status();
+                            let body = retry_resp.text().await.unwrap_or_default();
+                            error!("Agent Zero 401 retry failed with status {}: {}", status, body);
+                            return format!("Agent Zero auth error after retry (HTTP {}). Check token sync.", status);
+                        }
+                        Err(e) => {
+                            error!("Agent Zero 401 retry call failed: {e}");
+                            return format!("Unexpected error on retry: {e}");
+                        }
+                    }
+                }
+                error!("Agent Zero returned 401, but computed token unchanged");
+                return "Agent Zero authentication failed. Check bot logs.".to_string();
             }
             Ok(resp) if resp.status().as_u16() == 404 && !context_id.is_empty() => {
                 info!("Clearing stale context for room {}, retrying...", room_id);
@@ -506,17 +574,8 @@ async fn run() -> Result<()> {
                             info!("Sync loop heartbeat: {} syncs completed", sync_count);
                         }
                         // Check if this is an empty/stale sync
-                        // Dendrite incremental sync often omits "rooms" entirely or returns []
-                        // when there are no updates. For incremental syncs (since.is_some()),
-                        // this is completely normal. Only for initial syncs should missing
-                        // rooms data trigger a forced full sync.
-                        let has_rooms = if since.is_some() {
-                            true // incremental sync with no room updates is valid
-                        } else {
-                            sync.get("rooms")
-                                .map(|r| r.is_object() || r.is_array())
-                                .unwrap_or(false)
-                        };
+                        let has_rooms = sync.get("rooms").and_then(Value::as_object)
+                            .map(|r| !r.is_empty()).unwrap_or(false);
                         if !has_rooms {
                             empty_sync_count += 1;
                             if empty_sync_count >= 5 {
@@ -567,18 +626,8 @@ async fn run() -> Result<()> {
                         if sync_count % 60 == 0 {
                             info!("Sync loop heartbeat: {} syncs completed", sync_count);
                         }
-                        // Check if this is an empty/stale sync
-                        // Dendrite incremental sync often omits "rooms" entirely or returns []
-                        // when there are no updates. For incremental syncs (since.is_some()),
-                        // this is completely normal. Only for initial syncs should missing
-                        // rooms data trigger a forced full sync.
-                        let has_rooms = if since.is_some() {
-                            true // incremental sync with no room updates is valid
-                        } else {
-                            sync.get("rooms")
-                                .map(|r| r.is_object() || r.is_array())
-                                .unwrap_or(false)
-                        };
+                        let has_rooms = sync.get("rooms").and_then(Value::as_object)
+                            .map(|r| !r.is_empty()).unwrap_or(false);
                         if !has_rooms {
                             empty_sync_count += 1;
                             if empty_sync_count >= 5 {
@@ -681,12 +730,19 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
             if event_type != "m.room.message" {
                 continue;
             }
+            // Event dedup: skip if already processed
+            let event_id = event.get("event_id").and_then(Value::as_str).unwrap_or("").to_string();
+            if !event_id.is_empty() && !bot.processed_events.insert(event_id) {
+                continue;
+            }
             let sender = event.get("sender").and_then(Value::as_str).unwrap_or("");
             if sender == bot.cfg.user_id {
                 continue;
             }
             let ts = event.get("origin_server_ts").and_then(Value::as_i64).unwrap_or(0);
-            if ts < bot.cfg.bot_start_time_ms.saturating_sub(10_000) {
+            // Skip events older than 5 minutes (300,000 ms) to prevent replaying stale alerts
+            let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as i64;
+            if now_ms - ts > 300_000 {
                 continue;
             }
             let content = event.get("content").unwrap_or(&Value::Null);
@@ -770,4 +826,3 @@ async fn append_crash_log(err: &str) -> Result<()> {
     fs::write(path, out).await?;
     Ok(())
 }
-

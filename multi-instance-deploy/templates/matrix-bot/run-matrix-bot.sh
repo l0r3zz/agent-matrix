@@ -1,11 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# Pre-start dedup guard: kill any existing bot processes to prevent duplicates
-# pkill removed: watchdog sole authority (storm fix)
-# pkill removed: watchdog sole authority (storm fix)
-sleep 2
-
 BOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODE_FILE="${BOT_DIR}/.bot_runtime"
 

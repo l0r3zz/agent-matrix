@@ -217,3 +217,18 @@ scripts/bb-epub.sh
 *.ovpn
 multi-instance-deploy/scripts/step_ca_provisioner_passwd
 multi-instance-deploy/scripts/step_ca_password
+
+# Secrets and tokens
+multi-instance-deploy/scripts/synapse_admin_token
+
+# Backup files
+*.pre-*
+*.bak.*
+*.bak.storm.*
+
+# Runtime artifacts
+crash.log
+set-display-name-rust
+multi-instance-deploy/templates/matrix-bot/rust/target/
+multi-instance-deploy/templates/matrix-bot/rust/crash.log
+multi-instance-deploy/templates/matrix-bot/set-display-name-rust
