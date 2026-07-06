@@ -1,0 +1,28 @@
+
+# Matrix MCP server — managed by supervisord (replaces watchdog.sh)
+[program:run_mcp]
+command=/a0/usr/workdir/matrix-mcp-server/run-mcp-wrapper.sh
+environment=
+user=root
+stopwaitsecs=10
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+autorestart=true
+startretries=10
+exitcodes=0,2,241
+
+# Matrix bot — managed by supervisord (replaces watchdog.sh)
+[program:run_bot]
+command=/a0/usr/workdir/matrix-bot/run-bot-wrapper.sh
+environment=
+user=root
+stopwaitsecs=10
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+autorestart=true
+startretries=10
+exitcodes=0,2,241

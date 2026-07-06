@@ -1,0 +1,4 @@
+#!/bin/bash
+cd /a0/usr/workdir/matrix-bot
+source .env
+exec ./matrix-bot-rust

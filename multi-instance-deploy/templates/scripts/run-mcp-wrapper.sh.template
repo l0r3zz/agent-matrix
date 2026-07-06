@@ -1,0 +1,4 @@
+#!/bin/bash
+cd /a0/usr/workdir/matrix-mcp-server
+source .env
+exec ./matrix-mcp-server-r2
