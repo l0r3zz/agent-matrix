@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# startup-services.sh — Golden Template (v3.17)
+# startup-services.sh — Golden Template (v3.16)
 # =============================================================================
 # Persistent auto-start script for Matrix services on Agent Zero containers.
 # Launched via docker-compose command: runs in background alongside supervisord.
@@ -22,6 +22,22 @@ log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 log "========== startup-services.sh phases 0-4 complete =========="
 
 # -------------------------------------------------------
+# PHASE 0.5: Apply Time Travel plugin patches
+# The Time Travel plugin is baked into the Docker image and
+# does not survive container recreation. These patches fix:
+#   1. GIT_TIMEOUT_SECONDS 20 -> 60 (prevents stale index.lock)
+#   2. Add 'target' to EXCLUDED_DIR_NAMES (Rust build artifacts)
+# -------------------------------------------------------
+TT_PLUGIN="/a0/plugins/_time_travel/helpers/time_travel.py"
+if [ -f "$TT_PLUGIN" ]; then
+    sed -i 's/GIT_TIMEOUT_SECONDS = 20/GIT_TIMEOUT_SECONDS = 60/' "$TT_PLUGIN" 2>/dev/null || true
+    grep -q '"target"' "$TT_PLUGIN" 2>/dev/null || sed -i 's/".parcel-cache",/".parcel-cache",\n    "target",/' "$TT_PLUGIN" 2>/dev/null || true
+    log "Phase 0.5: Time Travel plugin patched (timeout=60, target excluded)"
+else
+    log "Phase 0.5: WARNING — Time Travel plugin not found at $TT_PLUGIN"
+fi
+
+# -------------------------------------------------------
 # PHASE 5: Start the watchdog as a background process.
 # The watchdog monitors bot and MCP server and restarts
 # them automatically if they crash. See watchdog.sh for
@@ -35,22 +51,15 @@ else
 fi
 
 # -------------------------------------------------------
-# PHASE 6: Setup weekly git gc for Time Travel repos
-# Runs every Sunday at 03:00 to prevent repo bloat and
-# stale index.lock issues.
+# PHASE 6: Start the wiki HTTP server (port 8080)
 # -------------------------------------------------------
-GIT_DIR="/a0/usr/.time_travel/workspaces/975eb797fc68061b3d6b10289d5e8eba/repo.git"
-if [ -d "$GIT_DIR" ]; then
-    # Append cron job if not already present
-    if ! crontab -l 2>/dev/null | grep -q "$GIT_DIR"; then
-        (crontab -l 2>/dev/null; echo "0 3 * * 0 git --git-dir=$GIT_DIR gc --auto >> $LOG 2>&1") | crontab -
-        log "Phase 6: Weekly git gc cron job installed for $GIT_DIR"
+if [ -d /a0/usr/workdir/galadriel-workspace/wiki-site ]; then
+    if ! pgrep -f "http.server 8080" > /dev/null 2>&1; then
+        nohup python3 -m http.server 8080 --directory /a0/usr/workdir/galadriel-workspace/wiki-site >> "$LOG" 2>&1 &
+        log "Phase 6: Wiki server launched (pid $!)"
     else
-        log "Phase 6: Git gc cron job already present"
+        log "Phase 6: Wiki server already running"
     fi
 else
-    log "Phase 6: Time Travel repo not found at $GIT_DIR, skipping git gc cron"
+    log "Phase 6: WARNING — wiki-site directory not found"
 fi
-
-# Phase 6 complete marker
-log "========== startup-services.sh phases 0-6 complete =========="
