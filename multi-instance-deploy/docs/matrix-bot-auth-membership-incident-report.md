@@ -1,9 +1,9 @@
 # Matrix Bot Authentication and Membership Incident Report
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Date:** 2026-10-08  
-**Resolved:** 2026-10-09  
-**Status:** Remediation complete -- all agents passing completion gates  
+**Resolved:** 2026-10-11  
+**Status:** Remediation complete -- all agents passing completion gates; automated hardening deployed  
 **Scope:** Agent0-1 through Agent0-5 on `g2s`  
 **Homeserver:** conduwuite behind Caddy  
 **Classification:** Redacted operational report; contains no plaintext credentials
@@ -629,3 +629,45 @@ Phase 0 (control-plane structural hardening) was not executed before the one-tim
 - Implement idempotent reconciler (`check` / `plan` / `apply`)
 - Refactor external fleet scripts into unified management utility
 - Immutable release bundles with checksums
+
+## Addendum: Federation and Membership Hardening (2026-10-11)
+
+### Post-Repair Incident: Signing Key Expiry and Federation Collapse
+
+On 2026-10-11, approximately 12 hours after the credential repair, all federated communication between Synapse and agents 3/4 failed. Root cause: Continuwuity automatically rotates signing keys, and Synapse's cached copies expired. Synapse returned `401 M_UNAUTHORIZED: Failed to find any key to satisfy` on all federation requests involving the expired keys.
+
+**Fix:** Queried Synapse's notary endpoint (`/_matrix/key/v2/query/{server_name}`) to force re-fetch of fresh keys for all 5 agents. All returned 200 OK with valid keys.
+
+### Post-Repair Incident: Stale Continuwuity Room State Preventing Joins
+
+After refreshing signing keys, agents could not rejoin Fleet HQ Clean. Element showed "room doesn't recognize the name." Investigation revealed:
+
+1. Synapse profile lookups for agents 1/2/4 returned 502 (transient timeouts, not persistent)
+2. Synapse destination retry status showed no backoff -- destinations were healthy
+3. The Synapse K8s service does NOT expose port 8448 externally; federation uses `.well-known` delegation to `matrix.v-site.net:443`
+4. Continuwuity containers CAN reach Synapse via Docker bridge NAT (confirmed by past auth event fetch responses in logs)
+5. Initial join attempts returned `{"room_id":"..."}` from Continuwuity but NO `make_join`/`send_join` traffic appeared in Synapse logs -- Continuwuity updated local state only, without completing the federation handshake
+6. Root cause: stale room state in Continuwuity from previous invite/leave cycles and the signing key incident
+
+**Fix:** Leave + forget rooms from agent side, restart Continuwuity containers, re-invite from `@admin:v-site.net` (obtained token via `/_synapse/admin/v1/users/{userId}/login`), accept from agent side. All 4 agents completed full `make_join` -> `send_join` -> 200 OK. All 6 members (admin + 5 agents) confirmed joined.
+
+### Automated Hardening Deployed
+
+Three cron jobs now run every 6 hours on g2s, staggered 15 minutes apart:
+
+| Cron | Offset | Script | Purpose |
+|------|--------|--------|---------|
+| `:00` | +0m | `fleet-token-healthcheck.sh` | Validate Matrix access tokens |
+| `:15` | +15m | `federation-key-refresh.sh` | Force Synapse to re-fetch agent signing keys via notary |
+| `:30` | +30m | `fleet-membership-healthcheck.sh` | Verify all agents joined in required rooms; auto-repair via invite+join |
+
+The membership healthcheck performs the full repair flow automatically: detect missing member -> get `@admin:v-site.net` token -> send invite -> accept from agent homeserver.
+
+### Additional Items for Permanent Repair Strategy
+
+The following inside-container improvements complement the external cron hardening:
+
+- **Rust bot auto-join:** Add invite acceptance logic to the Rust bot -- auto-accept invites from trusted senders (`@admin:v-site.net`, fleet members) both on startup and during runtime event loop
+- **Startup preflight membership gate:** Extend `startup-services.sh` to verify room memberships (query `joined_rooms`, compare against required room manifest) before declaring the agent healthy
+- **Watchdog room membership check:** Add periodic room membership verification to `watchdog.sh` -- check that the bot is still joined in all required rooms, alert or trigger re-join if not
+- **Continuwuity restart resilience:** Document that stale room state requires leave+forget+restart before re-joining; consider adding this as an automatic escalation path in the membership healthcheck
