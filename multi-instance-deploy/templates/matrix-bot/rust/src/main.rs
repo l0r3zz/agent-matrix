@@ -5,38 +5,42 @@ use pulldown_cmark::{html, Options, Parser};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Sha256, Digest};
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use std::collections::HashMap;
- use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::time::timeout;
 
 const MAX_CHARS_PER_MESSAGE: usize = 32000;
+const MAX_PERSISTED_EVENT_IDS: usize = 1000;
 
+/// Read the canonical Agent Zero API credential from `/a0/usr/workdir/matrix-bot/.a0-api-key`
+/// (or `.a0-api-key` in `bot_dir`). Do not fall back to `.env`.
+fn load_canonical_a0_api_key(bot_dir: &Path) -> Result<String> {
+    let secret_path = std::env::var("A0_API_KEY_FILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| bot_dir.join(".a0-api-key"));
 
-/// Compute the same deterministic token that Agent Zero's create_auth_token() produces.
-/// Algorithm: sha256(runtime_id:auth_login:auth_password) -> base64url -> first 16 chars
-fn compute_deterministic_token() -> String {
-    // Read the same env vars that Python's runtime.get_persistent_id() and settings use
-    let runtime_id = std::env::var("A0_PERSISTENT_RUNTIME_ID").unwrap_or_default();
-    let username = std::env::var("A0_AUTH_LOGIN").unwrap_or_else(|_|
-        std::env::var("AUTH_LOGIN").unwrap_or_default()
-    );
-    let password = std::env::var("A0_AUTH_PASSWORD").unwrap_or_else(|_|
-        std::env::var("AUTH_PASSWORD").unwrap_or_default()
-    );
-
-    if runtime_id.is_empty() || username.is_empty() || password.is_empty() {
-        return String::new();
+    let raw = std::fs::read_to_string(&secret_path).with_context(|| {
+        format!(
+            "Failed to read canonical Agent Zero credential from {} (fail-closed)",
+            secret_path.display()
+        )
+    })?;
+    let token = raw.trim().to_string();
+    if token.is_empty() {
+        return Err(anyhow!(
+            "Canonical Agent Zero credential file {} is empty (fail-closed)",
+            secret_path.display()
+        ));
     }
 
-    let input = format!("{}:{}:{}", runtime_id, username, password);
-    let hash_bytes = Sha256::digest(input.as_bytes());
-    let b64_token = URL_SAFE_NO_PAD.encode(hash_bytes);
-    b64_token.chars().take(16).collect()
+    info!(
+        "Loaded canonical Agent Zero credential from {} (len={})",
+        secret_path.display(),
+        token.len()
+    );
+    Ok(token)
 }
 
 /// Strip Matrix mention "pills" from plain-text message bodies.
@@ -49,18 +53,14 @@ fn strip_matrix_mention_pills(input: &str) -> String {
     let mut i = 0;
     while i < len {
         if chars[i] == '[' && i + 1 < len && chars[i + 1] == '@' {
-            // Potential mention pill: look for closing `](https://matrix.to/`
             if let Some(bracket_close) = chars[i..].iter().position(|&c| c == ']') {
                 let bracket_close = i + bracket_close;
-                // Check for `](https://matrix.to/` after the closing bracket
                 let after = bracket_close + 1;
                 if after < len && chars[after] == '(' {
-                    // Find the closing paren
                     if let Some(paren_close) = chars[after..].iter().position(|&c| c == ')') {
                         let paren_close = after + paren_close;
                         let link: String = chars[after + 1..paren_close].iter().collect();
                         if link.starts_with("https://matrix.to/") {
-                            // Extract the mention text (without brackets)
                             let mention: String = chars[i + 1..bracket_close].iter().collect();
                             result.push_str(&mention);
                             i = paren_close + 1;
@@ -88,7 +88,9 @@ struct Config {
     agent_identity: String,
     sync_timeout_ms: u64,
     state_file: PathBuf,
-    bot_start_time_ms: i64,
+    cursor_file: PathBuf,
+    amctl_url: String,
+    amctl_api_key: String,
     trigger_prefixes: Vec<String>,
 }
 
@@ -98,12 +100,24 @@ struct RoomState {
     room_contexts: HashMap<String, String>,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct SyncCursorState {
+    #[serde(default)]
+    version: u32,
+    next_batch: Option<String>,
+    #[serde(default)]
+    processed_events: Vec<String>,
+}
+
 struct Bot {
     cfg: Config,
     matrix_client: reqwest::Client,
     a0_client: reqwest::Client,
     state: RoomState,
-    processed_events: HashSet<String>,
+    whoami_user_id: String,
+    trusted_senders: HashSet<String>,
+    processed_events_set: HashSet<String>,
+    processed_events_order: VecDeque<String>,
 }
 
 impl Config {
@@ -115,22 +129,18 @@ impl Config {
         let device_id = std::env::var("MATRIX_DEVICE_ID").unwrap_or_else(|_| "AgentZeroBot".to_string());
         let a0_api_url =
             std::env::var("A0_API_URL").unwrap_or_else(|_| "http://localhost:80/api/api_message".to_string());
-        let a0_api_key = std::env::var("A0_API_KEY").unwrap_or_default();
-        // Auto-compute the deterministic token: used as fallback if .env key is missing/empty.
-        // This prevents 401 loops when mcp_server_token is regenerated on container restart.
-        let deterministic_token = compute_deterministic_token();
-        let a0_api_key = if a0_api_key.is_empty() && !deterministic_token.is_empty() {
-            info!("A0_API_KEY not set in .env, using deterministic token");
-            deterministic_token
-        } else {
-            a0_api_key
-        };
+        // Phase 3 Credential Authority: read strictly from .a0-api-key (no fallback to .env)
+        let a0_api_key = load_canonical_a0_api_key(&bot_dir)?;
         let bot_display_name = std::env::var("BOT_DISPLAY_NAME").unwrap_or_else(|_| "Agent Zero".to_string());
         let agent_identity = std::env::var("AGENT_IDENTITY").unwrap_or_else(|_| bot_display_name.clone());
         let sync_timeout_ms = std::env::var("SYNC_TIMEOUT_MS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(30000);
+        let amctl_url =
+            std::env::var("AMCTL_URL").unwrap_or_else(|_| "http://172.23.88.254:8077".to_string());
+        let amctl_api_key =
+            std::env::var("AMCTL_API_KEY").unwrap_or_else(|_| "amctl-dev-key-2026".to_string());
 
         if homeserver_url.is_empty() || user_id.is_empty() || access_token.is_empty() {
             return Err(anyhow!(
@@ -157,11 +167,8 @@ impl Config {
             trigger_prefixes.push(format!("@{}", bot_display_name));
         }
 
-        let bot_start_time_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
         let state_file = bot_dir.join("room_contexts.json");
+        let cursor_file = bot_dir.join("sync_cursor.json");
 
         Ok(Self {
             homeserver_url,
@@ -174,14 +181,16 @@ impl Config {
             agent_identity,
             sync_timeout_ms,
             state_file,
-            bot_start_time_ms,
+            cursor_file,
+            amctl_url,
+            amctl_api_key,
             trigger_prefixes,
         })
     }
 }
 
 impl Bot {
-    async fn new(cfg: Config) -> Result<Self> {
+    async fn new(cfg: Config, initial_events: Vec<String>) -> Result<Self> {
         let mut matrix_headers = HeaderMap::new();
         matrix_headers.insert(
             AUTHORIZATION,
@@ -201,17 +210,114 @@ impl Bot {
             .context("build a0 client")?;
 
         let state = load_state(&cfg.state_file).await.unwrap_or_default();
-        Ok(Self {
+        let whoami_user_id = cfg.user_id.clone();
+
+        let mut processed_events_set = HashSet::new();
+        let mut processed_events_order = VecDeque::new();
+        for ev_id in initial_events {
+            if processed_events_set.insert(ev_id.clone()) {
+                processed_events_order.push_back(ev_id);
+            }
+        }
+        while processed_events_order.len() > MAX_PERSISTED_EVENT_IDS {
+            if let Some(old) = processed_events_order.pop_front() {
+                processed_events_set.remove(&old);
+            }
+        }
+
+        let mut bot = Self {
             cfg,
             matrix_client,
             a0_client,
             state,
-            processed_events: HashSet::new(),
-        })
+            whoami_user_id,
+            trusted_senders: HashSet::new(),
+            processed_events_set,
+            processed_events_order,
+        };
+        bot.verify_whoami().await?;
+        bot.refresh_trusted_senders().await;
+        Ok(bot)
     }
 
     fn matrix_url(&self, path: &str) -> String {
         format!("{}{}", self.cfg.homeserver_url.trim_end_matches('/'), path)
+    }
+
+    async fn verify_whoami(&mut self) -> Result<()> {
+        let url = self.matrix_url("/_matrix/client/v3/account/whoami");
+        let resp = self.matrix_client.get(url).send().await.context("call /whoami")?;
+        if !resp.status().is_success() {
+            return Err(anyhow!("/whoami failed with HTTP {}", resp.status()));
+        }
+        let data: Value = resp.json().await.context("parse /whoami JSON")?;
+        let actual = data.get("user_id").and_then(Value::as_str).unwrap_or("").to_string();
+        if actual.is_empty() || actual != self.cfg.user_id {
+            return Err(anyhow!(
+                "Identity mismatch in /whoami: actual '{}' != configured '{}'",
+                actual,
+                self.cfg.user_id
+            ));
+        }
+        self.whoami_user_id = actual;
+        info!("Verified /whoami identity: {}", self.whoami_user_id);
+        Ok(())
+    }
+
+    async fn refresh_trusted_senders(&mut self) {
+        let url = format!("{}/api/v1/trusted-senders", self.cfg.amctl_url.trim_end_matches('/'));
+        match self
+            .a0_client
+            .get(&url)
+            .header("X-API-Key", &self.cfg.amctl_api_key)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(items) = resp.json::<Vec<Value>>().await {
+                    let mut set = HashSet::new();
+                    for item in items {
+                        if let Some(uid) = item.get("matrix_user_id").and_then(Value::as_str) {
+                            set.insert(uid.to_string());
+                        }
+                    }
+                    if !set.is_empty() {
+                        info!("Loaded {} trusted sender(s) from am-ctl platform", set.len());
+                        self.trusted_senders = set;
+                        return;
+                    }
+                }
+            }
+            Ok(resp) => {
+                warn!("Failed to fetch trusted_senders from am-ctl: HTTP {}", resp.status());
+            }
+            Err(e) => {
+                warn!("Could not reach am-ctl for trusted_senders: {e}");
+            }
+        }
+
+        if self.trusted_senders.is_empty() {
+            // Safe baseline fallback if platform is temporarily unreachable
+            self.trusted_senders.insert("@admin:v-site.net".to_string());
+            self.trusted_senders.insert("@l0r3zz:v-site.net".to_string());
+        }
+    }
+
+    fn record_processed_event(&mut self, event_id: &str) -> bool {
+        if event_id.is_empty() {
+            return true;
+        }
+        if !self.processed_events_set.insert(event_id.to_string()) {
+            return false;
+        }
+        self.processed_events_order.push_back(event_id.to_string());
+        while self.processed_events_order.len() > MAX_PERSISTED_EVENT_IDS {
+            if let Some(old) = self.processed_events_order.pop_front() {
+                self.processed_events_set.remove(&old);
+            }
+        }
+        true
     }
 
     async fn set_display_name(&self) {
@@ -341,34 +447,36 @@ impl Bot {
                 return self.handle_a0_success(room_id, resp).await;
             }
             Ok(resp) if resp.status().as_u16() == 401 => {
-                // Token may be stale; recompute deterministic token and retry once
-                let new_token = compute_deterministic_token();
-                if !new_token.is_empty() && new_token != self.cfg.a0_api_key {
-                    info!("Got 401 from Agent Zero, retrying with recomputed token");
-                    self.cfg.a0_api_key = new_token.clone();
-                    payload["api_key"] = Value::String(new_token.clone());
-                    let retry_req = self
-                        .a0_client
-                        .post(&self.cfg.a0_api_url)
-                        .header("X-API-KEY", &new_token)
-                        .json(&payload);
-                    match retry_req.send().await {
-                        Ok(retry_resp) if retry_resp.status().is_success() => {
-                            return self.handle_a0_success(room_id, retry_resp).await;
-                        }
-                        Ok(retry_resp) => {
-                            let status = retry_resp.status();
-                            let body = retry_resp.text().await.unwrap_or_default();
-                            error!("Agent Zero 401 retry failed with status {}: {}", status, body);
-                            return format!("Agent Zero auth error after retry (HTTP {}). Check token sync.", status);
-                        }
-                        Err(e) => {
-                            error!("Agent Zero 401 retry call failed: {e}");
-                            return format!("Unexpected error on retry: {e}");
+                if let Ok(new_token) = load_canonical_a0_api_key(
+                    self.cfg.state_file.parent().unwrap_or_else(|| Path::new(".")),
+                ) {
+                    if !new_token.is_empty() && new_token != self.cfg.a0_api_key {
+                        info!("Got 401 from Agent Zero, retrying with reloaded .a0-api-key");
+                        self.cfg.a0_api_key = new_token.clone();
+                        payload["api_key"] = Value::String(new_token.clone());
+                        let retry_req = self
+                            .a0_client
+                            .post(&self.cfg.a0_api_url)
+                            .header("X-API-KEY", &new_token)
+                            .json(&payload);
+                        match retry_req.send().await {
+                            Ok(retry_resp) if retry_resp.status().is_success() => {
+                                return self.handle_a0_success(room_id, retry_resp).await;
+                            }
+                            Ok(retry_resp) => {
+                                let status = retry_resp.status();
+                                let body = retry_resp.text().await.unwrap_or_default();
+                                error!("Agent Zero 401 retry failed with status {}: {}", status, body);
+                                return format!("Agent Zero auth error after retry (HTTP {}). Check token sync.", status);
+                            }
+                            Err(e) => {
+                                error!("Agent Zero 401 retry call failed: {e}");
+                                return format!("Unexpected error on retry: {e}");
+                            }
                         }
                     }
                 }
-                error!("Agent Zero returned 401, but computed token unchanged");
+                error!("Agent Zero returned 401 and .a0-api-key is unchanged");
                 return "Agent Zero authentication failed. Check bot logs.".to_string();
             }
             Ok(resp) if resp.status().as_u16() == 404 && !context_id.is_empty() => {
@@ -455,7 +563,44 @@ async fn load_state(path: &Path) -> Result<RoomState> {
 
 async fn save_state(path: &Path, state: &RoomState) -> Result<()> {
     let json = serde_json::to_string_pretty(&state.room_contexts)?;
-    fs::write(path, json).await?;
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, json).await?;
+    fs::rename(&tmp, path).await?;
+    Ok(())
+}
+
+async fn load_sync_cursor(path: &Path) -> SyncCursorState {
+    if !path.exists() {
+        return SyncCursorState {
+            version: 1,
+            next_batch: None,
+            processed_events: Vec::new(),
+        };
+    }
+    match fs::read_to_string(path).await {
+        Ok(content) => serde_json::from_str::<SyncCursorState>(&content).unwrap_or(SyncCursorState {
+            version: 1,
+            next_batch: None,
+            processed_events: Vec::new(),
+        }),
+        Err(_) => SyncCursorState {
+            version: 1,
+            next_batch: None,
+            processed_events: Vec::new(),
+        },
+    }
+}
+
+async fn save_sync_cursor(path: &Path, next_batch: &Option<String>, events: &VecDeque<String>) -> Result<()> {
+    let state = SyncCursorState {
+        version: 1,
+        next_batch: next_batch.clone(),
+        processed_events: events.iter().cloned().collect(),
+    };
+    let json = serde_json::to_string(&state)?;
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, json).await?;
+    fs::rename(&tmp, path).await?;
     Ok(())
 }
 
@@ -523,22 +668,38 @@ async fn run() -> Result<()> {
     info!("Starting Matrix Bot: {} @ {}", cfg.user_id, cfg.homeserver_url);
     info!("Agent Zero API: {}", cfg.a0_api_url);
     info!("Device ID: {}", cfg.device_id);
-    let mut bot = Bot::new(cfg).await?;
-    bot.set_display_name().await;
 
-    let mut since: Option<String>;
+    let cursor_state = load_sync_cursor(&cfg.cursor_file).await;
+    let mut since = cursor_state.next_batch;
+    if let Some(ref s) = since {
+        info!(
+            "Loaded persisted sync cursor from {}: next_batch={} (dedup_events={})",
+            cfg.cursor_file.display(),
+            s,
+            cursor_state.processed_events.len()
+        );
+    }
+
+    let mut bot = Bot::new(cfg, cursor_state.processed_events).await?;
+    bot.set_display_name().await;
 
     let mut attempt = 0u32;
     loop {
         attempt += 1;
-        match timeout(Duration::from_secs(60), bot.sync(None, 10000, true)).await {
+        let initial_full = since.is_none();
+        match timeout(Duration::from_secs(60), bot.sync(since.as_deref(), 5000, initial_full)).await {
             Ok(Ok(sync)) => {
-                since = sync.get("next_batch").and_then(Value::as_str).map(ToString::to_string);
+                if let Some(nb) = sync.get("next_batch").and_then(Value::as_str) {
+                    since = Some(nb.to_string());
+                }
                 info!(
                     "Initial sync complete. Next batch: {}",
                     since.clone().unwrap_or_default()
                 );
                 handle_sync(&mut bot, &sync).await?;
+                if let Err(e) = save_sync_cursor(&bot.cfg.cursor_file, &since, &bot.processed_events_order).await {
+                    warn!("Failed to persist sync cursor: {e}");
+                }
                 break;
             }
             Ok(Err(e)) => {
@@ -559,7 +720,6 @@ async fn run() -> Result<()> {
         .context("register SIGTERM handler")?;
 
     info!("Starting sync loop -- bot is live!");
-    let mut empty_sync_count: u32 = 0;
     let mut sync_count: u64 = 0;
     loop {
         #[cfg(unix)]
@@ -571,43 +731,26 @@ async fn run() -> Result<()> {
                     Ok(Ok(sync)) => {
                         sync_count += 1;
                         if sync_count % 60 == 0 {
-                            info!("Sync loop heartbeat: {} syncs completed", sync_count);
+                            info!("Sync loop heartbeat: {} syncs completed (cursor={})", sync_count, since.as_deref().unwrap_or("none"));
+                            bot.refresh_trusted_senders().await;
                         }
-                        // Check if this is an empty/stale sync
-                        let has_rooms = sync.get("rooms").and_then(Value::as_object)
-                            .map(|r| !r.is_empty()).unwrap_or(false);
-                        if !has_rooms {
-                            empty_sync_count += 1;
-                            if empty_sync_count >= 5 {
-                                warn!("Consecutive empty syncs: {} -- forcing full sync (clearing since token)", empty_sync_count);
-                                since = None;
-                                empty_sync_count = 0;
-                            }
-                        } else {
-                            empty_sync_count = 0;
+                        // Phase 8 Sync Hardening: treat empty incremental syncs as healthy;
+                        // NEVER reset `since = None` on empty syncs. Atomically persist every next_batch.
+                        if let Some(nb) = sync.get("next_batch").and_then(Value::as_str) {
+                            since = Some(nb.to_string());
                         }
-                        since = sync.get("next_batch").and_then(Value::as_str).map(ToString::to_string);
                         if let Err(e) = handle_sync(&mut bot, &sync).await {
                             warn!("Sync handler error: {}", e);
                         }
+                        if let Err(e) = save_sync_cursor(&bot.cfg.cursor_file, &since, &bot.processed_events_order).await {
+                            warn!("Failed to persist sync cursor: {e}");
+                        }
                     }
                     Ok(Err(e)) => {
-                        empty_sync_count += 1;
-                        if empty_sync_count >= 5 {
-                            warn!("Consecutive sync errors/timeouts: {} -- forcing full sync", empty_sync_count);
-                            since = None;
-                            empty_sync_count = 0;
-                        }
                         warn!("Sync error: {} -- retrying in 5s", e);
                         tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                     Err(_) => {
-                        empty_sync_count += 1;
-                        if empty_sync_count >= 5 {
-                            warn!("Consecutive sync timeouts: {} -- forcing full sync", empty_sync_count);
-                            since = None;
-                            empty_sync_count = 0;
-                        }
                         warn!("Sync timeout -- retrying in 10s");
                         tokio::time::sleep(Duration::from_secs(10)).await;
                     }
@@ -623,43 +766,19 @@ async fn run() -> Result<()> {
                 match result {
                     Ok(Ok(sync)) => {
                         sync_count += 1;
-                        if sync_count % 60 == 0 {
-                            info!("Sync loop heartbeat: {} syncs completed", sync_count);
+                        if let Some(nb) = sync.get("next_batch").and_then(Value::as_str) {
+                            since = Some(nb.to_string());
                         }
-                        let has_rooms = sync.get("rooms").and_then(Value::as_object)
-                            .map(|r| !r.is_empty()).unwrap_or(false);
-                        if !has_rooms {
-                            empty_sync_count += 1;
-                            if empty_sync_count >= 5 {
-                                warn!("Consecutive empty syncs: {} -- forcing full sync", empty_sync_count);
-                                since = None;
-                                empty_sync_count = 0;
-                            }
-                        } else {
-                            empty_sync_count = 0;
-                        }
-                        since = sync.get("next_batch").and_then(Value::as_str).map(ToString::to_string);
                         if let Err(e) = handle_sync(&mut bot, &sync).await {
                             warn!("Sync handler error: {}", e);
                         }
+                        let _ = save_sync_cursor(&bot.cfg.cursor_file, &since, &bot.processed_events_order).await;
                     }
                     Ok(Err(e)) => {
-                        empty_sync_count += 1;
-                        if empty_sync_count >= 5 {
-                            warn!("Consecutive sync errors/timeouts: {} -- forcing full sync", empty_sync_count);
-                            since = None;
-                            empty_sync_count = 0;
-                        }
                         warn!("Sync error: {} -- retrying in 5s", e);
                         tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                     Err(_) => {
-                        empty_sync_count += 1;
-                        if empty_sync_count >= 5 {
-                            warn!("Consecutive sync timeouts: {} -- forcing full sync", empty_sync_count);
-                            since = None;
-                            empty_sync_count = 0;
-                        }
                         warn!("Sync timeout -- retrying in 10s");
                         tokio::time::sleep(Duration::from_secs(10)).await;
                     }
@@ -669,7 +788,8 @@ async fn run() -> Result<()> {
         };
 
         if should_stop {
-            info!("Received shutdown signal -- shutting down...");
+            info!("Received shutdown signal -- saving cursor and shutting down...");
+            let _ = save_sync_cursor(&bot.cfg.cursor_file, &since, &bot.processed_events_order).await;
             break;
         }
     }
@@ -678,10 +798,61 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
+fn extract_invite_sender(invite_obj: &Value, my_user_id: &str) -> Option<String> {
+    let events = invite_obj
+        .get("invite_state")
+        .and_then(|s| s.get("events"))
+        .and_then(Value::as_array)?;
+
+    // Look for the m.room.member invite event targeting our user_id
+    for ev in events {
+        let ev_type = ev.get("type").and_then(Value::as_str).unwrap_or("");
+        let state_key = ev.get("state_key").and_then(Value::as_str).unwrap_or("");
+        let membership = ev
+            .get("content")
+            .and_then(|c| c.get("membership"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if ev_type == "m.room.member" && state_key == my_user_id && membership == "invite" {
+            if let Some(sender) = ev.get("sender").and_then(Value::as_str) {
+                return Some(sender.to_string());
+            }
+        }
+    }
+    // Fallback: any sender in invite_state events that isn't us
+    for ev in events {
+        if let Some(sender) = ev.get("sender").and_then(Value::as_str) {
+            if sender != my_user_id {
+                return Some(sender.to_string());
+            }
+        }
+    }
+    None
+}
+
 async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
+    // Phase 8 Auto-Join: Only accept invites from trusted senders in platform `trusted_senders` table
     if let Some(invites) = sync.get("rooms").and_then(|r| r.get("invite")).and_then(Value::as_object) {
-        for (room_id, _) in invites {
-            info!("Invited to {} -- joining...", room_id);
+        if !invites.is_empty() {
+            bot.refresh_trusted_senders().await;
+        }
+        for (room_id, invite_obj) in invites {
+            let sender = extract_invite_sender(invite_obj, &bot.whoami_user_id).unwrap_or_else(|| "unknown".to_string());
+            let invite_dedup_key = format!("invite:{}:{}", room_id, sender);
+            if !bot.trusted_senders.contains(&sender) {
+                if bot.record_processed_event(&invite_dedup_key) {
+                    warn!(
+                        "AUTO-JOIN REJECTED: Ignoring invite to room={} from untrusted sender={} (decision=reject_untrusted)",
+                        room_id, sender
+                    );
+                }
+                continue;
+            }
+
+            info!(
+                "AUTO-JOIN ACCEPTED: Invite to room={} from trusted sender={} -- joining...",
+                room_id, sender
+            );
             let mut joined = false;
             for attempt in 0..4 {
                 if attempt > 0 {
@@ -691,12 +862,12 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
                 }
                 if bot.join_room(room_id).await.unwrap_or(false) {
                     joined = true;
-                    info!("Joined room: {} (attempt {})", room_id, attempt + 1);
+                    info!("Joined room: {} (attempt {}, inviter={})", room_id, attempt + 1, sender);
                     let hello = format!("Hello! I'm {}, an AI agent powered by Agent Zero.", bot.cfg.bot_display_name);
                     let _ = bot.send_message(room_id, &hello).await;
                     break;
                 }
-                warn!("Join attempt {}/4 failed", attempt + 1);
+                warn!("Join attempt {}/4 failed for room={}", attempt + 1, room_id);
             }
             if !joined {
                 error!("Failed to join {} after 4 attempts.", room_id);
@@ -713,11 +884,6 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
     }
 
     for (room_id, room_obj) in joined_rooms.unwrap() {
-        let member_count = room_obj
-            .get("summary")
-            .and_then(|s| s.get("m.joined_member_count"))
-            .and_then(Value::as_i64);
-        let is_one_on_one = member_count.map(|c| c == 2).unwrap_or(true);
         let timeline = room_obj
             .get("timeline")
             .and_then(|t| t.get("events"))
@@ -730,19 +896,35 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
             if event_type != "m.room.message" {
                 continue;
             }
-            // Event dedup: skip if already processed
             let event_id = event.get("event_id").and_then(Value::as_str).unwrap_or("").to_string();
-            if !event_id.is_empty() && !bot.processed_events.insert(event_id) {
-                continue;
-            }
             let sender = event.get("sender").and_then(Value::as_str).unwrap_or("");
-            if sender == bot.cfg.user_id {
+
+            // Phase 8 Self-Event Suppression using verified /whoami identity
+            if sender == bot.whoami_user_id || sender == bot.cfg.user_id {
+                info!(
+                    "Event decision | room={} | event_id={} | sender={} | decision=drop_self_event",
+                    room_id, event_id, sender
+                );
+                let _ = bot.record_processed_event(&event_id);
                 continue;
             }
+
+            // Phase 8 Bounded Persistent Event-ID Deduplication across restarts
+            if !event_id.is_empty() && !bot.record_processed_event(&event_id) {
+                info!(
+                    "Event decision | room={} | event_id={} | sender={} | decision=drop_duplicate",
+                    room_id, event_id, sender
+                );
+                continue;
+            }
+
             let ts = event.get("origin_server_ts").and_then(Value::as_i64).unwrap_or(0);
-            // Skip events older than 5 minutes (300,000 ms) to prevent replaying stale alerts
             let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as i64;
             if now_ms - ts > 300_000 {
+                info!(
+                    "Event decision | room={} | event_id={} | sender={} | decision=drop_stale_ts",
+                    room_id, event_id, sender
+                );
                 continue;
             }
             let content = event.get("content").unwrap_or(&Value::Null);
@@ -750,26 +932,30 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
             if msg_type != "m.text" {
                 continue;
             }
-            let mut body = content
+            let raw_body = content
                 .get("body")
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .trim()
                 .to_string();
-            // Normalize Matrix mention pills: convert Element's
-            // [@user:server](https://matrix.to/#/@user:server) to plain @user:server
-            let mut body = strip_matrix_mention_pills(&body).trim().to_string();
+            let mut body = strip_matrix_mention_pills(&raw_body).trim().to_string();
             if body.is_empty() {
                 continue;
             }
 
+            // Phase 8 Trigger Policy Enforcement: require declared mention/command prefix
+            // EVEN in two-member (one-on-one) rooms to prevent agent-to-agent feedback loops.
             let body_lower = body.to_lowercase();
             let triggered = bot
                 .cfg
                 .trigger_prefixes
                 .iter()
                 .any(|p| body_lower.starts_with(&p.to_lowercase()));
-            if !is_one_on_one && !triggered {
+            if !triggered {
+                info!(
+                    "Event decision | room={} | event_id={} | sender={} | decision=ignore_untriggered",
+                    room_id, event_id, sender
+                );
                 continue;
             }
             for p in &bot.cfg.trigger_prefixes {
@@ -782,7 +968,10 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
                 continue;
             }
 
-            info!("Message in {} from {}: {}", room_id, sender, body);
+            info!(
+                "Event decision | room={} | event_id={} | sender={} | decision=process_addressed",
+                room_id, event_id, sender
+            );
 
             if let Some(reply) = built_in_response(&body, &bot.cfg.agent_identity, &bot.cfg.user_id) {
                 let _ = bot.send_message(room_id, &reply).await;

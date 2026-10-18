@@ -1,0 +1,18 @@
+[Unit]
+Description=Agent Matrix Fleet Control Plane (am-ctl)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=l0r3zz
+Group=l0r3zz
+WorkingDirectory=/opt/agent-zero/multi-instance-deploy/am-ctl
+ExecStart=/opt/agent-zero/multi-instance-deploy/am-ctl/.venv/bin/am-ctl-server
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Agent Matrix Daily Database & Infrastructure Backup (Phase 5)
+After=network-online.target docker.service am-ctl.service
+Requires=am-ctl.service
+
+[Service]
+Type=oneshot
+User=l0r3zz
+Group=l0r3zz
+WorkingDirectory=/opt/agent-zero/multi-instance-deploy/am-ctl
+ExecStart=/opt/agent-zero/multi-instance-deploy/scripts/fleet-backup.sh --type daily_full --verify

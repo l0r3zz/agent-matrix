@@ -1,194 +1,192 @@
-#!/bin/bash
-# watchdog.sh v2.0 -- with auth health checks
-# Monitors bot + MCP, validates Matrix auth, detects token mismatch
+#!/usr/bin/env bash
+# =============================================================================
+# watchdog.sh v3.0 — Platform-Integrated Container Health Reporter (Phase 8)
+# =============================================================================
+# Runs inside each agent container (or --once for single cycle), queries the
+# am-ctl platform API for alert_rules classification (RESTARTABLE vs
+# TERMINAL_CONFIG), executes local domain checks (matrix_auth, identity,
+# membership, a0_auth, mcp, process), and reports health state back to
+# POST /api/v1/health/{agent_name}/report.
+#
+# Never restart-loops on TERMINAL_CONFIG failures (401/403, identity mismatch,
+# missing required room).
+# =============================================================================
+set -euo pipefail
 
+RUN_ONCE=0
+WATCHDOG_INTERVAL="${WATCHDOG_INTERVAL:-120}"
+AGENT_NAME="${AGENT_NAME:-$(hostname)}"
+AMCTL_URL="${AMCTL_URL:-http://172.23.88.254:8077}"
+AMCTL_API_KEY="${AMCTL_API_KEY:-amctl-dev-key-2026}"
 LOG="/a0/usr/workdir/startup-services.log"
-BOT_PIDFILE="/a0/usr/workdir/matrix-bot/bot.pid"
-MCP_PIDFILE="/a0/usr/workdir/matrix-mcp-server/mcp.pid"
-MCP_DIR="/a0/usr/workdir/matrix-mcp-server"
-TOKEN_CHECK="/a0/usr/workdir/check-token-sync.py"
-WATCHDOG_INTERVAL=30
-HEALTH_CHECK_INTERVAL=300
-LAST_HEALTH_CHECK=0
 
-log() {
-    echo "$(date '+%F %T') $*" >> "$LOG"
-}
-
-is_alive() {
-    [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null
-}
-
-mcp_variant() {
-    local marker="${MCP_DIR}/.mcp-variant"
-    if [ -f "$marker" ]; then
-        cat "$marker" | tr -d '\n'
-    else
-        echo "ts"
-    fi
-}
-
-start_mcp_variant() {
-    local variant
-    variant=$(mcp_variant)
-    cd "$MCP_DIR" || return
-    > mcp-server.log
-    case "$variant" in
-        rust|r2)
-            if [ -x "${MCP_DIR}/matrix-mcp-server-r2" ]; then
-                log "WATCHDOG: Starting Rust MCP server (variant=rust)"
-                "${MCP_DIR}/matrix-mcp-server-r2" >> mcp-server.log 2>&1 &
-                echo $! > "$MCP_PIDFILE"
-                log "WATCHDOG: Rust MCP PID=$!"
-            else
-                log "WATCHDOG: ERROR - Rust binary not found, falling back to TS"
-                node dist/http-server.js >> mcp-server.log 2>&1 &
-                echo $! > "$MCP_PIDFILE"
-                log "WATCHDOG: TS MCP PID=$! (fallback)"
-            fi
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --once)
+            RUN_ONCE=1
+            shift
             ;;
-        ts|typescript)
-            log "WATCHDOG: Starting TypeScript MCP server (variant=ts)"
-            node dist/http-server.js >> mcp-server.log 2>&1 &
-            echo $! > "$MCP_PIDFILE"
-            log "WATCHDOG: TS MCP PID=$!"
+        --interval)
+            WATCHDOG_INTERVAL="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $(basename "$0") [--once] [--interval SECS]"
+            exit 0
             ;;
         *)
-            log "WATCHDOG: Unknown MCP variant '$variant', defaulting to TS"
-            node dist/http-server.js >> mcp-server.log 2>&1 &
-            echo $! > "$MCP_PIDFILE"
-            log "WATCHDOG: TS MCP PID=$! (default)"
+            echo "Unknown option: $1" >&2
+            exit 2
             ;;
     esac
-}
-
-mcp_auth_check() {
-    local MCP_ENV="${MCP_DIR}/.env"
-    [ ! -f "$MCP_ENV" ] && { log "HEALTH: .env not found"; return 1; }
-    local HS_URL TOKEN RESULT
-    HS_URL=$(grep '^MATRIX_HOMESERVER_URL=' "$MCP_ENV" | cut -d= -f2- | tr -d '"')
-    TOKEN=$(grep '^MATRIX_ACCESS_TOKEN=' "$MCP_ENV" | cut -d= -f2- | tr -d '"')
-    [ -z "$HS_URL" ] || [ -z "$TOKEN" ] && { log "HEALTH: Missing creds"; return 1; }
-    RESULT=$(curl -sf --max-time 10 -H "Authorization: Bearer $TOKEN" "$HS_URL/_matrix/client/v3/account/whoami" 2>/dev/null)
-    if echo "$RESULT" | grep -q user_id; then
-        return 0
-    else
-        log "HEALTH: Auth FAILED -- $RESULT"
-        return 1
-    fi
-}
-
-mcp_tool_check() {
-    # v2.1: Use /health endpoint instead of JSON-RPC tool call.
-    # matrix-mcp-server-r2 uses Streamable HTTP (SSE) for MCP protocol,
-    # which returns empty/SSE responses to plain curl JSON-RPC calls.
-    # The /health endpoint returns plain JSON and validates server+auth.
-    local RESULT
-    RESULT=$(curl -sf --max-time 10 http://localhost:3000/health 2>/dev/null)
-    if echo "$RESULT" | grep -q healthy; then
-        return 0
-    else
-        log "HEALTH: Tool check FAILED (health endpoint)"
-        return 1
-    fi
-}
-
-token_sync_check() {
-    [ ! -f "$TOKEN_CHECK" ] && return 0
-    local SYNC_RESULT
-    SYNC_RESULT=$(python3 "$TOKEN_CHECK" 2>/dev/null)
-    case "$SYNC_RESULT" in
-        MATCH|SKIP) return 0 ;;
-        MISMATCH*)
-            log "HEALTH: TOKEN $SYNC_RESULT"
-            log "HEALTH: TOKEN-GUARD handles this at runtime."
-            return 1 ;;
-        *) return 0 ;;
-    esac
-}
-
-restart_mcp() {
-    log "WATCHDOG: mcp-server $1 -- restarting"
-    local variant=$(mcp_variant)
-    log "WATCHDOG: MCP variant=$variant"
-    pkill -9 -f 'node dist/http-server.js' 2>/dev/null
-    pkill -9 -f 'matrix-mcp-server-r2' 2>/dev/null
-    sleep 2
-    start_mcp_variant
-    sleep 5
-    if mcp_auth_check; then
-        log "HEALTH: Auth PASSED after restart"
-    else
-        log "HEALTH: WARNING -- Auth FAILED after restart"
-    fi
-}
-
-
-# Clean up stale PID files from previous sessions.
-# Bind-mounted workdir keeps PID files across container restarts;
-# if the recorded PID no longer exists, remove the stale file
-# so is_alive() does not falsely report the service as running.
-for pidfile in "$BOT_PIDFILE" "$MCP_PIDFILE"; do
-    if [ -f "$pidfile" ]; then
-        OLD_PID=$(cat "$pidfile" 2>/dev/null)
-        if [ -n "$OLD_PID" ] && ! kill -0 "$OLD_PID" 2>/dev/null; then
-            log "WATCHDOG: Removing stale $pidfile (PID $OLD_PID no longer exists)"
-            rm -f "$pidfile"
-        fi
-    fi
 done
 
-# Capture initial PIDs
-BOT_PID=$(ps -eo pid,cmd | grep -E '[p]ython.*matrix_bot|[m]atrix-bot-rust' | awk '{print $1}' | head -1)
-MCP_PID=$(ps -eo pid,cmd | grep -E '[n]ode.*http-server|[m]atrix-mcp-server-r2' | awk '{print $1}' | head -1)
-[ -n "$BOT_PID" ] && echo "$BOT_PID" > "$BOT_PIDFILE"
-[ -n "$MCP_PID" ] && echo "$MCP_PID" > "$MCP_PIDFILE"
+log() {
+    echo "$(date '+%F %T') WATCHDOG-v3: $*" >> "${LOG}"
+}
 
-log "WATCHDOG v2.0: Starting interval=${WATCHDOG_INTERVAL}s health=${HEALTH_CHECK_INTERVAL}s"
-log "WATCHDOG: BOT PID=$(cat "$BOT_PIDFILE" 2>/dev/null || echo none)"
-log "WATCHDOG: MCP PID=$(cat "$MCP_PIDFILE" 2>/dev/null || echo none)"
+run_watchdog_cycle() {
+    # 1. Fetch agent registry record and alert_rules from platform
+    local reg_json rules_json
+    reg_json="$(curl -sf --max-time 10 -H "X-API-Key: ${AMCTL_API_KEY}" "${AMCTL_URL}/api/v1/agents/${AGENT_NAME}" 2>/dev/null || echo "")"
+    rules_json="$(curl -sf --max-time 10 -H "X-API-Key: ${AMCTL_API_KEY}" "${AMCTL_URL}/api/v1/health/rules/all" 2>/dev/null || echo "[]")"
 
-if ! token_sync_check; then
-    log "WATCHDOG: token mismatch detected; syncing settings.json MCP header token"
-    /a0/usr/workdir/sync-mcp-token-into-settings.py >> "$LOG" 2>&1 || true
+    if [[ -z "${reg_json}" ]]; then
+        log "WARN: Platform API unreachable at ${AMCTL_URL}; skipping cycle"
+        return 0
+    fi
+
+    # 2. Run local checks and build JSON report via Python
+    local report_payload
+    report_payload="$(REG_JSON="${reg_json}" RULES_JSON="${rules_json}" AGENT_NAME="${AGENT_NAME}" python3 - << 'PYEOF'
+import hashlib, json, os, subprocess, urllib.request
+
+reg = json.loads(os.environ["REG_JSON"])
+agent_name = os.environ["AGENT_NAME"]
+expected_uid = reg.get("matrix_user_id", "")
+req_rooms = [r["room_id"] for r in reg.get("required_rooms", [])]
+
+bot_env = {}
+if os.path.isfile("/a0/usr/workdir/matrix-bot/.env"):
+    for ln in open("/a0/usr/workdir/matrix-bot/.env"):
+        if "=" in ln and not ln.strip().startswith("#"):
+            k, v = ln.strip().split("=", 1)
+            bot_env[k] = v.strip('"').strip("'")
+
+hs_url = bot_env.get("MATRIX_HOMESERVER_URL", "http://localhost:8008").rstrip("/")
+token = bot_env.get("MATRIX_ACCESS_TOKEN", "")
+
+checks = []
+
+# matrix_auth & identity
+actual_uid = None
+whoami_err = None
+try:
+    req = urllib.request.Request(
+        f"{hs_url}/_matrix/client/v3/account/whoami",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    with urllib.request.urlopen(req, timeout=8) as resp:
+        data = json.loads(resp.read().decode())
+        actual_uid = data.get("user_id")
+except urllib.error.HTTPError as e:
+    whoami_err = f"http_{e.code}"
+except Exception as e:
+    whoami_err = str(e)
+
+if actual_uid:
+    checks.append({"check_type": "matrix_auth", "status": "pass", "detail": {"user_id": actual_uid}})
+else:
+    checks.append({"check_type": "matrix_auth", "status": "fail", "detail": {"error": whoami_err or "whoami_failed"}})
+
+if actual_uid and actual_uid == expected_uid:
+    checks.append({"check_type": "identity", "status": "pass", "detail": {"actual": actual_uid, "expected": expected_uid}})
+else:
+    checks.append({"check_type": "identity", "status": "fail", "detail": {"actual": actual_uid, "expected": expected_uid, "error": whoami_err or "identity_mismatch"}})
+
+# membership
+try:
+    req = urllib.request.Request(
+        f"{hs_url}/_matrix/client/v3/joined_rooms",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    with urllib.request.urlopen(req, timeout=8) as resp:
+        jdata = json.loads(resp.read().decode())
+        joined = set(jdata.get("joined_rooms", []))
+    missing = [r for r in req_rooms if r not in joined]
+    if not missing:
+        checks.append({"check_type": "membership", "status": "pass", "detail": {"joined_required": req_rooms, "total_joined": len(joined)}})
+    else:
+        checks.append({"check_type": "membership", "status": "fail", "detail": {"missing_rooms": missing}})
+except Exception as e:
+    checks.append({"check_type": "membership", "status": "fail", "detail": {"error": str(e)}})
+
+# a0_auth
+secret_path = "/a0/usr/workdir/matrix-bot/.a0-api-key"
+if os.path.isfile(secret_path):
+    a0_key = open(secret_path).read().strip()
+    fp = hashlib.sha256(a0_key.encode()).hexdigest()[:12]
+    try:
+        req = urllib.request.Request(
+            "http://localhost:80/api/api_message",
+            data=b"{}",
+            headers={"Content-Type": "application/json", "X-API-KEY": a0_key},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            code = resp.status
+    except urllib.error.HTTPError as e:
+        code = e.code
+    except Exception:
+        code = 0
+    if code in (200, 400, 422):
+        checks.append({"check_type": "a0_auth", "status": "pass", "detail": {"http_code": code, "fingerprint": fp, "source": "secret_file"}})
+    elif code in (401, 403):
+        checks.append({"check_type": "a0_auth", "status": "fail", "detail": {"error": f"unauthorized_{code}", "fingerprint": fp}})
+    else:
+        checks.append({"check_type": "a0_auth", "status": "warn", "detail": {"error": f"http_{code}", "fingerprint": fp}})
+else:
+    checks.append({"check_type": "a0_auth", "status": "fail", "detail": {"error": "missing_secret_file"}})
+
+# mcp
+try:
+    with urllib.request.urlopen("http://localhost:3000/health", timeout=5) as resp:
+        mdata = json.loads(resp.read().decode())
+        if mdata.get("status") == "healthy":
+            checks.append({"check_type": "mcp", "status": "pass", "detail": mdata})
+        else:
+            checks.append({"check_type": "mcp", "status": "fail", "detail": mdata})
+except Exception as e:
+    checks.append({"check_type": "mcp", "status": "fail", "detail": {"error": str(e)}})
+
+# process
+bot_cnt_out = subprocess.getoutput("pgrep -fc '[m]atrix-bot-rust' || true").strip()
+bot_cnt = int(bot_cnt_out) if bot_cnt_out.isdigit() else 0
+if bot_cnt == 1:
+    checks.append({"check_type": "process", "status": "pass", "detail": {"bot_count": 1, "bot_runtime": "rust", "supervisord": True}})
+else:
+    checks.append({"check_type": "process", "status": "fail", "detail": {"bot_count": bot_cnt, "supervisord": True}})
+
+print(json.dumps({"reporter": f"watchdog:v3:{agent_name}", "checks": checks}))
+PYEOF
+)"
+
+    # 3. Post health state to platform API (platform applies alert_rules classification)
+    curl -sf --max-time 10 -X POST "${AMCTL_URL}/api/v1/health/${AGENT_NAME}/report" \
+        -H "X-API-Key: ${AMCTL_API_KEY}" \
+        -H "Content-Type: application/json" \
+        -d "${report_payload}" >/dev/null 2>&1 || log "WARN: Failed to report health to ${AMCTL_URL}"
+
+    log "Reported health cycle for ${AGENT_NAME}"
+}
+
+if [[ "${RUN_ONCE}" -eq 1 ]]; then
+    run_watchdog_cycle
+    exit 0
 fi
-token_sync_check
-if mcp_auth_check; then
-    log "HEALTH: Initial auth PASSED"
-else
-    log "HEALTH: Initial auth FAILED"
-    restart_mcp "AUTH_FAILED"
-fi
 
+log "Starting watchdog v3.0 loop (interval=${WATCHDOG_INTERVAL}s)"
 while true; do
-    sleep "$WATCHDOG_INTERVAL"
-    NOW=$(date +%s)
-
-    if ! is_alive "$BOT_PIDFILE"; then
-        log "WATCHDOG: matrix-bot DEAD -- restarting"
-        cd /a0/usr/workdir/matrix-bot || continue
-        ./run-matrix-bot.sh >> bot.log 2>&1 &
-        echo $! > "$BOT_PIDFILE"
-        log "WATCHDOG: matrix-bot restarted PID=$!"
-    fi
-
-    if ! is_alive "$MCP_PIDFILE"; then
-        restart_mcp "DEAD"
-    fi
-
-    if [ $((NOW - LAST_HEALTH_CHECK)) -ge $HEALTH_CHECK_INTERVAL ]; then
-        LAST_HEALTH_CHECK=$NOW
-        if is_alive "$MCP_PIDFILE"; then
-            token_sync_check
-            if ! mcp_auth_check; then
-                log "HEALTH: Periodic auth FAILED"
-                restart_mcp "AUTH_FAILED"
-            elif ! mcp_tool_check; then
-                log "HEALTH: Periodic tool FAILED"
-                restart_mcp "TOOL_FAILED"
-            else
-                log "HEALTH: Periodic check PASSED"
-            fi
-        fi
-    fi
+    run_watchdog_cycle
+    sleep "${WATCHDOG_INTERVAL}"
 done

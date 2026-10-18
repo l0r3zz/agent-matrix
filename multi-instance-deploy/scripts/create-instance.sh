@@ -124,7 +124,6 @@ echo "  (Self-signed — replace with step-ca certs for federation)"
 echo "[5/9] Generating Matrix account credentials..."
 MATRIX_USER="agent0-${INSTANCE_NUM}"
 MATRIX_PASS=$(openssl rand -base64 24)
-A0_API_KEY=$(openssl rand -base64 12 | tr -d '/+=' | head -c 16)
 REG_TOKEN=$(openssl rand -base64 32 | tr -d '/+=')
 echo "  User: @${MATRIX_USER}:${MHS_FQDN}"
 
@@ -138,9 +137,6 @@ MATRIX_USER_ID=@${MATRIX_USER}:${MHS_FQDN}
 
 # --- Continuwuity Registration Token ---
 CONTINUWUITY_REGISTRATION_TOKEN=${REG_TOKEN}
-
-# --- Agent Zero API Key (for matrix-bot) ---
-A0_API_KEY=${A0_API_KEY}
 MATRIX_ENV
 
 # --- 6. Deploy matrix-mcp-server ---
@@ -169,7 +165,6 @@ if [ -d "${TEMPLATE_DIR}/matrix-bot" ]; then
     if [ -f "${BOT_DIR}/.env.template" ]; then
         sed -e "s/__INSTANCE_NUM__/${INSTANCE_NUM}/g" \
             -e "s/__MATRIX_ACCESS_TOKEN__/PENDING_REGISTRATION/g" \
-            -e "s/__A0_API_KEY__/${A0_API_KEY}/g" \
             "${BOT_DIR}/.env.template" > "${BOT_DIR}/.env"
         rm -f "${BOT_DIR}/.env.template"
     fi

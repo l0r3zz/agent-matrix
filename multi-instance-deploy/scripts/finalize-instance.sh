@@ -100,7 +100,6 @@ source_env() {
 }
 
 MATRIX_PASS=$(source_env "${INSTANCE_DIR}/.env" MATRIX_PASSWORD)
-# A0_API_KEY computed after container startup (see Step 6.5)
 
 [[ -n "$MATRIX_PASS" ]] || fail "MATRIX_PASSWORD not found in .env"
 
@@ -119,33 +118,6 @@ if [[ ${#API_KEYS[@]} -gt 0 ]]; then
     done
 fi
 set -u
-
-# Compute the mcp_server_token the same way Agent Zero does
-compute_a0_token() {
-    local instance_dir="$1"
-    # Wait for runtime ID to be generated
-    local RUNTIME_ID=""
-    for i in $(seq 1 30); do
-        RUNTIME_ID=$(docker exec ${INSTANCE_NAME} grep -oP 'A0_PERSISTENT_RUNTIME_ID=\K.*' /a0/usr/.env 2>/dev/null)
-        if [[ -n "$RUNTIME_ID" ]]; then break; fi
-        sleep 2
-    done
-    if [[ -z "$RUNTIME_ID" ]]; then
-        fail "Could not read A0_PERSISTENT_RUNTIME_ID from container"
-        return 1
-    fi
-    # Read auth credentials (empty for bot-only instances)
-    local AUTH_USER=$(docker exec ${INSTANCE_NAME} grep -oP 'AUTH_LOGIN=\K.*' /a0/usr/.env 2>/dev/null || echo "")
-    local AUTH_PASS=$(docker exec ${INSTANCE_NAME} grep -oP 'AUTH_PASSWORD=\K.*' /a0/usr/.env 2>/dev/null || echo "")
-    # Compute token: base64url(sha256(runtime_id:user:pass))[:16]
-    local TOKEN=$(python3 -c "
-import hashlib, base64
-hash_bytes = hashlib.sha256(f'${RUNTIME_ID}:${AUTH_USER}:${AUTH_PASS}'.encode()).digest()
-b64 = base64.urlsafe_b64encode(hash_bytes).decode().replace('=', '')
-print(b64[:16])
-")
-    echo "$TOKEN"
-}
 echo
 
 # =========================================================================
@@ -358,10 +330,6 @@ else:
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     data = {}
 
-# Set mcp_server_token for API auth
-if "${A0_API_KEY}":
-    data["mcp_server_token"] = "${A0_API_KEY}"
-
 # Set MCP servers config — NO headers (server reads from own .env)
 mcp_config = {
     "matrix": {
@@ -404,28 +372,11 @@ echo "Waiting 30s for services to stabilize..."
 sleep 30
 
 # =========================================================================
-# STEP 7b: Compute and deploy correct A0 API token
+# STEP 7b: Register canonical A0 credential via am-ctl API (Phase 3)
 # =========================================================================
-echo "[7b] Computing A0 API token from runtime ID..."
-RUNTIME_ID=""
-for i in $(seq 1 15); do
-    RUNTIME_ID=$(docker exec ${INSTANCE_NAME} grep -oP 'A0_PERSISTENT_RUNTIME_ID=\K.*' /a0/usr/.env 2>/dev/null)
-    [[ -n "$RUNTIME_ID" ]] && break
-    sleep 2
-done
-if [[ -z "$RUNTIME_ID" ]]; then
-    warn "Could not read runtime ID - bot may need manual token sync"
-else
-    COMPUTED_TOKEN=$(python3 -c "
-import hashlib, base64
-hash_bytes = hashlib.sha256(f'${RUNTIME_ID}::'.encode()).digest()
-print(base64.urlsafe_b64encode(hash_bytes).decode().replace('=','')[:16])
-")
-    info "Runtime ID: $RUNTIME_ID"
-    info "Computed token: $COMPUTED_TOKEN"
-    sed -i "s|^A0_API_KEY=.*|A0_API_KEY=${COMPUTED_TOKEN}|" "${BOT_ENV}"
-    sed -i "s|^A0_API_KEY=.*|A0_API_KEY=${COMPUTED_TOKEN}|" "${MCP_ENV}"
-    ok "API token deployed to bot and MCP .env files"
+echo "[7b] Verifying and registering canonical A0 credential via am-ctl..."
+if command -v am-ctl &>/dev/null; then
+    am-ctl credentials verify "${INSTANCE_NAME}" --sync || warn "am-ctl credentials verify returned non-zero"
 fi
 set -u
 
