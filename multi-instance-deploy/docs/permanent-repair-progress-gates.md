@@ -1,4 +1,4 @@
-# Permanent Repair Strategy -- Progress Gates
+# Agent-Matrix hardening Project
 
 **Date:** 2026-10-18 (revised from 2026-10-15)
 **Status:** Phases 1 through 9 COMPLETE -- All Implementation Gates PASSED (7-day fleet observation window active)
@@ -26,6 +26,8 @@ Phases are ordered by dependency. Later phases depend on earlier ones.
 
 ---
 
+
+
 ## Architectural Decisions
 
 **Decision date:** 2026-10-15
@@ -35,39 +37,41 @@ Phases are ordered by dependency. Later phases depend on earlier ones.
 `am-ctl` is a FastAPI control-plane server backed by PostgreSQL. A thin CLI client (`am-ctl`) wraps the API. Every fleet operation goes through the API -- the CLI, a future WebGUI, agents themselves, and external orchestrators all consume the same endpoints.
 
 ```
-                          ┌──────────────────────────────────────────┐
-                          │           am-ctl server (FastAPI)        │
-                          │                                          │
+                          ┌─────────────────────────────────────────┐
+                          │           am-ctl server (FastAPI)       │
+                          │                                         │
   am-ctl CLI ────────────►│  /api/v1/agents                         │
   WebGUI (future) ───────►│  /api/v1/health                         │
   Agents (future) ───────►│  /api/v1/reconcile                      │
   External systems ──────►│  /api/v1/deploy                         │
                           │  /api/v1/models                         │
                           │  /api/v1/federation                     │
-                          │                                          │
+                          │                                         │
                           │  ┌──────────┐  ┌──────────┐             │
                           │  │ Docker   │  │ Matrix   │             │
                           │  │ client   │  │ HTTP     │             │
                           │  └──────────┘  └──────────┘             │
-                          └──────────┬───────────────────────────────┘
+                          └──────────┬──────────────────────────────┘
                                      │
                           ┌──────────▼───────────────────────────────┐
-                          │  PostgreSQL 16 (172.23.90.1:5432)       │
-                          │  database: fleet_ops    user: amctl     │
+                          │  PostgreSQL 16 (172.23.90.1:5432)        │
+                          │  database: fleet_ops    user: amctl      │
                           │  ┌────────────────────────────────────┐  │
-                          │  │ agents          (registry)        │  │
-                          │  │ health_checks   (continuous)      │  │
-                          │  │ credentials     (fingerprints)    │  │
-                          │  │ deployments     (release history) │  │
-                          │  │ model_configs   (per-agent LLMs)  │  │
-                          │  │ audit_log       (all mutations)   │  │
-                          │  │ releases        (bundles + hashes)│  │
+                          │  │ agents          (registry)         │  │
+                          │  │ health_checks   (continuous)       │  │
+                          │  │ credentials     (fingerprints)     │  │
+                          │  │ deployments     (release history)  │  │
+                          │  │ model_configs   (per-agent LLMs)   │  │
+                          │  │ audit_log       (all mutations)    │  │
+                          │  │ releases        (bundles + hashes) │  │
                           │  └────────────────────────────────────┘  │
                           │                                          │
-                          │  database: open_brain   user: openbrain │
-                          │  (unchanged -- Open Brain MCP server)   │
+                          │  database: open_brain   user: openbrain  │
+                          │  (unchanged -- Open Brain MCP server)    │
                           └──────────────────────────────────────────┘
 ```
+
+
 
 ### Database
 
@@ -96,7 +100,11 @@ Auth:     API key (v1), JWT with role-based access (v2)
 
 ---
 
+
+
 ## Phase 1: Platform Foundation
+
+
 
 ### Why first
 
@@ -109,7 +117,11 @@ Nothing else can happen without the server, database, agent registry, and CLI cl
 - [x] OpenBrain Postgres instance accessible from g2s host
 - [x] No active fleet incidents
 
+
+
 ### Deliverables
+
+
 
 #### Database
 
@@ -176,6 +188,8 @@ CREATE TABLE audit_log (
 CREATE INDEX audit_log_agent_time ON audit_log(agent_id, created_at DESC);
 ```
 
+
+
 #### Server
 
 - [x] FastAPI application in `multi-instance-deploy/am-ctl/`
@@ -239,6 +253,8 @@ multi-instance-deploy/am-ctl/
 - [ ] Alembic migrations for schema versioning
 - [x] Systemd service file for `am-ctl` server on g2s
 
+
+
 #### CLI client
 
 - [x] `am-ctl agents list` -- tabular fleet overview
@@ -246,33 +262,45 @@ multi-instance-deploy/am-ctl/
 - [x] `am-ctl status` -- fleet-wide health summary
 - [x] `am-ctl --output json` -- JSON output for scripting
 
+
+
 #### Bootstrap
 
 - [x] Import existing fleet state into the `agents` table (5 agents from incident report completion gates)
 - [x] Import required rooms (Fleet HQ Clean for all agents)
 - [x] Import credential fingerprints from one-time repair records
 
+
+
 ### Progress gate
 
-| # | Criterion | Verification |
-|---|-----------|-------------|
-| 1 | `fleet_ops` database exists with all tables | **PASSED** 2026-10-17 -- `psql -U amctl -d fleet_ops -c '\dt'` shows 5 tables (agents, required_rooms, credential_fingerprints, health_checks, audit_log) |
-| 2 | All 5 agents in the registry | **PASSED** 2026-10-17 -- `am-ctl agents list` shows 5 agents with correct identities, rooms, and credential fingerprints |
-| 3 | Agent status endpoint returns live data | **PASSED** 2026-10-17 -- `am-ctl agents show agent0-2` shows 3 containers UP, 2 bots (rust), MCP/watchdog/supervisord OK, Matrix `/whoami` MATCH |
-| 4 | API key authentication works | **PASSED** 2026-10-17 -- Unauthenticated/wrong `X-API-Key` returns `HTTP 401`; valid key returns `HTTP 200` |
-| 5 | Audit log captures mutations | **PASSED** 2026-10-17 -- `PUT /api/v1/agents/agent0-2` records `agent_update` entry with `old`/`new` diff in `audit_log` |
-| 6 | Server runs as systemd service | **PASSED** 2026-10-17 -- `systemctl status am-ctl` shows `active (running)` (enabled at `/etc/systemd/system/am-ctl.service`, CLI linked at `/usr/local/bin/am-ctl`) |
-| 7 | CLI output matches direct API call | **PASSED** 2026-10-17 -- `am-ctl agents list --output json` matches `curl /api/v1/agents` byte-for-byte |
-| 8 | No impact on running fleet | **PASSED** 2026-10-17 -- All 5 agents (`agent0-1` .. `agent0-5`) verified UP with `/whoami` MATCH, MCP/watchdog/supervisord OK, and 5/5 active in `am-ctl status` |
+
+| #   | Criterion                                   | Verification                                                                                                                                                         |
+| --- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `fleet_ops` database exists with all tables | **PASSED** 2026-10-17 -- `psql -U amctl -d fleet_ops -c '\dt'` shows 5 tables (agents, required_rooms, credential_fingerprints, health_checks, audit_log)            |
+| 2   | All 5 agents in the registry                | **PASSED** 2026-10-17 -- `am-ctl agents list` shows 5 agents with correct identities, rooms, and credential fingerprints                                             |
+| 3   | Agent status endpoint returns live data     | **PASSED** 2026-10-17 -- `am-ctl agents show agent0-2` shows 3 containers UP, 2 bots (rust), MCP/watchdog/supervisord OK, Matrix `/whoami` MATCH                     |
+| 4   | API key authentication works                | **PASSED** 2026-10-17 -- Unauthenticated/wrong `X-API-Key` returns `HTTP 401`; valid key returns `HTTP 200`                                                          |
+| 5   | Audit log captures mutations                | **PASSED** 2026-10-17 -- `PUT /api/v1/agents/agent0-2` records `agent_update` entry with `old`/`new` diff in `audit_log`                                             |
+| 6   | Server runs as systemd service              | **PASSED** 2026-10-17 -- `systemctl status am-ctl` shows `active (running)` (enabled at `/etc/systemd/system/am-ctl.service`, CLI linked at `/usr/local/bin/am-ctl`) |
+| 7   | CLI output matches direct API call          | **PASSED** 2026-10-17 -- `am-ctl agents list --output json` matches `curl /api/v1/agents` byte-for-byte                                                              |
+| 8   | No impact on running fleet                  | **PASSED** 2026-10-17 -- All 5 agents (`agent0-1` .. `agent0-5`) verified UP with `/whoami` MATCH, MCP/watchdog/supervisord OK, and 5/5 active in `am-ctl status`    |
+
+
+
 
 ### Risk assessment
 
-| Dimension | Rating | Justification |
-|-----------|--------|---------------|
-| **Overall risk** | **LOW** | Additive -- new service alongside existing scripts; nothing removed yet |
-| Blast radius | None | Platform observes the fleet; doesn't control it yet |
-| Rollback | `systemctl stop am-ctl`; fleet continues with existing scripts |
-| Failure mode | Incorrect registry data could mislead operators; mitigate by verifying imports against live state |
+
+| Dimension        | Rating                                                                                            | Justification                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Overall risk** | **LOW**                                                                                           | Additive -- new service alongside existing scripts; nothing removed yet |
+| Blast radius     | None                                                                                              | Platform observes the fleet; doesn't control it yet                     |
+| Rollback         | `systemctl stop am-ctl`; fleet continues with existing scripts                                    |                                                                         |
+| Failure mode     | Incorrect registry data could mislead operators; mitigate by verifying imports against live state |                                                                         |
+
+
+
 
 ### Caution
 
@@ -280,7 +308,11 @@ The `pg_hba.conf` change requires a Postgres reload. Coordinate with OpenBrain t
 
 ---
 
+
+
 ## Phase 2: Health & Continuous Monitoring
+
+
 
 ### Why second
 
@@ -293,10 +325,14 @@ Replace the three external cron healthchecks with continuous API-driven monitori
 - `fleet-membership-healthcheck.sh` -- **absorbed** into continuous membership monitoring
 - `validate-instance.sh` -- **absorbed** into per-agent health check API
 
+
+
 ### Preconditions
 
 - [x] Phase 1 platform running with all 5 agents in registry
 - [x] Server can reach all agent homeservers and containers
+
+
 
 ### Deliverables
 
@@ -354,26 +390,36 @@ CREATE TABLE alert_rules (
   - `am-ctl health agent0-3` -- detailed health for one agent
   - `am-ctl health --check agent0-3` -- trigger immediate check
 
+
+
 ### Progress gate
 
-| # | Criterion | Verification |
-|---|-----------|-------------|
-| 1 | All 7 check types produce accurate results for all 5 agents | **PASSED** 2026-10-17 -- All 8 check types (`matrix_auth`, `identity`, `membership`, `a0_auth`, `mcp`, `process`, `federation`, `sync_cursor`) verified across `agent0-1` .. `agent0-5`; caught & repaired `agent0-5` stale MCP token (`M_UNKNOWN_TOKEN`) |
-| 2 | Health state persists across server restarts | **PASSED** 2026-10-17 -- `systemctl restart am-ctl` preserves materialized `health_state` in `fleet_ops` |
-| 3 | Membership auto-repair works | **PASSED** 2026-10-17 -- Left Fleet HQ Clean (`!gahcrWFWAUJQPPkuQy:v-site.net`) on `agent0-2`; `am-ctl health --check agent0-2` invited via `@admin:v-site.net`, joined from `agent0-2`, and logged `membership_auto_repair` to `audit_log` |
-| 4 | Terminal config failure stops bot and alerts | **PASSED** 2026-10-17 -- Corrupted registry identity on `agent0-2`; health check classified as `TERMINAL_CONFIG`, stopped `run_bot` via supervisord, and opened alert; auto-resolved alert upon restore |
-| 5 | Federation key refresh works | **PASSED** 2026-10-17 -- Synapse notary query (`/_matrix/key/v2/query/{fqdn}`) verified for all 5 agent homeservers |
-| 6 | Cron healthchecks disabled with no regression | **PASSED** 2026-10-17 -- 3 cron jobs commented out in `g2s` crontab (backup at `/tmp/crontab.bak.20261017`); background monitor active on `am-ctl.service` |
-| 7 | Health API responds within 500ms for fleet query | **PASSED** 2026-10-17 -- `GET /api/v1/health/fleet` responds in `6.8ms` (`0.0068s`) from materialized `health_state` |
+
+| #   | Criterion                                                   | Verification                                                                                                                                                                                                                                              |
+| --- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | All 7 check types produce accurate results for all 5 agents | **PASSED** 2026-10-17 -- All 8 check types (`matrix_auth`, `identity`, `membership`, `a0_auth`, `mcp`, `process`, `federation`, `sync_cursor`) verified across `agent0-1` .. `agent0-5`; caught & repaired `agent0-5` stale MCP token (`M_UNKNOWN_TOKEN`) |
+| 2   | Health state persists across server restarts                | **PASSED** 2026-10-17 -- `systemctl restart am-ctl` preserves materialized `health_state` in `fleet_ops`                                                                                                                                                  |
+| 3   | Membership auto-repair works                                | **PASSED** 2026-10-17 -- Left Fleet HQ Clean (`!gahcrWFWAUJQPPkuQy:v-site.net`) on `agent0-2`; `am-ctl health --check agent0-2` invited via `@admin:v-site.net`, joined from `agent0-2`, and logged `membership_auto_repair` to `audit_log`               |
+| 4   | Terminal config failure stops bot and alerts                | **PASSED** 2026-10-17 -- Corrupted registry identity on `agent0-2`; health check classified as `TERMINAL_CONFIG`, stopped `run_bot` via supervisord, and opened alert; auto-resolved alert upon restore                                                   |
+| 5   | Federation key refresh works                                | **PASSED** 2026-10-17 -- Synapse notary query (`/_matrix/key/v2/query/{fqdn}`) verified for all 5 agent homeservers                                                                                                                                       |
+| 6   | Cron healthchecks disabled with no regression               | **PASSED** 2026-10-17 -- 3 cron jobs commented out in `g2s` crontab (backup at `/tmp/crontab.bak.20261017`); background monitor active on `am-ctl.service`                                                                                                |
+| 7   | Health API responds within 500ms for fleet query            | **PASSED** 2026-10-17 -- `GET /api/v1/health/fleet` responds in `6.8ms` (`0.0068s`) from materialized `health_state`                                                                                                                                      |
+
+
+
 
 ### Risk assessment
 
-| Dimension | Rating | Justification |
-|-----------|--------|---------------|
-| **Overall risk** | **MEDIUM** | Replacing 3 proven cron scripts with new monitoring; gap if the platform goes down |
-| Blast radius | Fleet-wide monitoring gap if server crashes; agents themselves keep running |
-| Rollback | Re-enable cron scripts; they're idempotent |
-| Failure mode | Monitoring stops -> drift goes undetected -> membership loss or auth failure persists longer |
+
+| Dimension        | Rating                                                                                       | Justification                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **Overall risk** | **MEDIUM**                                                                                   | Replacing 3 proven cron scripts with new monitoring; gap if the platform goes down |
+| Blast radius     | Fleet-wide monitoring gap if server crashes; agents themselves keep running                  |                                                                                    |
+| Rollback         | Re-enable cron scripts; they're idempotent                                                   |                                                                                    |
+| Failure mode     | Monitoring stops -> drift goes undetected -> membership loss or auth failure persists longer |                                                                                    |
+
+
+
 
 ### Mitigation
 
@@ -382,6 +428,8 @@ CREATE TABLE alert_rules (
 - Server crash doesn't affect agents; only monitoring and auto-repair stop.
 
 ---
+
+
 
 ## Phase 3: Credential Authority & Identity
 
@@ -396,11 +444,15 @@ The credential contamination was the root cause of the incident. With the platfo
 - `create-instance.sh` -- **modified** (remove `A0_API_KEY` random generation)
 - `finalize-instance.sh` -- **modified** (remove Step 7b duplicate derivation; call API for credential registration)
 
+
+
 ### Preconditions
 
 - [x] Phase 2 health monitoring operational
 - [x] Agent Zero `create_auth_token()` derivation algorithm documented and verified
 - [x] Platform can reach Agent Zero API inside each container
+
+
 
 ### Deliverables
 
@@ -432,26 +484,36 @@ CREATE TABLE trusted_senders (
   - `am-ctl credentials verify agent0-3` -- verify agent's credential is valid
   - `am-ctl credentials check-collisions` -- fleet-wide fingerprint collision check
 
+
+
 ### Progress gate
 
-| # | Criterion | Verification |
-|---|-----------|-------------|
-| 1 | Only one code path derives the A0 credential | **PASSED** 2026-10-17 -- `rg 'A0_API_KEY.*sha256\|create_auth_token' --type sh` returns only `templates/scripts/derive-a0-token.sh` |
-| 2 | Canary on Agent0-2: bot starts with derived credential, responds to message | **PASSED** 2026-10-17 -- `agent0-2` started via `run-bot-wrapper.sh` -> `derive-a0-token.sh` -> `.a0-api-key` (`0600`), authenticated to Agent Zero (`ctx=RR0dTvV7`), and replied in Fleet HQ Clean |
-| 3 | Credential fingerprints recorded in platform DB | **PASSED** 2026-10-17 -- `am-ctl credentials verify agent0-2` confirms `canonical == deployed == registry == 83dae4ffc6b3` (`source=secret_file`, `a0_probe=PASS`) |
-| 4 | Cross-fleet collision detected | **PASSED** 2026-10-17 -- Simulated duplicate fingerprint on `agent0-3`; `am-ctl credentials check-collisions` flagged `agent0-2, agent0-3` collision and exited non-zero; restored clean state |
-| 5 | `create-instance.sh` has no `A0_API_KEY` generation | **PASSED** 2026-10-17 -- `grep -c 'A0_API_KEY' scripts/create-instance.sh` returns `0` |
-| 6 | `finalize-instance.sh` Step 7b removed | **PASSED** 2026-10-17 -- `compute_a0_token()` and Step 7b inline sha256 derivation removed; replaced with `am-ctl credentials verify` |
-| 7 | Bot `.env` no longer contains `A0_API_KEY` | **PASSED** 2026-10-17 -- `grep -c 'A0_API_KEY' /opt/agent-zero/agent0-2/usr/workdir/matrix-bot/.env` returns `0` |
+
+| #   | Criterion                                                                   | Verification                                                                                                                                                                                        |
+| --- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Only one code path derives the A0 credential                                | **PASSED** 2026-10-17 -- `rg 'A0_API_KEY.*sha256                                                                                                                                                    |
+| 2   | Canary on Agent0-2: bot starts with derived credential, responds to message | **PASSED** 2026-10-17 -- `agent0-2` started via `run-bot-wrapper.sh` -> `derive-a0-token.sh` -> `.a0-api-key` (`0600`), authenticated to Agent Zero (`ctx=RR0dTvV7`), and replied in Fleet HQ Clean |
+| 3   | Credential fingerprints recorded in platform DB                             | **PASSED** 2026-10-17 -- `am-ctl credentials verify agent0-2` confirms `canonical == deployed == registry == 83dae4ffc6b3` (`source=secret_file`, `a0_probe=PASS`)                                  |
+| 4   | Cross-fleet collision detected                                              | **PASSED** 2026-10-17 -- Simulated duplicate fingerprint on `agent0-3`; `am-ctl credentials check-collisions` flagged `agent0-2, agent0-3` collision and exited non-zero; restored clean state      |
+| 5   | `create-instance.sh` has no `A0_API_KEY` generation                         | **PASSED** 2026-10-17 -- `grep -c 'A0_API_KEY' scripts/create-instance.sh` returns `0`                                                                                                              |
+| 6   | `finalize-instance.sh` Step 7b removed                                      | **PASSED** 2026-10-17 -- `compute_a0_token()` and Step 7b inline sha256 derivation removed; replaced with `am-ctl credentials verify`                                                               |
+| 7   | Bot `.env` no longer contains `A0_API_KEY`                                  | **PASSED** 2026-10-17 -- `grep -c 'A0_API_KEY' /opt/agent-zero/agent0-2/usr/workdir/matrix-bot/.env` returns `0`                                                                                    |
+
+
+
 
 ### Risk assessment
 
-| Dimension | Rating | Justification |
-|-----------|--------|---------------|
-| **Overall risk** | **HIGH** | Modifying credential delivery on a live fleet; errors = total bot silence |
-| Blast radius | Per-node (sequential rollout) |
-| Rollback | Restore `.env.sync-backup` + `supervisorctl restart run_bot` |
-| Failure mode | Identical to original incident -- bot gets 401 from Agent Zero |
+
+| Dimension        | Rating                                                         | Justification                                                             |
+| ---------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Overall risk** | **HIGH**                                                       | Modifying credential delivery on a live fleet; errors = total bot silence |
+| Blast radius     | Per-node (sequential rollout)                                  |                                                                           |
+| Rollback         | Restore `.env.sync-backup` + `supervisorctl restart run_bot`   |                                                                           |
+| Failure mode     | Identical to original incident -- bot gets 401 from Agent Zero |                                                                           |
+
+
+
 
 ### Mitigation
 
@@ -460,6 +522,8 @@ CREATE TABLE trusted_senders (
 - Exporter failure = bot refuses to start (fail closed).
 
 ---
+
+
 
 ## Phase 4: Reconciliation Engine
 
@@ -476,11 +540,15 @@ With agent registry (Phase 1), continuous health (Phase 2), and credential autho
 - `fix-agentX-services.sh` -- **superseded** by `am-ctl reconcile apply`
 - `finalize-fleet.sh` -- **retired** (one-shot March 2026, no longer relevant)
 
+
+
 ### Preconditions
 
 - [x] Phases 1-3 operational and passing their gates
 - [x] Health monitoring producing accurate state in DB
 - [x] All fleet scripts inventoried (see Script Disposition below)
+
+
 
 ### Deliverables
 
@@ -525,26 +593,36 @@ CREATE TABLE reconcile_runs (
   - `am-ctl reconcile plan agent0-3` -- show proposed actions
   - `am-ctl reconcile apply agent0-3 [--yes]` -- apply with confirmation
 
+
+
 ### Progress gate
 
-| # | Criterion | Verification |
-|---|-----------|-------------|
-| 1 | `am-ctl reconcile check` matches manual verification for all 5 agents | **PASSED** 2026-10-17 -- Reports all 5 agents `CLEAN` across all 6 drift checks after sequential rollout |
-| 2 | `check` creates zero mutations (DB read-only, no Docker writes) | **PASSED** 2026-10-17 -- `audit_log` row count unchanged before and after fleet & per-agent `check` and `plan` |
-| 3 | `plan` shows correct actions for intentionally drifted agent | **PASSED** 2026-10-17 -- `am-ctl reconcile plan` outputs 4 ordered steps (`sync_artifacts`, `remove_env_a0_api_key`, `derive_canonical_secret`, `restart_service`) on drifted nodes and `0` steps on clean nodes |
-| 4 | `apply` fixes drift and subsequent `check` is clean | **PASSED** 2026-10-17 -- Sequentially applied across `agent0-2` -> `agent0-3` -> `agent0-4` -> `agent0-5` -> `agent0-1`; post-apply `reconcile check` is 5/5 `CLEAN` |
-| 5 | Second `apply` on clean agent is a no-op | **PASSED** 2026-10-17 -- Second `am-ctl reconcile apply agent0-2 --yes` returned `noop=True` with zero new `audit_log` rows |
-| 6 | Cross-fleet fingerprint collision flagged | **PASSED** 2026-10-17 -- `check_fleet_drift` cross-checks both DB registry and live deployed fingerprints |
-| 7 | All `apply` actions logged to audit table | **PASSED** 2026-10-17 -- All `reconcile_apply:*` steps recorded in `audit_log` (rows 8-25) and `reconcile_runs` |
+
+| #   | Criterion                                                             | Verification                                                                                                                                                                                                     |
+| --- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `am-ctl reconcile check` matches manual verification for all 5 agents | **PASSED** 2026-10-17 -- Reports all 5 agents `CLEAN` across all 6 drift checks after sequential rollout                                                                                                         |
+| 2   | `check` creates zero mutations (DB read-only, no Docker writes)       | **PASSED** 2026-10-17 -- `audit_log` row count unchanged before and after fleet & per-agent `check` and `plan`                                                                                                   |
+| 3   | `plan` shows correct actions for intentionally drifted agent          | **PASSED** 2026-10-17 -- `am-ctl reconcile plan` outputs 4 ordered steps (`sync_artifacts`, `remove_env_a0_api_key`, `derive_canonical_secret`, `restart_service`) on drifted nodes and `0` steps on clean nodes |
+| 4   | `apply` fixes drift and subsequent `check` is clean                   | **PASSED** 2026-10-17 -- Sequentially applied across `agent0-2` -> `agent0-3` -> `agent0-4` -> `agent0-5` -> `agent0-1`; post-apply `reconcile check` is 5/5 `CLEAN`                                             |
+| 5   | Second `apply` on clean agent is a no-op                              | **PASSED** 2026-10-17 -- Second `am-ctl reconcile apply agent0-2 --yes` returned `noop=True` with zero new `audit_log` rows                                                                                      |
+| 6   | Cross-fleet fingerprint collision flagged                             | **PASSED** 2026-10-17 -- `check_fleet_drift` cross-checks both DB registry and live deployed fingerprints                                                                                                        |
+| 7   | All `apply` actions logged to audit table                             | **PASSED** 2026-10-17 -- All `reconcile_apply:`* steps recorded in `audit_log` (rows 8-25) and `reconcile_runs`                                                                                                  |
+
+
+
 
 ### Risk assessment
 
-| Dimension | Rating | Justification |
-|-----------|--------|---------------|
-| **Overall risk** | **HIGH** | `apply` mutates live configuration; bugs can stop agents |
-| Blast radius | Per-agent (v1 enforces single-agent apply) |
-| Rollback | Pre-apply snapshots + `.env.sync-backup` |
-| Failure mode | Corrupt config -> bot fails preflight (Phase 8) -> stays down (fail-closed, correct but impactful) |
+
+| Dimension        | Rating                                                                                             | Justification                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **Overall risk** | **HIGH**                                                                                           | `apply` mutates live configuration; bugs can stop agents |
+| Blast radius     | Per-agent (v1 enforces single-agent apply)                                                         |                                                          |
+| Rollback         | Pre-apply snapshots + `.env.sync-backup`                                                           |                                                          |
+| Failure mode     | Corrupt config -> bot fails preflight (Phase 8) -> stays down (fail-closed, correct but impactful) |                                                          |
+
+
+
 
 ### Mitigation
 
@@ -555,7 +633,11 @@ CREATE TABLE reconcile_runs (
 
 ---
 
+
+
 ## Phase 5: Database & Infrastructure Backup Strategy
+
+
 
 ### Why fifth
 
@@ -563,20 +645,24 @@ The PostgreSQL 16 + pgvector instance on `172.23.90.1:5432` (`open-brain-db`) no
 
 ### Scope of protection
 
-1. **PostgreSQL Databases (`open-brain-db` container on `g2s`)**:
-   - `open_brain` -- collective vector memory (`thoughts` table + HNSW index + metadata)
-   - `fleet_ops` -- `am-ctl` control plane state (`agents`, `required_rooms`, `credential_fingerprints`, `trusted_senders`, `health_state`, `health_checks`, `alert_rules`, `alerts`, `reconcile_runs`, `audit_log`)
-   - Cluster globals (`pg_dumpall --globals-only`) -- roles (`openbrain`, `amctl`) and permissions
-2. **Infrastructure & Control-Plane State (`g2s`)**:
-   - OpenBrain compose, `.env`, `init-db/`, and `pg-conf/pg_hba_custom.conf`
-   - Per-agent Continuwuity signing keys and TLS certificates (`/opt/agent-zero/agent0-{1..5}/mhs/server.{crt,key}`)
-   - Per-agent non-ephemeral configuration (`docker-compose.yml`, `usr/settings.json`, `usr/workdir/matrix-bot/room_contexts.json`)
+1. **PostgreSQL Databases (**`open-brain-db` **container on** `g2s`**)**:
+  - `open_brain` -- collective vector memory (`thoughts` table + HNSW index + metadata)
+  - `fleet_ops` -- `am-ctl` control plane state (`agents`, `required_rooms`, `credential_fingerprints`, `trusted_senders`, `health_state`, `health_checks`, `alert_rules`, `alerts`, `reconcile_runs`, `audit_log`)
+  - Cluster globals (`pg_dumpall --globals-only`) -- roles (`openbrain`, `amctl`) and permissions
+2. **Infrastructure & Control-Plane State (**`g2s`**)**:
+  - OpenBrain compose, `.env`, `init-db/`, and `pg-conf/pg_hba_custom.conf`
+  - Per-agent Continuwuity signing keys and TLS certificates (`/opt/agent-zero/agent0-{1..5}/mhs/server.{crt,key}`)
+  - Per-agent non-ephemeral configuration (`docker-compose.yml`, `usr/settings.json`, `usr/workdir/matrix-bot/room_contexts.json`)
+
+
 
 ### Preconditions
 
 - [x] Phases 1-4 operational (`fleet_ops` and `open_brain` databases active on `172.23.90.1:5432`)
 - [x] Sufficient local disk space on `g2s` under `/opt/agent-zero/backups/`
 - [x] SSH / `rsync` connectivity from `g2s` to `tarnover` (or designated off-host backup target)
+
+
 
 ### Deliverables
 
@@ -621,27 +707,37 @@ CREATE INDEX backup_runs_time ON backup_runs(created_at DESC);
   - `am-ctl backup list` -- show backup catalog, freshness, and off-site sync status
   - `am-ctl backup verify [backup_id]` -- verify backup integrity via scratch restore
 
+
+
 ### Progress gate
 
-| # | Criterion | Verification |
-|---|-----------|-------------|
-| 1 | `am-ctl backup run` produces valid dumps for `open_brain`, `fleet_ops`, globals, and infra configs | **PASSED** 2026-10-17 -- Produced `open_brain` (2.0MB), `fleet_ops` (115KB), `globals` (0.9KB), and `infra_configs` (14KB) with verified `SHA256SUMS` |
-| 2 | Scratch-DB restore verification passes for both `open_brain` and `fleet_ops` | **PASSED** 2026-10-17 -- `am-ctl backup verify` restored `296/296` thoughts (`open_brain`, HNSW index OK) and `5/5` agents (`fleet_ops`) into scratch DBs and cleaned up |
-| 3 | Daily schedule active (systemd timer or `am-ctl` scheduler) | **PASSED** 2026-10-17 -- `am-ctl-backup.timer` enabled and active (`OnCalendar=*-*-* 03:00:00 UTC`), running `fleet-backup.sh --type daily_full --verify` |
-| 4 | Retention pruning works without deleting recent backups | **PASSED** 2026-10-17 -- Simulated `2026-08-01` (>30d) pruned automatically during backup run; `2026-10-10` (<30d) preserved |
-| 5 | Off-host copy verified | **PASSED** 2026-10-17 -- Synced via passwordless SSH/rsync to `tarnover:/home/l0r3zz/Dropbox/GEN-AI/AGENT-MATRIX/backups/daily/2026-10-17/` and passed `sha256sum -c SHA256SUMS` locally |
-| 6 | Stale/failed backup triggers platform alert | **PASSED** 2026-10-17 -- Simulated 30h backup age; `backup_freshness` alert opened in `am-ctl alerts list` and auto-resolved upon fresh timestamp |
+
+| #   | Criterion                                                                                          | Verification                                                                                                                                                                             |
+| --- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `am-ctl backup run` produces valid dumps for `open_brain`, `fleet_ops`, globals, and infra configs | **PASSED** 2026-10-17 -- Produced `open_brain` (2.0MB), `fleet_ops` (115KB), `globals` (0.9KB), and `infra_configs` (14KB) with verified `SHA256SUMS`                                    |
+| 2   | Scratch-DB restore verification passes for both `open_brain` and `fleet_ops`                       | **PASSED** 2026-10-17 -- `am-ctl backup verify` restored `296/296` thoughts (`open_brain`, HNSW index OK) and `5/5` agents (`fleet_ops`) into scratch DBs and cleaned up                 |
+| 3   | Daily schedule active (systemd timer or `am-ctl` scheduler)                                        | **PASSED** 2026-10-17 -- `am-ctl-backup.timer` enabled and active (`OnCalendar=*-*-* 03:00:00 UTC`), running `fleet-backup.sh --type daily_full --verify`                                |
+| 4   | Retention pruning works without deleting recent backups                                            | **PASSED** 2026-10-17 -- Simulated `2026-08-01` (>30d) pruned automatically during backup run; `2026-10-10` (<30d) preserved                                                             |
+| 5   | Off-host copy verified                                                                             | **PASSED** 2026-10-17 -- Synced via passwordless SSH/rsync to `tarnover:/home/l0r3zz/Dropbox/GEN-AI/AGENT-MATRIX/backups/daily/2026-10-17/` and passed `sha256sum -c SHA256SUMS` locally |
+| 6   | Stale/failed backup triggers platform alert                                                        | **PASSED** 2026-10-17 -- Simulated 30h backup age; `backup_freshness` alert opened in `am-ctl alerts list` and auto-resolved upon fresh timestamp                                        |
+
+
+
 
 ### Risk assessment
 
-| Dimension | Rating | Justification |
-|-----------|--------|---------------|
-| **Overall risk** | **LOW** | `pg_dump` is non-blocking (MVCC snapshot); scratch restore runs in an isolated temporary database |
-| Blast radius | None | Does not lock tables or interrupt `open-brain-mcp` or `am-ctl` |
-| Rollback | Remove timer/schedule; delete scratch database if a verification job is interrupted |
-| Failure mode | Disk exhaustion if retention pruning fails -> mitigated by size tracking and pruning check; silent dump corruption -> mitigated by automated `am-ctl backup verify` scratch restore |
+
+| Dimension        | Rating                                                                                                                                                                              | Justification                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Overall risk** | **LOW**                                                                                                                                                                             | `pg_dump` is non-blocking (MVCC snapshot); scratch restore runs in an isolated temporary database |
+| Blast radius     | None                                                                                                                                                                                | Does not lock tables or interrupt `open-brain-mcp` or `am-ctl`                                    |
+| Rollback         | Remove timer/schedule; delete scratch database if a verification job is interrupted                                                                                                 |                                                                                                   |
+| Failure mode     | Disk exhaustion if retention pruning fails -> mitigated by size tracking and pruning check; silent dump corruption -> mitigated by automated `am-ctl backup verify` scratch restore |                                                                                                   |
+
 
 ---
+
+
 
 ## Phase 6: Fleet Deployment
 
@@ -658,11 +754,15 @@ With reconciliation (Phase 4) and verified database/infrastructure backups (Phas
 - `update-fleet-v2.sh` -- **retired** (earlier version of update-fleet)
 - `deploy-supervisord-fleet.sh` -- **absorbed** into deployment pipeline
 
+
+
 ### Preconditions
 
 - [x] Phase 4 reconciler operational
 - [x] Phase 5 automated backups operational (pre-deploy backup hook available)
 - [x] Release bundle format defined (tarball with checksum manifest)
+
+
 
 ### Deliverables
 
@@ -705,29 +805,41 @@ CREATE TABLE deployments (
   - `am-ctl deploy version --version v1.12 [--instances 2,3]` -- Docker image update
   - `am-ctl deploy status` -- fleet deployment overview
 
+
+
 ### Progress gate
 
-| # | Criterion | Verification |
-|---|-----------|-------------|
-| 1 | Release bundle registered with correct checksums | **PASSED** 2026-10-17 -- `am-ctl deploy release upload --version v1.0.0` packaged `/opt/agent-zero/releases/am-release-v1.0.0.tar.gz` (`sha256: 836e312b22d51b93...`) with 5 artifact hashes |
-| 2 | Deploy to canary (Agent0-2) succeeds and passes all health checks | **PASSED** 2026-10-17 -- `am-ctl deploy agent0-2 --release v1.0.0` installed artifacts atomically, passed health & drift checks, and sequentially rolled out to `agent0-3, 4, 5, 1` |
-| 3 | Tampered artifact detected | **PASSED** 2026-10-17 -- Appended comment to `derive-a0-token.sh` on `agent0-2`; `am-ctl reconcile check agent0-2` flagged `artifact_hash: DRIFT`; restored via `am-ctl deploy` |
-| 4 | Docker image update works for single agent | **PASSED** 2026-10-17 -- `am-ctl deploy version --version v2.14 --instances 2` verified running version + compose version parity and logged to `audit_log` |
-| 5 | Instance-local state preserved across deploy | **PASSED** 2026-10-17 -- Verified `bot_env_preserved=True` and `room_contexts_preserved=True` across all 5 deployments |
-| 6 | `update-fleet.sh --status` equivalent works | **PASSED** 2026-10-17 -- `am-ctl deploy status` displays container state, running A0 version (`v2.14`), compose tag (`v2.14`), release (`v1.0.0`), bot count (`1`), MCP (`r2:0.1.1`), supervisord (`OK`), and reconcile (`CLEAN`) |
+
+| #   | Criterion                                                         | Verification                                                                                                                                                                                                                      |
+| --- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Release bundle registered with correct checksums                  | **PASSED** 2026-10-17 -- `am-ctl deploy release upload --version v1.0.0` packaged `/opt/agent-zero/releases/am-release-v1.0.0.tar.gz` (`sha256: 836e312b22d51b93...`) with 5 artifact hashes                                      |
+| 2   | Deploy to canary (Agent0-2) succeeds and passes all health checks | **PASSED** 2026-10-17 -- `am-ctl deploy agent0-2 --release v1.0.0` installed artifacts atomically, passed health & drift checks, and sequentially rolled out to `agent0-3, 4, 5, 1`                                               |
+| 3   | Tampered artifact detected                                        | **PASSED** 2026-10-17 -- Appended comment to `derive-a0-token.sh` on `agent0-2`; `am-ctl reconcile check agent0-2` flagged `artifact_hash: DRIFT`; restored via `am-ctl deploy`                                                   |
+| 4   | Docker image update works for single agent                        | **PASSED** 2026-10-17 -- `am-ctl deploy version --version v2.14 --instances 2` verified running version + compose version parity and logged to `audit_log`                                                                        |
+| 5   | Instance-local state preserved across deploy                      | **PASSED** 2026-10-17 -- Verified `bot_env_preserved=True` and `room_contexts_preserved=True` across all 5 deployments                                                                                                            |
+| 6   | `update-fleet.sh --status` equivalent works                       | **PASSED** 2026-10-17 -- `am-ctl deploy status` displays container state, running A0 version (`v2.14`), compose tag (`v2.14`), release (`v1.0.0`), bot count (`1`), MCP (`r2:0.1.1`), supervisord (`OK`), and reconcile (`CLEAN`) |
+
+
+
 
 ### Risk assessment
 
-| Dimension | Rating | Justification |
-|-----------|--------|---------------|
-| **Overall risk** | **MEDIUM** | Replaces proven deployment scripts; bad deploy = bot outage |
-| Blast radius | Per-agent (sequential); fleet-wide only if operator explicitly requests |
-| Rollback | Previous release bundle + `am-ctl deploy agent0-N --release <previous>` |
-| Failure mode | Bad bundle -> preflight fails -> bot stays down (correct behavior) |
+
+| Dimension        | Rating                                                                  | Justification                                               |
+| ---------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Overall risk** | **MEDIUM**                                                              | Replaces proven deployment scripts; bad deploy = bot outage |
+| Blast radius     | Per-agent (sequential); fleet-wide only if operator explicitly requests |                                                             |
+| Rollback         | Previous release bundle + `am-ctl deploy agent0-N --release <previous>` |                                                             |
+| Failure mode     | Bad bundle -> preflight fails -> bot stays down (correct behavior)      |                                                             |
+
 
 ---
 
+
+
 ## Phase 7: Model Management
+
+
 
 ### Why seventh
 
@@ -737,10 +849,14 @@ CREATE TABLE deployments (
 
 - `fleet-models.sh` -- **absorbed** into `am-ctl models`
 
+
+
 ### Preconditions
 
 - [x] Platform operational with agent registry
 - [x] Model configuration format documented
+
+
 
 ### Deliverables
 
@@ -768,24 +884,34 @@ CREATE TABLE model_configs (
   - `am-ctl models set agent0-3 --chat-model openrouter/moonshotai/kimi-k2.6`
   - `am-ctl models diagnose` -- check model availability
 
+
+
 ### Progress gate
 
-| # | Criterion | Verification |
-|---|-----------|-------------|
-| 1 | `am-ctl models` output matches `fleet-models.sh` output | **PASSED** 2026-10-17 -- Upgraded for Agent Zero v2.14 preset-based architecture (`config.json` + `presets.yaml`, where legacy `fleet-models.sh` reported `unknown`); resolves active preset + `chat`, `utility`, and `embedding` models across all 5 agents |
-| 2 | Model change via API reflected in container | **PASSED** 2026-10-17 -- `am-ctl models set agent0-3 --chat-model openrouter/moonshotai/kimi-k2.6` updated `/a0/usr/plugins/_model_config/presets.yaml` + host `.env`; restored to `openrouter/deepseek/deepseek-v4-pro` |
-| 3 | Model change logged in audit table | **PASSED** 2026-10-17 -- Verified `model_config_update` entries in `audit_log` (rows 37-38) with `old`/`new` diff and 20 rows synced in `model_configs` |
-| 4 | `fleet-models.sh` disabled with no regression | **PASSED** 2026-10-17 -- `fleet-models.sh`, `update-fleet.sh`, `update-fleet-v2.sh`, and `sync-fleet.sh` moved to `scripts/legacy/` (`chmod -x`) on `g2s` |
+
+| #   | Criterion                                               | Verification                                                                                                                                                                                                                                                 |
+| --- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `am-ctl models` output matches `fleet-models.sh` output | **PASSED** 2026-10-17 -- Upgraded for Agent Zero v2.14 preset-based architecture (`config.json` + `presets.yaml`, where legacy `fleet-models.sh` reported `unknown`); resolves active preset + `chat`, `utility`, and `embedding` models across all 5 agents |
+| 2   | Model change via API reflected in container             | **PASSED** 2026-10-17 -- `am-ctl models set agent0-3 --chat-model openrouter/moonshotai/kimi-k2.6` updated `/a0/usr/plugins/_model_config/presets.yaml` + host `.env`; restored to `openrouter/deepseek/deepseek-v4-pro`                                     |
+| 3   | Model change logged in audit table                      | **PASSED** 2026-10-17 -- Verified `model_config_update` entries in `audit_log` (rows 37-38) with `old`/`new` diff and 20 rows synced in `model_configs`                                                                                                      |
+| 4   | `fleet-models.sh` disabled with no regression           | **PASSED** 2026-10-17 -- `fleet-models.sh`, `update-fleet.sh`, `update-fleet-v2.sh`, and `sync-fleet.sh` moved to `scripts/legacy/` (`chmod -x`) on `g2s`                                                                                                    |
+
+
+
 
 ### Risk assessment
 
-| Dimension | Rating | Justification |
-|-----------|--------|---------------|
-| **Overall risk** | **LOW** | Model config changes are non-destructive; wrong model = bad responses, not outage |
-| Blast radius | Per-agent |
-| Rollback | `am-ctl models set agent0-N --chat-model <previous>` |
+
+| Dimension        | Rating                                               | Justification                                                                     |
+| ---------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Overall risk** | **LOW**                                              | Model config changes are non-destructive; wrong model = bad responses, not outage |
+| Blast radius     | Per-agent                                            |                                                                                   |
+| Rollback         | `am-ctl models set agent0-N --chat-model <previous>` |                                                                                   |
+
 
 ---
+
+
 
 ## Phase 8: Inside-Container Hardening
 
@@ -802,11 +928,15 @@ With the platform providing the control plane, inside-container scripts can now 
 - `run-matrix-bot.sh` -- **modified** (call preflight before Rust binary)
 - Rust bot source -- **modified** (sync hardening, auto-join)
 
+
+
 ### Preconditions
 
 - [x] Platform API accessible from inside agent containers (via macvlan or Docker bridge)
 - [x] Agent registry populated with correct identities and required rooms
 - [x] Credential authority operational (Phase 3)
+
+
 
 ### Deliverables
 
@@ -826,27 +956,37 @@ With the platform providing the control plane, inside-container scripts can now 
   - Trigger policy enforcement in two-member rooms
 - [x] **Auto-join**: Rust bot accepts invites from trusted senders (queried from platform `trusted_senders` table)
 
+
+
 ### Progress gate
 
-| # | Criterion | Verification |
-|---|-----------|-------------|
-| 1 | Preflight catches wrong identity and refuses to start | **PASSED** 2026-10-18 -- Sabotaged `agent0-2` registry identity; `preflight-check.sh` exited non-zero (`FATAL: Identity mismatch`) |
-| 2 | Preflight catches missing room and refuses to start | **PASSED** 2026-10-18 -- Added fake required room on `agent0-2`; `preflight-check.sh` exited non-zero (`FATAL: Missing required room membership(s)`) |
-| 3 | Preflight reports failure to platform API | **PASSED** 2026-10-18 -- Both sabotage failures immediately visible in `am-ctl health agent0-2` (`reported_by: preflight:agent0-2`) and stopped `run_bot` via `TERMINAL_CONFIG` rule |
-| 4 | Watchdog v3.0 reports health to platform | **PASSED** 2026-10-18 -- `health_checks` table shows `reported_by = watchdog:v3:agent0-2` via `POST /api/v1/health/{agent}/report` |
-| 5 | Sync cursor survives container restart | **PASSED** 2026-10-18 -- `sync_cursor.json` (`next_batch=364492`, 83 dedup event IDs) persisted atomically and loaded on bot restart |
-| 6 | Self-events never trigger responses | **PASSED** 2026-10-18 -- Sent `@agent0-2: ping` using `@agent0-2` token; bot logged `decision=drop_self_event` and did not respond |
-| 7 | Auto-join accepts invite from trusted sender | **PASSED** 2026-10-18 -- Invited `@agent0-2` from trusted `@admin:v-site.net`; bot logged `AUTO-JOIN ACCEPTED` and joined `!EkvyAqHfHjexksnbwX:v-site.net` within 6s |
-| 8 | Auto-join rejects untrusted invite | **PASSED** 2026-10-18 -- Removed sender from `trusted_senders` and invited `@agent0-2`; bot logged `AUTO-JOIN REJECTED (decision=reject_untrusted)` and did not join |
+
+| #   | Criterion                                             | Verification                                                                                                                                                                         |
+| --- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Preflight catches wrong identity and refuses to start | **PASSED** 2026-10-18 -- Sabotaged `agent0-2` registry identity; `preflight-check.sh` exited non-zero (`FATAL: Identity mismatch`)                                                   |
+| 2   | Preflight catches missing room and refuses to start   | **PASSED** 2026-10-18 -- Added fake required room on `agent0-2`; `preflight-check.sh` exited non-zero (`FATAL: Missing required room membership(s)`)                                 |
+| 3   | Preflight reports failure to platform API             | **PASSED** 2026-10-18 -- Both sabotage failures immediately visible in `am-ctl health agent0-2` (`reported_by: preflight:agent0-2`) and stopped `run_bot` via `TERMINAL_CONFIG` rule |
+| 4   | Watchdog v3.0 reports health to platform              | **PASSED** 2026-10-18 -- `health_checks` table shows `reported_by = watchdog:v3:agent0-2` via `POST /api/v1/health/{agent}/report`                                                   |
+| 5   | Sync cursor survives container restart                | **PASSED** 2026-10-18 -- `sync_cursor.json` (`next_batch=364492`, 83 dedup event IDs) persisted atomically and loaded on bot restart                                                 |
+| 6   | Self-events never trigger responses                   | **PASSED** 2026-10-18 -- Sent `@agent0-2: ping` using `@agent0-2` token; bot logged `decision=drop_self_event` and did not respond                                                   |
+| 7   | Auto-join accepts invite from trusted sender          | **PASSED** 2026-10-18 -- Invited `@agent0-2` from trusted `@admin:v-site.net`; bot logged `AUTO-JOIN ACCEPTED` and joined `!EkvyAqHfHjexksnbwX:v-site.net` within 6s                 |
+| 8   | Auto-join rejects untrusted invite                    | **PASSED** 2026-10-18 -- Removed sender from `trusted_senders` and invited `@agent0-2`; bot logged `AUTO-JOIN REJECTED (decision=reject_untrusted)` and did not join                 |
+
+
+
 
 ### Risk assessment
 
-| Dimension | Rating | Justification |
-|-----------|--------|---------------|
-| **Overall risk** | **MEDIUM** | Preflight gate could false-positive; watchdog replacement could regress restart behavior |
-| Blast radius | Per-node; Agent Zero and Continuwuity stay up if bot stops |
-| Rollback | Revert to previous `watchdog.sh` v2.0; comment out preflight in `run-matrix-bot.sh` |
-| Failure mode | False preflight failure -> bot won't start; cursor corruption -> replay storm |
+
+| Dimension        | Rating                                                                              | Justification                                                                            |
+| ---------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Overall risk** | **MEDIUM**                                                                          | Preflight gate could false-positive; watchdog replacement could regress restart behavior |
+| Blast radius     | Per-node; Agent Zero and Continuwuity stay up if bot stops                          |                                                                                          |
+| Rollback         | Revert to previous `watchdog.sh` v2.0; comment out preflight in `run-matrix-bot.sh` |                                                                                          |
+| Failure mode     | False preflight failure -> bot won't start; cursor corruption -> replay storm       |                                                                                          |
+
+
+
 
 ### Mitigation
 
@@ -856,7 +996,11 @@ With the platform providing the control plane, inside-container scripts can now 
 
 ---
 
+
+
 ## Phase 9: Immutable Releases & v2 Planning
+
+
 
 ### Why last
 
@@ -867,6 +1011,8 @@ Capstone phase. All artifacts are stable. The release system is fully platform-m
 - `deploy-supervisord-fleet.sh` -- **absorbed** (if not already by Phase 6)
 - All `scripts/legacy/` -- **deleted** (30-day grace period complete)
 
+
+
 ### Deliverables
 
 - [x] **Immutable release bundles**: built by `make release` or CI, containing all Phase 1-8 artifacts with SHA-256 checksum manifest
@@ -874,100 +1020,136 @@ Capstone phase. All artifacts are stable. The release system is fully platform-m
 - [x] **v2 API design document**: provisioning endpoints for `create`, `finalize`, `destroy`, `decommission` (`docs/am-ctl-v2-design.md`)
 - [x] **Multi-host readiness**: document what changes when agents span multiple Docker hosts (`docs/am-ctl-v2-design.md`)
 
+
+
 ### Progress gate
 
-| # | Criterion | Verification |
-|---|-----------|-------------|
-| 1 | Release bundle builds reproducibly | **PASSED** 2026-10-18 -- `make verify-reproducible VERSION=v1.2.0` produced identical SHA-256 (`6a6572f0b6ee2e895f297c613986667c890613aab574a4be299cd0782c11c324`) across two independent builds |
-| 2 | Bundle contains no secrets | **PASSED** 2026-10-18 -- Extracted `am-release-v1.2.0.tar.gz` and verified `grep -rnE 'syt_\|A0_API_KEY='` returned `0` |
-| 3 | Full fleet deployment via platform succeeds | **PASSED** 2026-10-18 -- `am-ctl deploy release upload` + sequential `am-ctl deploy agent0-{2,3,4,5,1} --release v1.2.0` succeeded with 5/5 `PASS` and `CLEAN` |
-| 4 | Tampered artifact detected by reconciler | **PASSED** 2026-10-18 -- Modified `preflight-check.sh` on `agent0-2`; `am-ctl reconcile check agent0-2` flagged `artifact_hash: DRIFT`; restored via `am-ctl deploy agent0-2 --release v1.2.0` |
-| 5 | v2 API design reviewed and approved | **PASSED** 2026-10-18 -- Documented in [am-ctl-v2-design.md](am-ctl-v2-design.md) |
-| 6 | Fleet has run on platform-managed release for 7 days with zero unplanned interventions | **IN SOAK** (started 2026-10-18 on release `v1.2.0`) -- Audit log + health history tracking continuously |
+
+| #   | Criterion                                                                              | Verification                                                                                                                                                                                     |
+| --- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Release bundle builds reproducibly                                                     | **PASSED** 2026-10-18 -- `make verify-reproducible VERSION=v1.2.0` produced identical SHA-256 (`6a6572f0b6ee2e895f297c613986667c890613aab574a4be299cd0782c11c324`) across two independent builds |
+| 2   | Bundle contains no secrets                                                             | **PASSED** 2026-10-18 -- Extracted `am-release-v1.2.0.tar.gz` and verified `grep -rnE 'syt_                                                                                                      |
+| 3   | Full fleet deployment via platform succeeds                                            | **PASSED** 2026-10-18 -- `am-ctl deploy release upload` + sequential `am-ctl deploy agent0-{2,3,4,5,1} --release v1.2.0` succeeded with 5/5 `PASS` and `CLEAN`                                   |
+| 4   | Tampered artifact detected by reconciler                                               | **PASSED** 2026-10-18 -- Modified `preflight-check.sh` on `agent0-2`; `am-ctl reconcile check agent0-2` flagged `artifact_hash: DRIFT`; restored via `am-ctl deploy agent0-2 --release v1.2.0`   |
+| 5   | v2 API design reviewed and approved                                                    | **PASSED** 2026-10-18 -- Documented in [am-ctl-v2-design.md](am-ctl-v2-design.md)                                                                                                                |
+| 6   | Fleet has run on platform-managed release for 7 days with zero unplanned interventions | **IN SOAK** (started 2026-10-18 on release `v1.2.0`) -- Audit log + health history tracking continuously                                                                                         |
+
+
+
 
 ### Risk assessment
 
-| Dimension | Rating | Justification |
-|-----------|--------|---------------|
-| **Overall risk** | **MEDIUM** | Deployment pipeline change; bad bundle = bot outage (fail-closed) |
-| Blast radius | Per-agent with sequential rollout |
-| Rollback | Previous release bundle via `am-ctl deploy agent0-N --release <previous>` |
+
+| Dimension        | Rating                                                                    | Justification                                                     |
+| ---------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **Overall risk** | **MEDIUM**                                                                | Deployment pipeline change; bad bundle = bot outage (fail-closed) |
+| Blast radius     | Per-agent with sequential rollout                                         |                                                                   |
+| Rollback         | Previous release bundle via `am-ctl deploy agent0-N --release <previous>` |                                                                   |
+
 
 ---
+
+
 
 ## Risk Summary
 
-| Phase | Item | Risk | Key Danger |
-|-------|------|------|------------|
-| 1 | Platform foundation | **LOW** | Additive; wrong registry data misleads operators |
-| 2 | Health & monitoring | **MEDIUM** | Monitoring gap if platform goes down during cron cutover |
-| 3 | Credential authority | **HIGH** | Credential delivery failure = total bot silence (repeats original incident) |
-| 4 | Reconciliation engine | **HIGH** | `apply` mutates live config; bugs can cascade |
-| 5 | DB & infrastructure backup | **LOW** | Non-blocking `pg_dump`; disk fullness if pruning fails |
-| 6 | Fleet deployment | **MEDIUM** | Bad deploy = bot outage; mitigated by preflight + Phase 5 backup |
-| 7 | Model management | **LOW** | Non-destructive; wrong model != outage |
-| 8 | Inside-container hardening | **MEDIUM** | Preflight false-positive or watchdog regression |
-| 9 | Immutable releases & v2 | **MEDIUM** | Deployment pipeline change |
+
+| Phase | Item                       | Risk       | Key Danger                                                                  |
+| ----- | -------------------------- | ---------- | --------------------------------------------------------------------------- |
+| 1     | Platform foundation        | **LOW**    | Additive; wrong registry data misleads operators                            |
+| 2     | Health & monitoring        | **MEDIUM** | Monitoring gap if platform goes down during cron cutover                    |
+| 3     | Credential authority       | **HIGH**   | Credential delivery failure = total bot silence (repeats original incident) |
+| 4     | Reconciliation engine      | **HIGH**   | `apply` mutates live config; bugs can cascade                               |
+| 5     | DB & infrastructure backup | **LOW**    | Non-blocking `pg_dump`; disk fullness if pruning fails                      |
+| 6     | Fleet deployment           | **MEDIUM** | Bad deploy = bot outage; mitigated by preflight + Phase 5 backup            |
+| 7     | Model management           | **LOW**    | Non-destructive; wrong model != outage                                      |
+| 8     | Inside-container hardening | **MEDIUM** | Preflight false-positive or watchdog regression                             |
+| 9     | Immutable releases & v2    | **MEDIUM** | Deployment pipeline change                                                  |
+
 
 ---
+
+
 
 ## Script Disposition
 
+
+
 ### Directly Replaced by am-ctl (v1)
 
-| Script | Current purpose | Replaced in | Replacement |
-|--------|----------------|-------------|-------------|
-| `sync-fleet.sh` | Push templates, preserve `.env` | Phase 4/6 | `am-ctl reconcile apply` / `am-ctl deploy` |
-| `validate-instance.sh` | Per-instance health validation | Phase 2/4 | `am-ctl health` / `am-ctl reconcile check` |
-| `fix-agentX-services.sh` | SSH to g2s, restart services | Phase 4 | `am-ctl reconcile apply` |
-| `deploy-supervisord-fleet.sh` | Install supervisord config | Phase 6 | `am-ctl deploy` |
-| `fleet-token-healthcheck.sh` | Cron: token validation | Phase 2 | Continuous monitoring |
-| `federation-key-refresh.sh` | Cron: signing key refresh | Phase 2 | Continuous monitoring |
-| `fleet-membership-healthcheck.sh` | Cron: membership repair | Phase 2 | Continuous monitoring + auto-repair |
-| `fleet-models.sh` | LLM model configuration | Phase 7 | `am-ctl models` |
-| `update-fleet.sh` (v2.2) | Docker image version management | Phase 6 | `am-ctl deploy version` |
-| `finalize-fleet.sh` | One-shot env standardization | Phase 4 | Retired (one-shot, March 2026) |
-| `update-fleet-v2.sh` | Earlier version of update-fleet | Phase 6 | Retired (superseded by v2.2, then by am-ctl) |
+
+| Script                            | Current purpose                 | Replaced in | Replacement                                  |
+| --------------------------------- | ------------------------------- | ----------- | -------------------------------------------- |
+| `sync-fleet.sh`                   | Push templates, preserve `.env` | Phase 4/6   | `am-ctl reconcile apply` / `am-ctl deploy`   |
+| `validate-instance.sh`            | Per-instance health validation  | Phase 2/4   | `am-ctl health` / `am-ctl reconcile check`   |
+| `fix-agentX-services.sh`          | SSH to g2s, restart services    | Phase 4     | `am-ctl reconcile apply`                     |
+| `deploy-supervisord-fleet.sh`     | Install supervisord config      | Phase 6     | `am-ctl deploy`                              |
+| `fleet-token-healthcheck.sh`      | Cron: token validation          | Phase 2     | Continuous monitoring                        |
+| `federation-key-refresh.sh`       | Cron: signing key refresh       | Phase 2     | Continuous monitoring                        |
+| `fleet-membership-healthcheck.sh` | Cron: membership repair         | Phase 2     | Continuous monitoring + auto-repair          |
+| `fleet-models.sh`                 | LLM model configuration         | Phase 7     | `am-ctl models`                              |
+| `update-fleet.sh` (v2.2)          | Docker image version management | Phase 6     | `am-ctl deploy version`                      |
+| `finalize-fleet.sh`               | One-shot env standardization    | Phase 4     | Retired (one-shot, March 2026)               |
+| `update-fleet-v2.sh`              | Earlier version of update-fleet | Phase 6     | Retired (superseded by v2.2, then by am-ctl) |
+
+
+
 
 ### Modified but Kept (until v2 absorbs them)
 
-| Script | What changes | Changed in |
-|--------|-------------|------------|
-| `create-instance.sh` | Remove `A0_API_KEY` generation | Phase 3 (absorbed into `am-ctl create` in v2) |
-| `finalize-instance.sh` | Remove Step 7b derivation | Phase 3 (absorbed into `am-ctl finalize` in v2) |
-| `startup-services.sh` | Add preflight gate | Phase 8 |
-| `watchdog.sh` | Replace v2.0 with v3.0 | Phase 8 |
-| `run-matrix-bot.sh` | Call preflight before Rust binary | Phase 8 |
+
+| Script                 | What changes                      | Changed in                                      |
+| ---------------------- | --------------------------------- | ----------------------------------------------- |
+| `create-instance.sh`   | Remove `A0_API_KEY` generation    | Phase 3 (absorbed into `am-ctl create` in v2)   |
+| `finalize-instance.sh` | Remove Step 7b derivation         | Phase 3 (absorbed into `am-ctl finalize` in v2) |
+| `startup-services.sh`  | Add preflight gate                | Phase 8                                         |
+| `watchdog.sh`          | Replace v2.0 with v3.0            | Phase 8                                         |
+| `run-matrix-bot.sh`    | Call preflight before Rust binary | Phase 8                                         |
+
+
+
 
 ### Retained Until v2 (Provisioning Lifecycle)
 
-| Script | Why it stays until v2 |
-|--------|----------------------|
-| `destroy-and-rebuild.sh` | Teardown lifecycle -- v2 provisioning API absorbs it |
-| `decommission-instance.sh` | Safe shutdown -- v2 provisioning API absorbs it |
+
+| Script                     | Why it stays until v2                                |
+| -------------------------- | ---------------------------------------------------- |
+| `destroy-and-rebuild.sh`   | Teardown lifecycle -- v2 provisioning API absorbs it |
+| `decommission-instance.sh` | Safe shutdown -- v2 provisioning API absorbs it      |
+
+
+
 
 ### Retained Permanently (Utility)
 
-| Script | Why |
-|--------|-----|
-| `check-token-sync.py` | Inside-container utility; watchdog v3.0 may absorb |
-| `sync-mcp-token-into-settings.py` | MCP-specific; orthogonal to fleet management |
+
+| Script                            | Why                                                |
+| --------------------------------- | -------------------------------------------------- |
+| `check-token-sync.py`             | Inside-container utility; watchdog v3.0 may absorb |
+| `sync-mcp-token-into-settings.py` | MCP-specific; orthogonal to fleet management       |
+
+
+
 
 ### Per-Phase Script Impact
 
-| Phase | Scripts affected | Nature |
-|-------|-----------------|--------|
-| 1 | None | New platform; no scripts changed |
-| 2 | 3 cron healthchecks, `validate-instance.sh` | Absorbed into continuous monitoring |
-| 3 | `create-instance.sh`, `finalize-instance.sh` | Modified (remove credential code) |
-| 4 | `sync-fleet.sh`, `validate-instance.sh`, `fix-agentX-services.sh` | Superseded |
-| 5 | `fleet-backup.sh` (new) | Added (automated DB + infra backup & restore verification) |
-| 6 | `update-fleet.sh`, `deploy-supervisord-fleet.sh` | Absorbed |
-| 7 | `fleet-models.sh` | Absorbed |
-| 8 | `startup-services.sh`, `watchdog.sh`, `run-matrix-bot.sh` | Modified |
-| 9 | All legacy scripts | Deleted (grace period complete) |
+
+| Phase | Scripts affected                                                  | Nature                                                     |
+| ----- | ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| 1     | None                                                              | New platform; no scripts changed                           |
+| 2     | 3 cron healthchecks, `validate-instance.sh`                       | Absorbed into continuous monitoring                        |
+| 3     | `create-instance.sh`, `finalize-instance.sh`                      | Modified (remove credential code)                          |
+| 4     | `sync-fleet.sh`, `validate-instance.sh`, `fix-agentX-services.sh` | Superseded                                                 |
+| 5     | `fleet-backup.sh` (new)                                           | Added (automated DB + infra backup & restore verification) |
+| 6     | `update-fleet.sh`, `deploy-supervisord-fleet.sh`                  | Absorbed                                                   |
+| 7     | `fleet-models.sh`                                                 | Absorbed                                                   |
+| 8     | `startup-services.sh`, `watchdog.sh`, `run-matrix-bot.sh`         | Modified                                                   |
+| 9     | All legacy scripts                                                | Deleted (grace period complete)                            |
+
 
 ---
+
+
 
 ## Sequential Rollout Protocol (All Phases)
 
@@ -989,6 +1171,8 @@ Between each node:
 If a gate fails: **stop the rollout, keep that bot down, repair forward.**
 
 ---
+
+
 
 ## Dependency Graph
 
@@ -1028,6 +1212,8 @@ v2: Provisioning API (create, finalize, destroy, decommission)
 
 ---
 
+
+
 ## Definition of Done (v1)
 
 The permanent repair strategy v1 is complete when:
@@ -1046,6 +1232,8 @@ The permanent repair strategy v1 is complete when:
 - [x] No legacy credential derivation paths remain
 - [ ] Fleet has run on platform-managed operations for 7 days with zero unplanned interventions
 - [ ] Test suite passes with >80% coverage on services and check logic
+
+
 
 ### Definition of Done (v2 -- future)
 
