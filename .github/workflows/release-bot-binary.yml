@@ -1,18 +1,20 @@
 # =============================================================================
-# agent-matrix — Build & Release Matrix Bot Binaries
+# agent-matrix — Build & Release Matrix Bot Binaries (Component Release)
 # Compiles the Rust matrix-bot and publishes binaries as GitHub Release assets.
-# Trigger: push a version tag (e.g. git tag v0.1.0 && git push origin v0.1.0)
+# Trigger: push a bot version tag (e.g. git tag bot-v0.1.3 && git push origin bot-v0.1.3)
 #          or run manually from the Actions tab with a custom tag.
+# Note: Historical tags v0.1.1 and v0.1.2 remain untouched; top-level v* tags
+#       (e.g. v0.91) are reserved for full Agent-Matrix project releases.
 # =============================================================================
 name: Release Bot Binary
 
 on:
   push:
-    tags: ['v*']
+    tags: ['bot-v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.1.0)'
+        description: 'Bot release tag (e.g. bot-v0.1.3)'
         required: true
 
 jobs:

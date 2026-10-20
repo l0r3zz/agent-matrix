@@ -1,0 +1,102 @@
+# =============================================================================
+# Agent-Matrix — Full Project Release Workflow
+# Trigger: push a project version tag matching v* (e.g. git tag v0.91 && git push origin v0.91)
+#          (excludes bot-v* tags, which are handled by release-bot-binary.yml)
+#
+# Builds:
+#   1. Rust Matrix Bot binaries (matrix-bot-rust, set-display-name-rust)
+#   2. Deterministic, reproducible am-ctl release bundle (am-release-<tag>.tar.gz)
+#      with embedded MANIFEST.json and SHA256SUMS
+#   3. Standalone SHA256SUMS.txt covering all published release assets
+# =============================================================================
+name: Release Agent-Matrix
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Project release tag (e.g. v0.91)'
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust Matrix Bot binaries
+        run: |
+          cd multi-instance-deploy/templates/matrix-bot/rust
+          cargo build --release
+          ls -lh target/release/matrix-bot-rust target/release/set-display-name-rust
+
+      - name: Build & verify reproducible am-ctl release bundle
+        run: |
+          mkdir -p dist-release
+          python3 multi-instance-deploy/scripts/build-release.py \
+            --version "${{ steps.tag.outputs.tag }}" \
+            --repo-root multi-instance-deploy \
+            --output "dist-release/am-release-${{ steps.tag.outputs.tag }}.tar.gz"
+          python3 multi-instance-deploy/scripts/build-release.py \
+            --version "${{ steps.tag.outputs.tag }}" \
+            --repo-root multi-instance-deploy \
+            --output "dist-release/am-release-${{ steps.tag.outputs.tag }}-verify.tar.gz"
+          H1=$(sha256sum "dist-release/am-release-${{ steps.tag.outputs.tag }}.tar.gz" | awk '{print $1}')
+          H2=$(sha256sum "dist-release/am-release-${{ steps.tag.outputs.tag }}-verify.tar.gz" | awk '{print $1}')
+          rm -f "dist-release/am-release-${{ steps.tag.outputs.tag }}-verify.tar.gz"
+          if [ "$H1" != "$H2" ]; then
+            echo "ERROR: Reproducible build verification failed ($H1 != $H2)"
+            exit 1
+          fi
+          cp multi-instance-deploy/templates/matrix-bot/rust/target/release/matrix-bot-rust dist-release/
+          cp multi-instance-deploy/templates/matrix-bot/rust/target/release/set-display-name-rust dist-release/
+          cd dist-release
+          sha256sum "am-release-${{ steps.tag.outputs.tag }}.tar.gz" matrix-bot-rust set-display-name-rust > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Agent-Matrix ${{ steps.tag.outputs.tag }}"
+          generate_release_notes: true
+          body: |
+            ## Agent-Matrix ${{ steps.tag.outputs.tag }}
+
+            Full project release of **Agent-Matrix** — the decentralized, federated AI agent platform (Caddy TLS + Continuwuity Matrix homeserver + Agent Zero runtime triplet), `am-ctl` v1 fleet control plane, Open Brain (`OB1`) shared vector memory, and hardened Rust Matrix Bot.
+
+            ### Published Release Assets
+            - `am-release-${{ steps.tag.outputs.tag }}.tar.gz` — Deterministic, reproducible `am-ctl` fleet release bundle (`matrix-bot-rust`, `run-bot-wrapper.sh`, `run-matrix-bot.sh`, `derive-a0-token.sh`, `preflight-check.sh`, `watchdog.sh`, `startup-services.sh`, `MANIFEST.json`, `SHA256SUMS`)
+            - `matrix-bot-rust` — Pre-built Linux/amd64 Rust Matrix Bot binary
+            - `set-display-name-rust` — Pre-built Linux/amd64 display-name utility
+            - `SHA256SUMS.txt` — SHA-256 checksums for all release assets
+          files: |
+            dist-release/am-release-${{ steps.tag.outputs.tag }}.tar.gz
+            dist-release/matrix-bot-rust
+            dist-release/set-display-name-rust
+            dist-release/SHA256SUMS.txt
