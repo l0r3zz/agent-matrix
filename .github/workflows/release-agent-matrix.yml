@@ -53,18 +53,17 @@ jobs:
         run: |
           cd multi-instance-deploy/templates/matrix-bot/rust
           cargo build --release
-          ls -lh target/release/matrix-bot-rust target/release/set-display-name-rust
+          cp target/release/matrix-bot-rust ../matrix-bot-rust
+          ls -lh target/release/matrix-bot-rust target/release/set-display-name-rust ../matrix-bot-rust
 
       - name: Build & verify reproducible am-ctl release bundle
         run: |
           mkdir -p dist-release
           python3 multi-instance-deploy/scripts/build-release.py \
             --version "${{ steps.tag.outputs.tag }}" \
-            --repo-root multi-instance-deploy \
             --output "dist-release/am-release-${{ steps.tag.outputs.tag }}.tar.gz"
           python3 multi-instance-deploy/scripts/build-release.py \
             --version "${{ steps.tag.outputs.tag }}" \
-            --repo-root multi-instance-deploy \
             --output "dist-release/am-release-${{ steps.tag.outputs.tag }}-verify.tar.gz"
           H1=$(sha256sum "dist-release/am-release-${{ steps.tag.outputs.tag }}.tar.gz" | awk '{print $1}')
           H2=$(sha256sum "dist-release/am-release-${{ steps.tag.outputs.tag }}-verify.tar.gz" | awk '{print $1}')
