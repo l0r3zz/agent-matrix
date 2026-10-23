@@ -135,16 +135,19 @@ async def _get_synapse_pod_and_token() -> tuple[str | None, str | None]:
 
 async def check_and_refresh_federation_keys(homeserver_fqdn: str) -> tuple[str, dict]:
     """Query Synapse notary for the agent homeserver's signing keys.
+    Uses minimum_valid_until_ts (now + 2 days) to force Synapse to refresh its
+    cached keys from Continuwuity before the 2-day warning threshold is crossed.
     Returns (status: 'pass' | 'warn' | 'fail', detail).
     """
     pod, admin_token = await _get_synapse_pod_and_token()
     if not pod or not admin_token:
         return "warn", {"error": "synapse_pod_or_token_unavailable"}
 
+    min_valid_ms = int((time.time() + 2 * 86400) * 1000)
     rc, out = await _run([
         "kubectl", "exec", "-n", "matrix", pod, "-c", "matrix", "--",
         "curl", "-sf", "--max-time", "15",
-        f"http://localhost:8008/_matrix/key/v2/query/{homeserver_fqdn}",
+        f"http://localhost:8008/_matrix/key/v2/query/{homeserver_fqdn}?minimum_valid_until_ts={min_valid_ms}",
         "-H", f"Authorization: Bearer {admin_token}",
     ], timeout=20.0)
 
