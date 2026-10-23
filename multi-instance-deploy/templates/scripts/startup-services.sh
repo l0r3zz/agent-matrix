@@ -7,6 +7,7 @@
 # Lives on bind mount: /a0/usr/workdir/startup-services.sh
 #
 # Boot sequence:
+#   Phase 0.1: Restore SSH keys from skill backup (~/.ssh is ephemeral)
 #   Phase 0.5: Apply Time Travel plugin patches
 #   Phase 5: Ensure supervisord-managed MCP + bot (with preflight gate)
 #   Phase 5.5: Launch Watchdog v3.0 (platform-integrated health reporter)
@@ -19,6 +20,22 @@ LOG="/a0/usr/workdir/startup-services.log"
 log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 
 log "========== startup-services.sh v3.20 starting =========="
+
+# -------------------------------------------------------
+# PHASE 0.1: Restore SSH keys from skill backup (~/.ssh is ephemeral)
+# -------------------------------------------------------
+SSH_KEY_BACKUP="/a0/usr/skills/ssh2g2s/keys/id_ed25519"
+if [ -f "$SSH_KEY_BACKUP" ] && [ ! -f "$HOME/.ssh/id_ed25519" ]; then
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+    cp "$SSH_KEY_BACKUP" "$HOME/.ssh/id_ed25519"
+    cp "${SSH_KEY_BACKUP}.pub" "$HOME/.ssh/id_ed25519.pub" 2>/dev/null || true
+    chmod 600 "$HOME/.ssh/id_ed25519"
+    chmod 644 "$HOME/.ssh/id_ed25519.pub" 2>/dev/null || true
+    log "Phase 0.1: SSH key restored from skill backup"
+else
+    log "Phase 0.1: SSH key already present (or backup missing), skipping"
+fi
 
 # -------------------------------------------------------
 # PHASE 0.5: Apply Time Travel plugin patches
