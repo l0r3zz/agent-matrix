@@ -168,7 +168,7 @@ host    open_brain  openbrain   172.23.0.0/16        scram-sha-256
 host    all         all         0.0.0.0/0            reject
 ```
 
-Then add this line to the init script so PostgreSQL loads the custom `pg_hba.conf`. Create `/opt/agent-zero/open-brain/init-dbba.sh`:
+Then create the init script `/opt/agent-zero/open-brain/init-db/00-pg-hba.sh` so PostgreSQL loads the custom `pg_hba.conf` on first start:
 
 ```bash
 #!/bin/bash
