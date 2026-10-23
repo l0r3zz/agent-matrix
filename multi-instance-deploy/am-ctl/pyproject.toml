@@ -35,3 +35,8 @@ am-ctl-server = "amctl.app:run"
 
 [tool.setuptools.packages.find]
 include = ["amctl*"]
+
+[tool.coverage.run]
+concurrency = ["greenlet", "thread"]
+source = ["amctl"]
+

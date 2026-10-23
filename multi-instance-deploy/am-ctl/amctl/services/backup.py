@@ -503,7 +503,10 @@ async def check_backup_freshness(session: AsyncSession) -> tuple[str, dict]:
             details[target] = {"error": "no_backup_found"}
             continue
 
-        age_hours = (now - latest.created_at).total_seconds() / 3600.0
+        created_dt = latest.created_at
+        if created_dt.tzinfo is None:
+            created_dt = created_dt.replace(tzinfo=timezone.utc)
+        age_hours = (now - created_dt).total_seconds() / 3600.0
         details[target] = {
             "id": latest.id,
             "status": latest.status,

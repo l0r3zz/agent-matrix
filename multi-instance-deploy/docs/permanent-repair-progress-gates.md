@@ -1231,7 +1231,7 @@ The permanent repair strategy v1 is complete when:
 - [x] All mutations logged in `audit_log` table
 - [x] No legacy credential derivation paths remain
 - [ ] Fleet has run on platform-managed operations for 7 days with zero unplanned interventions
-- [ ] Test suite passes with >80% coverage on services and check logic
+- [x] Test suite passes with >80% coverage on services and check logic (`13 passed, 87% coverage`)
 
 
 
