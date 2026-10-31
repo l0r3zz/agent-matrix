@@ -1,0 +1,8 @@
+{"event_id":"$ftdXYHy9X0vwnrfCqk52ZoYWNDskQcIlLqrDQQaUZx0","fed_sync_latency_ms":5680,"origin_server_ts":1793408629180,"room_id":"!gahcrWFWAUJQPPkuQy:v-site.net","sender":"@admin:v-site.net","stage":"bot_received","ts":1793408634860}
+{"builtin":true,"event_id":"$ftdXYHy9X0vwnrfCqk52ZoYWNDskQcIlLqrDQQaUZx0","stage":"reply_sent","total_rtt_ms":5687,"ts":1793408634867}
+{"event_id":"$OUxRJ-xKZs07P3vycvqXB9_398WqA3YLlqKtHm_UCHc","fed_sync_latency_ms":1174,"origin_server_ts":1793409736384,"room_id":"!gahcrWFWAUJQPPkuQy:v-site.net","sender":"@admin:v-site.net","stage":"bot_received","ts":1793409737558}
+{"event_id":"$OUxRJ-xKZs07P3vycvqXB9_398WqA3YLlqKtHm_UCHc","stage":"a0_request_start","ts":1793409737560}
+{"a0_latency_ms":18011,"event_id":"$OUxRJ-xKZs07P3vycvqXB9_398WqA3YLlqKtHm_UCHc","reply_len":78,"stage":"a0_request_done","ts":1793409755571}
+{"builtin":false,"chunks":1,"event_id":"$OUxRJ-xKZs07P3vycvqXB9_398WqA3YLlqKtHm_UCHc","stage":"reply_sent","total_rtt_ms":19192,"ts":1793409755576}
+{"event_id":"$j2wfCvK7ItwEVA_YjOW1yBdp1xvCjO_1xhuVqZ_MJyc","fed_sync_latency_ms":15882,"origin_server_ts":1793409822906,"room_id":"!gahcrWFWAUJQPPkuQy:v-site.net","sender":"@admin:v-site.net","stage":"bot_received","ts":1793409838788}
+{"builtin":true,"event_id":"$j2wfCvK7ItwEVA_YjOW1yBdp1xvCjO_1xhuVqZ_MJyc","stage":"reply_sent","total_rtt_ms":15885,"ts":1793409838791}

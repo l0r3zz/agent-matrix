@@ -1,0 +1,65 @@
+{"ts": 1793407107542, "stage": "synapse_fed_send", "req": "PUT-O-22042", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332036", "dur_ms": 70, "start_ts": 1793407107472}
+{"ts": 1793407107558, "stage": "synapse_fed_send", "req": "PUT-O-22043", "dest": "agent0-5-mhs.cybertribe.com", "txn": "1792411332037", "dur_ms": 70, "start_ts": 1793407107488}
+{"ts": 1793407107592, "stage": "synapse_fed_send", "req": "PUT-O-22044", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332038", "dur_ms": 80, "start_ts": 1793407107512}
+{"ts": 1793407107609, "stage": "synapse_fed_send", "req": "PUT-O-22045", "dest": "agent0-3-mhs.cybertribe.com", "txn": "1792411332039", "dur_ms": 70, "start_ts": 1793407107539}
+{"ts": 1793407107637, "stage": "synapse_fed_send", "req": "PUT-O-22046", "dest": "agent0-4-mhs.cybertribe.com", "txn": "1792411332040", "dur_ms": 80, "start_ts": 1793407107557}
+{"ts": 1793407113244, "stage": "synapse_fed_send", "req": "PUT-O-22048", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332042", "dur_ms": 70, "start_ts": 1793407113174}
+{"ts": 1793407113374, "stage": "synapse_fed_send", "req": "PUT-O-22047", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332041", "dur_ms": 200, "start_ts": 1793407113174}
+{"ts": 1793407116279, "stage": "synapse_fed_send", "req": "PUT-O-22050", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332044", "dur_ms": 70, "start_ts": 1793407116209}
+{"ts": 1793407116280, "stage": "synapse_fed_send", "req": "PUT-O-22049", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332043", "dur_ms": 80, "start_ts": 1793407116200}
+{"ts": 1793407117687, "stage": "synapse_fed_send", "req": "PUT-O-22052", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332046", "dur_ms": 70, "start_ts": 1793407117617}
+{"ts": 1793407117691, "stage": "synapse_fed_send", "req": "PUT-O-22051", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332045", "dur_ms": 70, "start_ts": 1793407117621}
+{"ts": 1793407127729, "stage": "synapse_fed_send", "req": "PUT-O-22054", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332048", "dur_ms": 70, "start_ts": 1793407127659}
+{"ts": 1793407128185, "stage": "synapse_fed_send", "req": "PUT-O-22053", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332047", "dur_ms": 530, "start_ts": 1793407127655}
+{"ts": 1793407165576, "stage": "synapse_client_send", "req": "PUT-235958", "src_ip": "10.200.0.27", "user": "@admin:v-site.net", "room": "!OwVrRzvrSzqHCrZqVz:v-site.net", "proc_ms": 1241, "start_ts": 1793407164335}
+{"ts": 1793407166214, "stage": "synapse_fed_send", "req": "PUT-O-22055", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332049", "dur_ms": 230, "start_ts": 1793407165984}
+{"ts": 1793407167886, "stage": "synapse_fed_send", "req": "PUT-O-22056", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332050", "dur_ms": 1900, "start_ts": 1793407165986}
+{"ts": 1793407173278, "stage": "synapse_fed_recv", "req": "PUT-235972", "txn": "tRPqyckUfOYzVIdy--HWnW69nb_ymJC8wAgIaW-O6Qs", "origin": "agent0-1-mhs.cybertribe.com", "pdus": 1}
+{"ts": 1793407173332, "stage": "synapse_pdu", "room": "!OwVrRzvrSzqHCrZqVz:v-site.net", "pdu_event_id": "$i52wE2DB0oMRgWE-kmzZ8aFMvqELA4RfocUJGNO8Kxk", "pdu_type": "m.room.message"}
+{"ts": 1793407187963, "stage": "synapse_fed_send", "req": "PUT-O-22062", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332052", "dur_ms": 80, "start_ts": 1793407187883}
+{"ts": 1793407187966, "stage": "synapse_fed_send", "req": "PUT-O-22061", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332051", "dur_ms": 80, "start_ts": 1793407187886}
+{"ts": 1793407405296, "stage": "synapse_fed_send", "req": "PUT-O-22063", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332053", "dur_ms": 260, "start_ts": 1793407405036}
+{"ts": 1793407405330, "stage": "synapse_fed_send", "req": "PUT-O-22064", "dest": "agent0-5-mhs.cybertribe.com", "txn": "1792411332054", "dur_ms": 260, "start_ts": 1793407405070}
+{"ts": 1793407405353, "stage": "synapse_fed_send", "req": "PUT-O-22065", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332055", "dur_ms": 260, "start_ts": 1793407405093}
+{"ts": 1793407405367, "stage": "synapse_fed_send", "req": "PUT-O-22068", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332058", "dur_ms": 70, "start_ts": 1793407405297}
+{"ts": 1793407405368, "stage": "synapse_fed_send", "req": "PUT-O-22066", "dest": "agent0-3-mhs.cybertribe.com", "txn": "1792411332056", "dur_ms": 250, "start_ts": 1793407405118}
+{"ts": 1793407405400, "stage": "synapse_fed_send", "req": "PUT-O-22069", "dest": "agent0-5-mhs.cybertribe.com", "txn": "1792411332059", "dur_ms": 70, "start_ts": 1793407405330}
+{"ts": 1793407405422, "stage": "synapse_fed_send", "req": "PUT-O-22070", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332060", "dur_ms": 70, "start_ts": 1793407405352}
+{"ts": 1793407405437, "stage": "synapse_fed_send", "req": "PUT-O-22071", "dest": "agent0-3-mhs.cybertribe.com", "txn": "1792411332061", "dur_ms": 70, "start_ts": 1793407405367}
+{"ts": 1793407405742, "stage": "synapse_fed_send", "req": "PUT-O-22067", "dest": "agent0-4-mhs.cybertribe.com", "txn": "1792411332057", "dur_ms": 600, "start_ts": 1793407405142}
+{"ts": 1793407405811, "stage": "synapse_fed_send", "req": "PUT-O-22072", "dest": "agent0-4-mhs.cybertribe.com", "txn": "1792411332062", "dur_ms": 70, "start_ts": 1793407405741}
+{"ts": 1793407468104, "stage": "synapse_fed_send", "req": "PUT-O-22073", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332063", "dur_ms": 80, "start_ts": 1793407468024}
+{"ts": 1793407468113, "stage": "synapse_fed_send", "req": "PUT-O-22074", "dest": "agent0-5-mhs.cybertribe.com", "txn": "1792411332064", "dur_ms": 70, "start_ts": 1793407468043}
+{"ts": 1793407468137, "stage": "synapse_fed_send", "req": "PUT-O-22075", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332065", "dur_ms": 70, "start_ts": 1793407468067}
+{"ts": 1793407468161, "stage": "synapse_fed_send", "req": "PUT-O-22076", "dest": "agent0-3-mhs.cybertribe.com", "txn": "1792411332066", "dur_ms": 70, "start_ts": 1793407468091}
+{"ts": 1793407468192, "stage": "synapse_fed_send", "req": "PUT-O-22077", "dest": "agent0-4-mhs.cybertribe.com", "txn": "1792411332067", "dur_ms": 80, "start_ts": 1793407468112}
+{"ts": 1793407650341, "stage": "synapse_fed_send", "req": "PUT-O-22080", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332070", "dur_ms": 240, "start_ts": 1793407650101}
+{"ts": 1793407650344, "stage": "synapse_fed_send", "req": "PUT-O-22078", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332068", "dur_ms": 300, "start_ts": 1793407650044}
+{"ts": 1793407650411, "stage": "synapse_fed_send", "req": "PUT-O-22081", "dest": "agent0-3-mhs.cybertribe.com", "txn": "1792411332071", "dur_ms": 280, "start_ts": 1793407650131}
+{"ts": 1793407650414, "stage": "synapse_fed_send", "req": "PUT-O-22084", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332074", "dur_ms": 70, "start_ts": 1793407650344}
+{"ts": 1793407650416, "stage": "synapse_fed_send", "req": "PUT-O-22083", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332073", "dur_ms": 80, "start_ts": 1793407650336}
+{"ts": 1793407650417, "stage": "synapse_fed_send", "req": "PUT-O-22079", "dest": "agent0-5-mhs.cybertribe.com", "txn": "1792411332069", "dur_ms": 340, "start_ts": 1793407650077}
+{"ts": 1793407650426, "stage": "synapse_fed_send", "req": "PUT-O-22082", "dest": "agent0-4-mhs.cybertribe.com", "txn": "1792411332072", "dur_ms": 270, "start_ts": 1793407650156}
+{"ts": 1793407650489, "stage": "synapse_fed_send", "req": "PUT-O-22085", "dest": "agent0-3-mhs.cybertribe.com", "txn": "1792411332075", "dur_ms": 80, "start_ts": 1793407650409}
+{"ts": 1793407650491, "stage": "synapse_fed_send", "req": "PUT-O-22086", "dest": "agent0-5-mhs.cybertribe.com", "txn": "1792411332076", "dur_ms": 70, "start_ts": 1793407650421}
+{"ts": 1793407650498, "stage": "synapse_fed_send", "req": "PUT-O-22087", "dest": "agent0-4-mhs.cybertribe.com", "txn": "1792411332077", "dur_ms": 70, "start_ts": 1793407650428}
+{"ts": 1793407892698, "stage": "synapse_fed_send", "req": "PUT-O-22088", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332078", "dur_ms": 240, "start_ts": 1793407892458}
+{"ts": 1793407892731, "stage": "synapse_fed_send", "req": "PUT-O-22089", "dest": "agent0-5-mhs.cybertribe.com", "txn": "1792411332079", "dur_ms": 240, "start_ts": 1793407892491}
+{"ts": 1793407892782, "stage": "synapse_fed_send", "req": "PUT-O-22091", "dest": "agent0-3-mhs.cybertribe.com", "txn": "1792411332081", "dur_ms": 240, "start_ts": 1793407892542}
+{"ts": 1793407892802, "stage": "synapse_fed_send", "req": "PUT-O-22092", "dest": "agent0-4-mhs.cybertribe.com", "txn": "1792411332082", "dur_ms": 230, "start_ts": 1793407892572}
+{"ts": 1793407893082, "stage": "synapse_fed_send", "req": "PUT-O-22090", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332080", "dur_ms": 560, "start_ts": 1793407892522}
+{"ts": 1793407894459, "stage": "synapse_fed_send", "req": "PUT-O-22094", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332084", "dur_ms": 70, "start_ts": 1793407894389}
+{"ts": 1793407894461, "stage": "synapse_fed_send", "req": "PUT-O-22093", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332083", "dur_ms": 80, "start_ts": 1793407894381}
+{"ts": 1793407899182, "stage": "synapse_fed_send", "req": "PUT-O-22096", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332086", "dur_ms": 80, "start_ts": 1793407899102}
+{"ts": 1793407899185, "stage": "synapse_fed_send", "req": "PUT-O-22095", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332085", "dur_ms": 80, "start_ts": 1793407899105}
+{"ts": 1793407900350, "stage": "synapse_fed_send", "req": "PUT-O-22098", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332088", "dur_ms": 80, "start_ts": 1793407900270}
+{"ts": 1793407900355, "stage": "synapse_fed_send", "req": "PUT-O-22097", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332087", "dur_ms": 80, "start_ts": 1793407900275}
+{"ts": 1793407903842, "stage": "synapse_fed_send", "req": "PUT-O-22100", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332090", "dur_ms": 80, "start_ts": 1793407903762}
+{"ts": 1793407903843, "stage": "synapse_fed_send", "req": "PUT-O-22099", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332089", "dur_ms": 80, "start_ts": 1793407903763}
+{"ts": 1793407904388, "stage": "synapse_client_send", "req": "PUT-236169", "src_ip": "10.200.0.27", "user": "@admin:v-site.net", "room": "!OwVrRzvrSzqHCrZqVz:v-site.net", "proc_ms": 558, "start_ts": 1793407903830}
+{"ts": 1793407904611, "stage": "synapse_fed_send", "req": "PUT-O-22101", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332091", "dur_ms": 130, "start_ts": 1793407904481}
+{"ts": 1793407904735, "stage": "synapse_fed_recv", "req": "PUT-236175", "txn": "Ji8BgMg7wS2huakxoAjay7JTNbrIEG7JEuXPNErJEqQ", "origin": "agent0-1-mhs.cybertribe.com", "pdus": 1}
+{"ts": 1793407904771, "stage": "synapse_pdu", "room": "!OwVrRzvrSzqHCrZqVz:v-site.net", "pdu_event_id": "$6bQswhdaTM3YBC9nvzn-UXh1TMts5n1WSttmpSzMWF0", "pdu_type": "m.room.message"}
+{"ts": 1793407904794, "stage": "synapse_fed_send", "req": "PUT-O-22102", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332092", "dur_ms": 310, "start_ts": 1793407904484}
+{"ts": 1793407906542, "stage": "synapse_fed_send", "req": "PUT-O-22104", "dest": "agent0-2-mhs.cybertribe.com", "txn": "1792411332094", "dur_ms": 70, "start_ts": 1793407906472}
+{"ts": 1793407906543, "stage": "synapse_fed_send", "req": "PUT-O-22103", "dest": "agent0-1-mhs.cybertribe.com", "txn": "1792411332093", "dur_ms": 80, "start_ts": 1793407906463}
