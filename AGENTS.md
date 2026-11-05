@@ -33,6 +33,9 @@ multi-instance-deploy/
     matrix-mcp-server/        -- TypeScript MCP server (has its own package.json, CLAUDE.md)
     matrix-bot/               -- Rust bot + legacy Python bot
     scripts/                  -- Fleet/sync/switch/smoke-test scripts
+    clear-rules/              -- CLEAR writing skill source
+    clear-rules.zip           -- Agent Zero skill import (Settings, Skills, Import)
+    repo-spec-audit/          -- Read-only repo + Spec Kit audit skill (SKILL.md, install.sh)
   scripts/                    -- Host-side helpers (destroy-and-rebuild, fix-agentX-services)
 migration/
   tarnover-refresh/           -- Host OS refresh runbook + scripts
