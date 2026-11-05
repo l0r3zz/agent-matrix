@@ -19,6 +19,7 @@ import tarfile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from amctl.agent_zero_release import LATEST_RELEASE_URL, fetch_latest_tag, is_latest_keyword
 from amctl.models.agent import Agent
 from amctl.models.audit import AuditLog
 from amctl.models.deploy import Deployment, Release
@@ -373,7 +374,17 @@ async def update_agent_image_version(
 ) -> VersionUpdateResponse:
     """Update Agent Zero Docker image version in docker-compose.yml and optionally
     recreate the container (absorbs update-fleet.sh v2.2).
+
+    ``image_version="latest"`` is the GitHub keyword, not the Docker tag. It is
+    replaced with ``tag_name`` from ``agent0ai/agent-zero`` ``releases/latest``
+    before Compose is rewritten, so the health check compares that version.
     """
+    requested_version = image_version
+    resolved_from = None
+    if is_latest_keyword(image_version):
+        image_version = await fetch_latest_tag()
+        resolved_from = LATEST_RELEASE_URL
+
     compose_path = INSTANCE_BASE / agent.name / "docker-compose.yml"
     if not compose_path.is_file():
         raise ValueError(f"Missing {compose_path}")
@@ -390,7 +401,11 @@ async def update_agent_image_version(
             container_recreated=False,
             health_passed=True,
             status="already_current",
-            detail={"message": f"{agent.name} is already at {image_version}"},
+            detail=_version_detail(
+                f"{agent.name} is already at {image_version}",
+                requested_version,
+                resolved_from,
+            ),
         )
 
     # Backup compose file and update tag
@@ -432,7 +447,9 @@ async def update_agent_image_version(
             action="deploy_image_version",
             detail={
                 "previous_version": prev_ver,
+                "requested_version": requested_version,
                 "target_version": image_version,
+                "resolved_from": resolved_from,
                 "skip_restart": skip_restart,
                 "container_recreated": container_recreated,
                 "health_passed": health_passed,
@@ -450,7 +467,22 @@ async def update_agent_image_version(
         container_recreated=container_recreated,
         health_passed=health_passed,
         status="success" if health_passed else "degraded",
+        detail=_version_detail(None, requested_version, resolved_from),
     )
+
+
+def _version_detail(
+    message: str | None,
+    requested_version: str,
+    resolved_from: str | None,
+) -> dict | None:
+    detail: dict = {}
+    if message:
+        detail["message"] = message
+    if resolved_from:
+        detail["requested_version"] = requested_version
+        detail["resolved_from"] = resolved_from
+    return detail or None
 
 
 async def get_fleet_deploy_status(session: AsyncSession) -> FleetDeployStatusResponse:

@@ -404,7 +404,7 @@ Replaces `sync-fleet.sh`, `update-fleet.sh`, `update-fleet-v2.sh`, and `deploy-s
   - **API Endpoint**: `POST /api/v1/deploy/{name}`
 
 - **`am-ctl deploy version --version <TAG> [--instances 2,3,...] [--skip-restart] [--force] [--output table|json]`**
-  Updates the `agent-zero` Docker image tag (e.g., `v2.14`) in the target instances' `docker-compose.yml`, recreates the container via `docker compose up -d` (unless `--skip-restart` is set), and runs post-restart health verification.
+  Updates the `agent-zero` Docker image tag (e.g., `v2.15`) in the target instances' `docker-compose.yml`, recreates the container via `docker compose up -d` (unless `--skip-restart` is set), and runs post-restart health verification. `--version latest` looks up `tag_name` on the newest non-prerelease GitHub release of `agent0ai/agent-zero` and deploys that tag. The word `latest` is not written into Compose.
   - **API Endpoint**: `POST /api/v1/deploy/{name}/version`
 
 - **`am-ctl deploy status [--output table|json]`**

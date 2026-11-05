@@ -250,6 +250,21 @@ async def test_deployer_releases_deploy_version_and_status(
     assert r_ver.json()["compose_updated"] is True
     assert "agent0ai/agent-zero:v2.15" in (inst_base / "agent0-2" / "docker-compose.yml").read_text()
 
+    # 3b. --version latest resolves the GitHub release tag before rewriting Compose
+    async def mock_latest_tag() -> str:
+        return "v2.16"
+
+    monkeypatch.setattr(deployer, "fetch_latest_tag", mock_latest_tag)
+    r_latest = await client.post(
+        "/api/v1/deploy/agent0-2/version",
+        headers=API_HEADERS,
+        json={"image_version": "latest", "skip_restart": True, "force": False, "operator": "pytest"},
+    )
+    assert r_latest.status_code == 200
+    assert r_latest.json()["target_version"] == "v2.16"
+    assert r_latest.json()["detail"]["requested_version"] == "latest"
+    assert "agent0ai/agent-zero:v2.16" in (inst_base / "agent0-2" / "docker-compose.yml").read_text()
+
     # 4. Fleet deploy status
     r_st = await client.get("/api/v1/deploy/status", headers=API_HEADERS)
     assert r_st.status_code == 200

@@ -5,6 +5,7 @@ import sys
 import click
 import httpx
 
+from amctl.agent_zero_release import fetch_latest_tag_sync, is_latest_keyword
 from amctl_cli.client import AmCtlClient
 from amctl_cli.output import (
     console,
@@ -571,7 +572,12 @@ def deploy_status_cmd(ctx, cmd_output):
 
 
 @deploy_group.command("version")
-@click.option("--version", "image_version", required=True, help="Target Agent Zero image tag (e.g. v2.14)")
+@click.option(
+    "--version",
+    "image_version",
+    required=True,
+    help="Agent Zero image tag (e.g. v2.15). 'latest' uses the newest GitHub release tag",
+)
 @click.option("--instances", default="2", help="Comma-separated instance numbers (e.g. 2,3)")
 @click.option("--skip-restart", is_flag=True, help="Update docker-compose.yml only without recreating container")
 @click.option("--force", is_flag=True, help="Force recreate even if already at target version")
@@ -581,6 +587,14 @@ def deploy_version_cmd(ctx, image_version, instances, skip_restart, force, cmd_o
     """Update Agent Zero Docker image version for specified instance(s)."""
     client = get_client(ctx)
     fmt = cmd_output or ctx.obj["output_format"]
+    if is_latest_keyword(image_version):
+        try:
+            resolved = fetch_latest_tag_sync()
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            sys.exit(1)
+        console.print(f"Resolved latest to {resolved} from GitHub agent0ai/agent-zero")
+        image_version = resolved
     inst_list = [f"agent0-{x.strip()}" if not x.strip().startswith("agent0-") else x.strip() for x in instances.split(",") if x.strip()]
     results = []
     for aname in inst_list:
