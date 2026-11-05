@@ -230,19 +230,62 @@ echo
 # =========================================================================
 echo "[4/7] Updating access tokens..."
 
+# The MCP server and the bot must be separate Matrix devices. The MCP server
+# (matrix-mcp-server-r2) binds its E2EE crypto store to its token's device;
+# a bot syncing on that same device consumes the to-device room keys.
+BOT_DEVICE_ID="AgentZeroBot"
+
+token_device() {
+    curl -s "http://${MHS_IP}:8008/_matrix/client/v3/account/whoami" \
+        -H "Authorization: Bearer $1" 2>/dev/null | \
+        python3 -c "import sys,json; print(json.load(sys.stdin).get('device_id',''))" 2>/dev/null || true
+}
+
+login_device() {
+    curl -s -X POST "http://${MHS_IP}:8008/_matrix/client/v3/login" \
+        -H 'Content-Type: application/json' \
+        -d "{\"type\": \"m.login.password\", \"identifier\": {\"type\": \"m.id.user\", \"user\": \"${MATRIX_USER}\"}, \"password\": \"${MATRIX_PASS}\", \"device_id\": \"$1\", \"initial_device_display_name\": \"$1\"}" 2>/dev/null | \
+        python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || true
+}
+
+# Re-runs keep a still-valid MCP token so an existing crypto store stays bound.
+MCP_TOKEN="${ACCESS_TOKEN}"
+EXISTING_MCP_TOKEN="$(source_env "${MCP_ENV}" MATRIX_ACCESS_TOKEN)"
+if [[ -n "${EXISTING_MCP_TOKEN}" && "${EXISTING_MCP_TOKEN}" != PENDING_* ]]; then
+    EXISTING_MCP_DEVICE="$(token_device "${EXISTING_MCP_TOKEN}")"
+    if [[ -n "${EXISTING_MCP_DEVICE}" && "${EXISTING_MCP_DEVICE}" != "${BOT_DEVICE_ID}" ]]; then
+        MCP_TOKEN="${EXISTING_MCP_TOKEN}"
+        info "Keeping existing MCP device ${EXISTING_MCP_DEVICE}"
+        curl -s -X POST "http://${MHS_IP}:8008/_matrix/client/v3/logout" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" >/dev/null 2>&1 || true
+    fi
+fi
+MCP_DEVICE="$(token_device "${MCP_TOKEN}")"
+
+BOT_TOKEN="$(login_device "${BOT_DEVICE_ID}")"
+[[ -n "${BOT_TOKEN}" ]] || fail "Bot login as device ${BOT_DEVICE_ID} failed"
+BOT_DEVICE="$(token_device "${BOT_TOKEN}")"
+[[ -n "${MCP_DEVICE}" && "${BOT_DEVICE}" == "${BOT_DEVICE_ID}" && "${MCP_DEVICE}" != "${BOT_DEVICE}" ]] || \
+    fail "MCP and bot must use different devices (mcp=${MCP_DEVICE:-?} bot=${BOT_DEVICE:-?})"
+
 # Update bot .env
-sed -i "s|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${ACCESS_TOKEN}|" "${BOT_ENV}"
-ok "Bot .env updated"
+sed -i "s|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${BOT_TOKEN}|" "${BOT_ENV}"
+if grep -q "^MATRIX_DEVICE_ID=" "${BOT_ENV}"; then
+    sed -i "s|^MATRIX_DEVICE_ID=.*|MATRIX_DEVICE_ID=${BOT_DEVICE_ID}|" "${BOT_ENV}"
+else
+    echo "MATRIX_DEVICE_ID=${BOT_DEVICE_ID}" >> "${BOT_ENV}"
+fi
+ok "Bot .env updated (device ${BOT_DEVICE_ID})"
 
 # Update MCP .env
-sed -i "s|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${ACCESS_TOKEN}|" "${MCP_ENV}"
-ok "MCP .env updated"
+sed -i "s|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${MCP_TOKEN}|" "${MCP_ENV}"
+ok "MCP .env updated (device ${MCP_DEVICE})"
 
-# Also update main .env for reference
+# Also update main .env for reference (MCP token; fleet-token-healthcheck.sh persists it here)
 if grep -q "^MATRIX_ACCESS_TOKEN=" "${INSTANCE_DIR}/.env"; then
-    sed -i "s|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${ACCESS_TOKEN}|" "${INSTANCE_DIR}/.env"
+    sed -i "s|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${MCP_TOKEN}|" "${INSTANCE_DIR}/.env"
 else
-    echo "MATRIX_ACCESS_TOKEN=${ACCESS_TOKEN}" >> "${INSTANCE_DIR}/.env"
+    echo "MATRIX_ACCESS_TOKEN=${MCP_TOKEN}" >> "${INSTANCE_DIR}/.env"
 fi
 ok "Main .env updated"
 echo

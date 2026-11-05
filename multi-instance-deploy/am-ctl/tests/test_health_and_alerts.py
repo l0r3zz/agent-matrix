@@ -4,8 +4,11 @@ import json
 import time
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from amctl.models.audit import AuditLog
+from amctl.models.health import HealthState
 from amctl.schemas.agent import ContainerStatus, MatrixIdentity, ProcessInfo
 from amctl.services import agent_zero, docker, matrix
 from tests.conftest import API_HEADERS
@@ -188,3 +191,50 @@ async def test_health_engine_healthy_auto_repair_and_terminal_stop(
     r_rules = await client.get("/api/v1/health/rules/all", headers=API_HEADERS)
     assert r_rules.status_code == 200
     assert len(r_rules.json()) == 8
+
+
+@pytest.mark.asyncio
+async def test_report_on_non_active_agent_records_but_suppresses_actions(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch
+):
+    sup_calls = []
+
+    async def mock_sup(name: str, action: str, prog: str):
+        sup_calls.append((name, action, prog))
+        return True, "ok"
+
+    monkeypatch.setattr("amctl.services.health_engine.supervisor_action", mock_sup)
+
+    r_put = await client.put(
+        "/api/v1/agents/agent0-1", headers=API_HEADERS, json={"status": "maintenance"}
+    )
+    assert r_put.status_code == 200 and r_put.json()["status"] == "maintenance"
+
+    # watchdog.sh reports run_bot down (restartable) and a terminal identity failure
+    r_rep = await client.post(
+        "/api/v1/health/agent0-1/report",
+        headers=API_HEADERS,
+        json={
+            "reporter": "watchdog.sh",
+            "checks": [
+                {"check_type": "process", "status": "fail", "detail": {"bot_count": 0}},
+                {"check_type": "identity", "status": "fail", "detail": {"error": "identity_mismatch"}},
+            ],
+        },
+    )
+    assert r_rep.status_code == 200
+    assert sup_calls == []
+
+    states = (await db_session.execute(select(HealthState))).scalars().all()
+    by_type = {s.check_type: s for s in states}
+    assert by_type["process"].status == "fail"
+    assert by_type["identity"].status == "fail"
+
+    audits = (
+        await db_session.execute(select(AuditLog).where(AuditLog.action == "auto_action_suppressed"))
+    ).scalars().all()
+    assert {a.detail["check_type"] for a in audits} == {"process", "identity"}
+    assert all(a.detail["agent_status"] == "maintenance" for a in audits)
+
+    r_alerts = await client.get("/api/v1/alerts?status=open", headers=API_HEADERS)
+    assert r_alerts.json() == []

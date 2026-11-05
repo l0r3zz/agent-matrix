@@ -72,6 +72,17 @@ generate_new_token() {
     echo "$response" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('access_token',''))" 2>/dev/null
 }
 
+# matrix-mcp-server-r2 binds its E2EE crypto store to one device. A refreshed
+# MCP token must log in as that same device, or the store is orphaned.
+get_mcp_device_id() {
+    local agent_num=$1
+    local store
+    store=$(get_container_mcp_env_value "$agent_num" "CRYPTO_STORE_PATH")
+    if [[ -n "$store" ]]; then
+        docker exec "agent0-${agent_num}" cat "${store}/.device-id" 2>/dev/null | tr -d '\r\n'
+    fi
+}
+
 update_mcp_env() {
     local agent_num=$1
     local token=$2
@@ -150,17 +161,20 @@ for agent_num in "${AGENTS[@]}"; do
     
     if [[ "$MCP_STATUS" == "401" || "$BOT_STATUS" == "401" ]]; then
         log "  Token(s) expired — attempting refresh..."
+        MCP_DEVICE_ID=$(get_mcp_device_id "$agent_num")
+        MCP_DEVICE_ID=${MCP_DEVICE_ID:-matrix-mcp-server-device}
+        log "  MCP device: ${MCP_DEVICE_ID}"
         
         # Try login with deployment password
         if [[ -n "$DEPLOY_PASSWORD" ]]; then
-            NEW_MCP_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "$DEPLOY_PASSWORD" "matrix-mcp-server-device")
+            NEW_MCP_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "$DEPLOY_PASSWORD" "$MCP_DEVICE_ID")
             NEW_BOT_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "$DEPLOY_PASSWORD" "AgentZeroBot")
         fi
         
         # If deployment password fails, try "password" (common default)
         if [[ -z "$NEW_MCP_TOKEN" ]]; then
             log "  Deployment password failed, trying default password..."
-            NEW_MCP_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "password" "matrix-mcp-server-device")
+            NEW_MCP_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "password" "$MCP_DEVICE_ID")
             NEW_BOT_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "password" "AgentZeroBot")
         fi
         
