@@ -1,0 +1,2 @@
+{"event_id":"$ftdXYHy9X0vwnrfCqk52ZoYWNDskQcIlLqrDQQaUZx0","fed_sync_latency_ms":5680,"origin_server_ts":1793408629180,"room_id":"!gahcrWFWAUJQPPkuQy:v-site.net","sender":"@admin:v-site.net","stage":"bot_received","ts":1793408634860}
+{"builtin":true,"event_id":"$ftdXYHy9X0vwnrfCqk52ZoYWNDskQcIlLqrDQQaUZx0","stage":"reply_sent","total_rtt_ms":5687,"ts":1793408634867}

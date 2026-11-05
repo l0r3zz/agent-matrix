@@ -626,6 +626,40 @@ fn chunk_by_chars(input: &str, max_chars: usize) -> Vec<String> {
         .collect()
 }
 
+/// Current unix time in milliseconds for pipeline tracing.
+/// Named trace_now_ms to avoid collision with the per-event `now_ms` local in handle_sync.
+fn trace_now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
+
+/// Append one pipeline-trace record (JSONL) to trace.jsonl in the bot working
+/// directory. Never fails; silent on error so tracing can never break the bot.
+/// Disable with TRACE_ENABLED=0|false|no.
+fn trace_event(event_id: &str, stage: &str, fields: Value) {
+    if matches!(
+        std::env::var("TRACE_ENABLED").as_deref(),
+        Ok("0") | Ok("false") | Ok("no")
+    ) {
+        return;
+    }
+    let mut rec = json!({ "ts": trace_now_ms(), "event_id": event_id, "stage": stage });
+    if let (Some(obj), Some(extra)) = (rec.as_object_mut(), fields.as_object()) {
+        for (k, v) in extra {
+            obj.insert(k.clone(), v.clone());
+        }
+    }
+    let path = std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("trace.jsonl");
+    use std::io::Write as _;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "{}", rec);
+    }
+}
+
 fn built_in_response(body: &str, agent_identity: &str, user_id: &str) -> Option<String> {
     match body.trim().to_lowercase().as_str() {
         "ping" => Some("PONG".to_string()),
@@ -973,8 +1007,19 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
                 room_id, event_id, sender
             );
 
+            trace_event(&event_id, "bot_received", json!({
+                "room_id": room_id,
+                "sender": sender,
+                "origin_server_ts": ts,
+                "fed_sync_latency_ms": now_ms - ts,
+            }));
+
             if let Some(reply) = built_in_response(&body, &bot.cfg.agent_identity, &bot.cfg.user_id) {
                 let _ = bot.send_message(room_id, &reply).await;
+                trace_event(&event_id, "reply_sent", json!({
+                    "builtin": true,
+                    "total_rtt_ms": trace_now_ms() - ts,
+                }));
                 continue;
             }
 
@@ -983,15 +1028,28 @@ async fn handle_sync(bot: &mut Bot, sync: &Value) -> Result<()> {
                 "[MATRIX MESSAGE - reply with plain conversational text only, DO NOT use any Matrix tools, do not send messages via MCP. Keep responses concise and conversational - a few sentences max. No status reports or diagnostics unless explicitly asked.]\nFrom: {}\nRoom: {}\n\n{}",
                 sender, room_id, body
             );
+            let a0_start_ms = trace_now_ms();
+            trace_event(&event_id, "a0_request_start", json!({}));
             let reply = bot.ask_agent_zero(&full_message, room_id, sender).await;
+            trace_event(&event_id, "a0_request_done", json!({
+                "a0_latency_ms": trace_now_ms() - a0_start_ms,
+                "reply_len": reply.len(),
+            }));
             let _ = bot.set_typing(room_id, false).await;
 
-            for chunk in chunk_by_chars(&reply, MAX_CHARS_PER_MESSAGE) {
+            let chunks = chunk_by_chars(&reply, MAX_CHARS_PER_MESSAGE);
+            let n_chunks = chunks.len();
+            for chunk in chunks {
                 if let Err(e) = bot.send_message(room_id, &chunk).await {
                     warn!("Failed to send response chunk: {}", e);
                     break;
                 }
             }
+            trace_event(&event_id, "reply_sent", json!({
+                "builtin": false,
+                "chunks": n_chunks,
+                "total_rtt_ms": trace_now_ms() - ts,
+            }));
         }
     }
     Ok(())

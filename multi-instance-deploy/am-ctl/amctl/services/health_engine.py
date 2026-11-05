@@ -123,6 +123,18 @@ async def _record_check_and_act(
     if status != "fail":
         return
 
+    # Operators park an agent (e.g. "maintenance") to stop automation from
+    # touching it. Container-side reporters (watchdog.sh, preflight-check.sh)
+    # still post here, so the status gate must live at this choke point.
+    if agent.status != "active":
+        session.add(AuditLog(
+            agent_id=agent.id,
+            action="auto_action_suppressed",
+            detail={"check_type": check_type, "agent_status": agent.status, "suppressed_action": action},
+            operator=operator,
+        ))
+        return
+
     # 4. Handle failure according to classification (TERMINAL_CONFIG vs RESTARTABLE)
     detail["classification"] = classification.upper()
 

@@ -853,10 +853,13 @@ Create via A0 scheduler or verify with `scheduler:list_tasks`.
 If all three layers fail or tokens need manual rotation:
 
 ```bash
-# 1. Get a new token (inside agent container)
+# 1. Get a new token (inside agent container).
+#    With matrix-mcp-server-r2, log in as the existing MCP device so the
+#    E2EE crypto store stays bound to it (see 7.7).
+DEVICE=$(cat /a0/usr/workdir/matrix-mcp-server/crypto-store/.device-id)
 curl -s -X POST http://agent0-N-mhs:8008/_matrix/client/v3/login \
   -H "Content-Type: application/json" \
-  -d '{"type":"m.login.password","user":"@agent0-N:agent0-N-mhs.cybertribe.com","password":"YOUR_PASSWORD"}' \
+  -d '{"type":"m.login.password","user":"@agent0-N:agent0-N-mhs.cybertribe.com","password":"YOUR_PASSWORD","device_id":"'"$DEVICE"'"}' \
   | jq -r '.access_token'
 
 # 2. Update .env
@@ -872,6 +875,47 @@ cd /a0/usr/workdir/matrix-mcp-server && nohup node dist/http-server.js >> mcp-se
 # 5. Verify
 curl -s http://localhost:3000/health
 ```
+
+## 7.7 Separate Matrix Devices for the Bot and MCP Server (v0.92)
+
+The bot and the MCP server log in as the same Matrix user but must use **different devices**:
+
+| Process | `.env` | Device |
+|---------|--------|--------|
+| `run_bot` (`matrix-bot-rust`) | `matrix-bot/.env` | `AgentZeroBot` |
+| `run_mcp` (`matrix-mcp-server-r2`) | `matrix-mcp-server/.env` | the device in `crypto-store/.device-id` |
+
+Why: `matrix-mcp-server-r2` owns an E2EE crypto store bound to its device. Matrix delivers to-device messages (Megolm room keys) to whichever client syncs as that device. If the bot syncs with the MCP token, it consumes the room keys, and every inbound encrypted message fails with `missing_key`.
+
+Rules:
+- Never copy one `MATRIX_ACCESS_TOKEN` into both `.env` files.
+- Refresh the MCP token only by logging in with its existing `device_id` (7.6 step 1). A new device orphans the crypto store.
+- `finalize-instance.sh` provisions both devices. For existing agents, run on g2s:
+
+```bash
+templates/scripts/split-bot-device.sh --dry-run 5   # report only
+templates/scripts/split-bot-device.sh 5             # move the bot to AgentZeroBot, restart run_bot only
+```
+
+The script is idempotent and never touches the MCP token, device, or crypto store.
+
+Known limit: `matrix-bot-rust` has no E2EE, so it does not answer in encrypted rooms. `matrix-mcp-server-r2` Stage 2 (`003-integrated-matrix-bot`) removes this limit.
+
+### Enabling E2EE (matrix-mcp-server-r2 v0.2.0)
+
+Split the devices first, then follow the upgrade guide in the r2 repo: [`docs/upgrade-to-v0.2.0.md`](https://github.com/l0r3zz/matrix-mcp-server-r2/blob/main/docs/upgrade-to-v0.2.0.md). It covers the per-agent steps, verification, recovery-key backup, rollback, and a stale-password reset that keeps existing devices. If the MCP token device does not match `crypto-store/.device-id`, r2 v0.2.0 refuses to start.
+
+### Pausing automation for one agent
+
+Set the agent's status to anything other than `active` (for example `maintenance`):
+
+```bash
+curl -s -X PUT http://127.0.0.1:8077/api/v1/agents/agent0-N \
+  -H "X-API-Key: $AMCTL_API_KEY" -H "Content-Type: application/json" \
+  -d '{"status":"maintenance"}'
+```
+
+am-ctl still records health checks, including reports from the in-container `watchdog.sh`, but skips restart and stop actions and writes an `auto_action_suppressed` audit entry. Set `"status":"active"` to resume.
 
 ### Key Files
 

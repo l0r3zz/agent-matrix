@@ -73,7 +73,7 @@ Executes the post-creation bootstrap sequence asynchronously and idempotently:
 2. Polls Continuwuity (`http://172.23.89.N:8008/_matrix/client/versions`) until ready.
 3. Extracts the one-time Continuwuity bootstrap token from container logs (or logs in if already registered) and completes UIAA registration for `@agent0-N`.
 4. Requests a Step-CA certificate (`server.crt` + `server.key` full chain) from `tarnover` Step-CA provisioner and reloads Caddy.
-5. Writes `MATRIX_ACCESS_TOKEN` to `matrix-bot/.env` and `matrix-mcp-server/.env`, and runs `sync-mcp-token-into-settings.py`.
+5. Writes separate device tokens: the MCP token to `matrix-mcp-server/.env` and an `AgentZeroBot` device token to `matrix-bot/.env` (never one token in both; see operations manual 7.7). Then runs `sync-mcp-token-into-settings.py`.
 6. Derives the canonical `.a0-api-key` via `derive-a0-token.sh` and records its SHA-256 fingerprint in `credential_fingerprints`.
 7. Runs `preflight-check.sh`, starts `run_mcp` and `run_bot` under `supervisord`, triggers Synapse notary key fetch + room auto-repair for `required_rooms`, and transitions `agents.status` from `'provisioning'` to `'active'`.
 
