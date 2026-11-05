@@ -13,6 +13,10 @@
 #
 # Usage: ./split-bot-device.sh [--dry-run] <agent-number> [agent-number ...]
 # Example: ./split-bot-device.sh 5
+#
+# The bot login uses MATRIX_PASSWORD from /opt/agent-zero/agent0-N/.env.
+# If that value is stale, pass the real one in the environment:
+#   read -rs MATRIX_PASSWORD && export MATRIX_PASSWORD && ./split-bot-device.sh 5
 # =============================================================================
 set -euo pipefail
 
@@ -101,12 +105,12 @@ split_agent() {
     local user_id user password new_token new_device
     user_id="$(env_value "${agent}" "${MCP_ENV}" MATRIX_USER_ID)"
     user="${user_id#@}"; user="${user%%:*}"
-    password="$(grep '^MATRIX_PASSWORD=' "${AGENT_ZERO_DIR}/${agent}/.env" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '\r\n"')"
+    password="${MATRIX_PASSWORD:-$(grep '^MATRIX_PASSWORD=' "${AGENT_ZERO_DIR}/${agent}/.env" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '\r\n"')}"
     [[ -n "${user}" && -n "${password}" ]] || { log "  FAIL: missing user or MATRIX_PASSWORD in ${AGENT_ZERO_DIR}/${agent}/.env"; return 1; }
 
     log "  Logging bot in as device ${BOT_DEVICE_ID}"
     new_token="$(login_bot_device "${agent}" "${hs}" "${user}" "${password}")"
-    [[ -n "${new_token}" ]] || { log "  FAIL: bot login failed"; return 1; }
+    [[ -n "${new_token}" ]] || { log "  FAIL: bot login failed (password rejected? set MATRIX_PASSWORD to override ${AGENT_ZERO_DIR}/${agent}/.env)"; return 1; }
     new_device="$(token_device "${agent}" "${hs}" "${new_token}")"
     if [[ "${new_device}" != "${BOT_DEVICE_ID}" || "${new_device}" == "${mcp_device}" ]]; then
         log "  FAIL: new bot token resolves to device ${new_device:-?}"
