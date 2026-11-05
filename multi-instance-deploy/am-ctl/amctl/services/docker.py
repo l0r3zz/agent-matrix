@@ -7,25 +7,69 @@ This avoids pulling in the full Docker SDK as a dependency.
 import asyncio
 import json
 import logging
+import os
+import signal
 
 from amctl.schemas.agent import ContainerStatus, ProcessInfo
 
 logger = logging.getLogger(__name__)
 
 
-async def _run(cmd: list[str], timeout: float = 15.0) -> tuple[int, str]:
-    """Run a command and return (exit_code, stdout)."""
+async def _run(
+    cmd: list[str],
+    timeout: float = 15.0,
+    on_line=None,
+) -> tuple[int, str]:
+    """Run a command and return (exit_code, stdout).
+
+    When ``on_line`` is set, stdout and stderr are merged and each progress
+    line is passed to that async callback as it arrives.
+    """
+    merge_output = on_line is not None
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT if merge_output else asyncio.subprocess.PIPE,
+        start_new_session=True,
     )
+
+    async def _finish() -> tuple[int, str]:
+        if not merge_output:
+            stdout, _stderr = await proc.communicate()
+            return proc.returncode or 0, stdout.decode().strip()
+        assert proc.stdout is not None
+        collected: list[str] = []
+        pending = ""
+        while True:
+            chunk = await proc.stdout.read(512)
+            if not chunk:
+                break
+            pending += chunk.decode(errors="replace")
+            while True:
+                cuts = [i for i in (pending.find("\n"), pending.find("\r")) if i >= 0]
+                if not cuts:
+                    break
+                cut = min(cuts)
+                line = pending[:cut].strip()
+                pending = pending[cut + 1 :]
+                if line:
+                    collected.append(line)
+                    await on_line(line)
+        tail = pending.strip()
+        if tail:
+            collected.append(tail)
+            await on_line(tail)
+        await proc.wait()
+        return proc.returncode or 0, "\n".join(collected)
+
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        return await asyncio.wait_for(_finish(), timeout=timeout)
     except asyncio.TimeoutError:
-        proc.kill()
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         return 1, ""
-    return proc.returncode or 0, stdout.decode().strip()
 
 
 async def get_container_status(agent_name: str) -> list[ContainerStatus]:

@@ -403,8 +403,8 @@ Replaces `sync-fleet.sh`, `update-fleet.sh`, `update-fleet-v2.sh`, and `deploy-s
   Deploys registered release `<VER>` to `<AGENT_NAME>`. Verifies SHA-256 checksums before and after copying files into the instance's bind-mounted workdir, **preserves instance-local state** (`matrix-bot/.env` and `room_contexts.json`), restarts `matrix-bot` via `supervisorctl`, and runs post-deploy health and reconciliation drift checks.
   - **API Endpoint**: `POST /api/v1/deploy/{name}`
 
-- **`am-ctl deploy version --version <TAG> [--instances 2,3,...] [--skip-restart] [--force] [--output table|json]`**
-  Updates the `agent-zero` Docker image tag (e.g., `v2.15`) in the target instances' `docker-compose.yml`, recreates the container via `docker compose up -d` (unless `--skip-restart` is set), and runs post-restart health verification. `--version latest` looks up `tag_name` on the newest non-prerelease GitHub release of `agent0ai/agent-zero` and deploys that tag. The word `latest` is not written into Compose.
+- **`am-ctl deploy version --version <TAG> [--instances 2,3,...] [--skip-restart] [--force] [--verbose] [--output table|json]`**
+  Updates the `agent-zero` Docker image tag (e.g., `v2.15`) in the target instances' `docker-compose.yml`, recreates the container via `docker compose up -d` (unless `--skip-restart` is set), and runs post-restart health verification. `--version latest` looks up `tag_name` on the newest non-prerelease GitHub release of `agent0ai/agent-zero` and deploys that tag. The word `latest` is not written into Compose. `--verbose` prints Compose output while that recreate runs. The command waits up to 15 minutes per instance.
   - **API Endpoint**: `POST /api/v1/deploy/{name}/version`
 
 - **`am-ctl deploy status [--output table|json]`**

@@ -1,5 +1,7 @@
 """HTTP client for the am-ctl API."""
 
+import json
+
 import httpx
 
 
@@ -196,18 +198,47 @@ class AmCtlClient:
         skip_restart: bool = False,
         force: bool = False,
         operator: str = "cli:deploy_version",
+        verbose: bool = False,
+        on_line=None,
     ) -> dict:
-        resp = self._client.post(
+        payload = {
+            "image_version": image_version,
+            "skip_restart": skip_restart,
+            "force": force,
+            "operator": operator,
+            "verbose": verbose,
+        }
+        # Image pulls can take many minutes. The client default is 60s.
+        timeout = 900.0
+        if not verbose:
+            resp = self._client.post(
+                f"/api/v1/deploy/{agent_name}/version",
+                json=payload,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        result = None
+        with self._client.stream(
+            "POST",
             f"/api/v1/deploy/{agent_name}/version",
-            json={
-                "image_version": image_version,
-                "skip_restart": skip_restart,
-                "force": force,
-                "operator": operator,
-            },
-        )
-        resp.raise_for_status()
-        return resp.json()
+            json=payload,
+            timeout=timeout,
+        ) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                if line.startswith("AMCTL_RESULT "):
+                    result = json.loads(line.removeprefix("AMCTL_RESULT "))
+                elif line.startswith("ERROR "):
+                    raise RuntimeError(line.removeprefix("ERROR "))
+                elif on_line is not None:
+                    on_line(line)
+        if result is None:
+            raise RuntimeError(f"{agent_name}: verbose deploy ended without a result")
+        return result
 
     # Phase 7: Model Management
     def list_fleet_models(self) -> dict:

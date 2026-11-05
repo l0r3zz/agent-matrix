@@ -581,9 +581,10 @@ def deploy_status_cmd(ctx, cmd_output):
 @click.option("--instances", default="2", help="Comma-separated instance numbers (e.g. 2,3)")
 @click.option("--skip-restart", is_flag=True, help="Update docker-compose.yml only without recreating container")
 @click.option("--force", is_flag=True, help="Force recreate even if already at target version")
+@click.option("--verbose", is_flag=True, help="Show docker compose output while the container is recreated")
 @click.option("--output", "cmd_output", type=click.Choice(["table", "json"]), default=None, help="Output format")
 @click.pass_context
-def deploy_version_cmd(ctx, image_version, instances, skip_restart, force, cmd_output):
+def deploy_version_cmd(ctx, image_version, instances, skip_restart, force, verbose, cmd_output):
     """Update Agent Zero Docker image version for specified instance(s)."""
     client = get_client(ctx)
     fmt = cmd_output or ctx.obj["output_format"]
@@ -599,11 +600,15 @@ def deploy_version_cmd(ctx, image_version, instances, skip_restart, force, cmd_o
     results = []
     for aname in inst_list:
         try:
+            if fmt != "json":
+                console.print(f"Updating {aname} to {image_version}...")
             res = client.deploy_version(
                 agent_name=aname,
                 image_version=image_version,
                 skip_restart=skip_restart,
                 force=force,
+                verbose=verbose,
+                on_line=(lambda line: console.print(line, markup=False, highlight=False)) if verbose else None,
             )
             results.append(res)
             if fmt != "json":
@@ -611,6 +616,16 @@ def deploy_version_cmd(ctx, image_version, instances, skip_restart, force, cmd_o
                     f"[cyan]{aname}[/cyan]: {res['previous_version']} -> {res['target_version']} "
                     f"(status=[green]{res['status']}[/green], health={'PASS' if res['health_passed'] else 'WARN'})"
                 )
+        except httpx.TimeoutException:
+            console.print(
+                f"[red]{aname}: no answer after 15 minutes. "
+                "The server may still be recreating the container. "
+                "Check it before starting the next instance.[/red]"
+            )
+            sys.exit(1)
+        except RuntimeError as exc:
+            console.print(f"[red]{aname}: {exc}[/red]")
+            sys.exit(1)
         except httpx.HTTPStatusError as e:
             console.print(f"[red]{aname}: {e.response.text}[/red]")
             sys.exit(1)

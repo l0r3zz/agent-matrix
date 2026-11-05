@@ -265,6 +265,16 @@ async def test_deployer_releases_deploy_version_and_status(
     assert r_latest.json()["detail"]["requested_version"] == "latest"
     assert "agent0ai/agent-zero:v2.16" in (inst_base / "agent0-2" / "docker-compose.yml").read_text()
 
+    r_verbose = await client.post(
+        "/api/v1/deploy/agent0-2/version",
+        headers=API_HEADERS,
+        json={"image_version": "v2.16", "skip_restart": True, "verbose": True, "operator": "pytest"},
+    )
+    assert r_verbose.status_code == 200
+    assert "Updating agent0-2 to v2.16" in r_verbose.text
+    assert "AMCTL_RESULT " in r_verbose.text
+    assert '"target_version":"v2.16"' in r_verbose.text.replace(" ", "")
+
     # 4. Fleet deploy status
     r_st = await client.get("/api/v1/deploy/status", headers=API_HEADERS)
     assert r_st.status_code == 200

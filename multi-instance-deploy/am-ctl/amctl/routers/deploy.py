@@ -1,6 +1,9 @@
 """Release & fleet deployment API endpoints (Phase 6)."""
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +18,6 @@ from amctl.schemas.deploy import (
     ReleaseCreateRequest,
     ReleaseResponse,
     VersionUpdateRequest,
-    VersionUpdateResponse,
 )
 from amctl.services.deployer import (
     create_or_register_release,
@@ -83,27 +85,71 @@ async def deploy_to_agent(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/deploy/{agent_name}/version", response_model=VersionUpdateResponse)
+@router.post("/deploy/{agent_name}/version", response_model=None)
 async def update_agent_version(
     agent_name: str,
     req: VersionUpdateRequest,
     session: AsyncSession = Depends(get_session),
     _key: str = Depends(require_api_key),
 ):
-    """Update Agent Zero Docker image version for a single agent."""
+    """Update Agent Zero Docker image version for a single agent.
+
+    ``verbose`` streams Compose progress as text, then one ``AMCTL_RESULT`` JSON line.
+    """
     res = await session.execute(select(Agent).where(Agent.name == agent_name))
     agent = res.scalar_one_or_none()
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
 
-    try:
-        return await update_agent_image_version(
-            session,
-            agent,
-            image_version=req.image_version,
-            skip_restart=req.skip_restart,
-            force=req.force,
-            operator=req.operator,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    if not req.verbose:
+        try:
+            return await update_agent_image_version(
+                session,
+                agent,
+                image_version=req.image_version,
+                skip_restart=req.skip_restart,
+                force=req.force,
+                operator=req.operator,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    async def body():
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def on_line(line: str) -> None:
+            await queue.put(("log", line))
+
+        async def work() -> None:
+            try:
+                result = await update_agent_image_version(
+                    session,
+                    agent,
+                    image_version=req.image_version,
+                    skip_restart=req.skip_restart,
+                    force=req.force,
+                    operator=req.operator,
+                    on_line=on_line,
+                )
+                await queue.put(("done", result.model_dump_json()))
+            except Exception as exc:
+                await queue.put(("error", str(exc)))
+
+        task = asyncio.create_task(work())
+        try:
+            while True:
+                kind, payload = await queue.get()
+                if kind == "log":
+                    yield f"{payload}\n".encode()
+                elif kind == "done":
+                    yield f"AMCTL_RESULT {payload}\n".encode()
+                    break
+                else:
+                    yield f"ERROR {payload}\n".encode()
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    return StreamingResponse(body(), media_type="text/plain")

@@ -44,6 +44,7 @@ class VersionUpdateRequest(BaseModel):
     skip_restart: bool = False
     force: bool = False
     operator: str = "cli:deploy_version"
+    verbose: bool = False
 
 
 class VersionUpdateResponse(BaseModel):

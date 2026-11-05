@@ -371,6 +371,7 @@ async def update_agent_image_version(
     skip_restart: bool = False,
     force: bool = False,
     operator: str = "cli:deploy_version",
+    on_line=None,
 ) -> VersionUpdateResponse:
     """Update Agent Zero Docker image version in docker-compose.yml and optionally
     recreate the container (absorbs update-fleet.sh v2.2).
@@ -384,6 +385,8 @@ async def update_agent_image_version(
     if is_latest_keyword(image_version):
         image_version = await fetch_latest_tag()
         resolved_from = LATEST_RELEASE_URL
+    if on_line is not None:
+        await on_line(f"Updating {agent.name} to {image_version}")
 
     compose_path = INSTANCE_BASE / agent.name / "docker-compose.yml"
     if not compose_path.is_file():
@@ -422,17 +425,25 @@ async def update_agent_image_version(
 
     if not skip_restart:
         svc_name = _get_compose_service_name(compose_path)
-        rc, out = await _run([
-            "bash", "-c",
-            f"cd /opt/agent-zero/{agent.name} && set -a && [ -f .env ] && source .env && set +a && "
-            f"docker compose up -d --no-deps --force-recreate {svc_name}",
-        ], timeout=120.0)
+        logger.info("Recreating %s with image tag %s", agent.name, image_version)
+        rc, out = await _run(
+            [
+                "bash", "-c",
+                f"cd /opt/agent-zero/{agent.name} && set -a && [ -f .env ] && source .env && set +a && "
+                f"docker compose up -d --no-deps --force-recreate {svc_name}",
+            ],
+            timeout=900.0,
+            on_line=on_line,
+        )
+        logger.info("Compose recreate for %s finished rc=%s", agent.name, rc)
         container_recreated = rc == 0
         # Wait for container services & Agent Zero UI to stabilize
-        for _ in range(25):
+        for attempt in range(25):
             await asyncio.sleep(2)
             pinfo = await get_process_info(agent.name)
             cur_v = await _get_running_a0_version(agent.name)
+            if on_line is not None and attempt % 5 == 0:
+                await on_line(f"Waiting for {agent.name} to report {image_version} (saw {cur_v})")
             if pinfo and pinfo.bot_count == 1 and cur_v == image_version:
                 break
 
