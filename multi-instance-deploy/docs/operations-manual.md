@@ -901,6 +901,10 @@ The script is idempotent and never touches the MCP token, device, or crypto stor
 
 Known limit: `matrix-bot-rust` has no E2EE, so it does not answer in encrypted rooms. `matrix-mcp-server-r2` Stage 2 (`003-integrated-matrix-bot`) removes this limit.
 
+### Enabling E2EE (matrix-mcp-server-r2 v0.2.0)
+
+Split the devices first, then follow the upgrade guide in the r2 repo: [`docs/upgrade-to-v0.2.0.md`](https://github.com/l0r3zz/matrix-mcp-server-r2/blob/main/docs/upgrade-to-v0.2.0.md). It covers the per-agent steps, verification, recovery-key backup, rollback, and a stale-password reset that keeps existing devices. If the MCP token device does not match `crypto-store/.device-id`, r2 v0.2.0 refuses to start.
+
 ### Pausing automation for one agent
 
 Set the agent's status to anything other than `active` (for example `maintenance`):
