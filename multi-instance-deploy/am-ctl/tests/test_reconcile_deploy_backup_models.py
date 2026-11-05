@@ -1,5 +1,7 @@
 """Tests for Phase 4 Reconciler, Phase 5 Backups, Phase 6 Deployer, and Phase 7 Model Manager."""
 
+import asyncio
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -8,6 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from amctl.schemas.agent import ContainerStatus, MatrixIdentity, ProcessInfo
+from amctl.schemas.reconcile import AgentDriftReport
 from amctl.services import backup, deployer, model_manager, reconciler
 from tests.conftest import API_HEADERS
 
@@ -279,6 +282,76 @@ async def test_deployer_releases_deploy_version_and_status(
     r_st = await client.get("/api/v1/deploy/status", headers=API_HEADERS)
     assert r_st.status_code == 200
     assert r_st.json()["latest_release"] == "v1.2.1"
+
+
+@pytest.mark.asyncio
+async def test_probe_in_batches_caps_at_five():
+    inflight = 0
+    peak = 0
+
+    async def work() -> int:
+        nonlocal inflight, peak
+        inflight += 1
+        peak = max(peak, inflight)
+        await asyncio.sleep(0.02)
+        inflight -= 1
+        return 1
+
+    results = await reconciler.probe_in_batches([work() for _ in range(6)], batch_size=5)
+    assert results == [1, 1, 1, 1, 1, 1]
+    assert peak == 5
+
+
+@pytest.mark.asyncio
+async def test_fleet_deploy_status_probes_agents_together(db_session: AsyncSession, monkeypatch):
+    inflight = 0
+    peak = 0
+
+    async def hold() -> None:
+        nonlocal inflight, peak
+        inflight += 1
+        peak = max(peak, inflight)
+        await asyncio.sleep(0.05)
+        inflight -= 1
+
+    async def mock_containers(name: str):
+        return [ContainerStatus(name=name, running=True)]
+
+    async def mock_proc(name: str):
+        return ProcessInfo(
+            bot_count=1, bot_runtime="rust", mcp_running=True, watchdog_running=True, supervisord_running=True
+        )
+
+    async def mock_version(name: str) -> str:
+        return "v2.15"
+
+    async def mock_mcp(name: str):
+        return "pass", {"status": "healthy", "version": "0.2.0"}
+
+    async def mock_drift(session, agent, colliding_fingerprints=None):
+        await hold()
+        return AgentDriftReport(
+            agent_id=agent.id,
+            agent_name=agent.name,
+            instance_num=agent.instance_num,
+            clean=True,
+            drift_count=0,
+            checks=[],
+            checked_at=datetime.now(timezone.utc),
+        )
+
+    monkeypatch.setattr(deployer, "get_container_status", mock_containers)
+    monkeypatch.setattr(deployer, "get_process_info", mock_proc)
+    monkeypatch.setattr(deployer, "_get_running_a0_version", mock_version)
+    monkeypatch.setattr(deployer, "check_mcp_health", mock_mcp)
+    monkeypatch.setattr(deployer, "check_agent_drift", mock_drift)
+    monkeypatch.setattr(deployer, "_get_compose_a0_version", lambda name: "v2.15")
+
+    report = await deployer.get_fleet_deploy_status(db_session)
+    assert [item.agent_name for item in report.agents] == ["agent0-1", "agent0-2"]
+    assert report.up_agents == 2
+    assert report.clean_agents == 2
+    assert peak == 2
 
 
 @pytest.mark.asyncio

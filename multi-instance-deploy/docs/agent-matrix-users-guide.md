@@ -408,7 +408,7 @@ Replaces `sync-fleet.sh`, `update-fleet.sh`, `update-fleet-v2.sh`, and `deploy-s
   - **API Endpoint**: `POST /api/v1/deploy/{name}/version`
 
 - **`am-ctl deploy status [--output table|json]`**
-  Displays the fleet-wide deployment matrix: container status, running Agent Zero version, compose tag, active release version (`v1.2.0`), bot process count, `matrix-mcp-server-r2` version, `supervisord` status, and drift status.
+  Displays the fleet-wide deployment matrix: container status, running Agent Zero version, compose tag, active release version (`v1.2.0`), bot process count, `matrix-mcp-server-r2` version, `supervisord` status, and drift status. Live probes run 5 agents at a time.
   - **API Endpoint**: `GET /api/v1/deploy/status`
 
 ---

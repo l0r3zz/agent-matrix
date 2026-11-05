@@ -324,6 +324,18 @@ async def check_agent_drift(
     )
 
 
+# Live docker and homeserver probes. A full fleet check runs this many agents at once.
+PROBE_BATCH_SIZE = 5
+
+
+async def probe_in_batches(coros: list, batch_size: int = PROBE_BATCH_SIZE):
+    """Run coroutines `batch_size` at a time. Result order matches `coros`."""
+    results = []
+    for start in range(0, len(coros), batch_size):
+        results.extend(await asyncio.gather(*coros[start : start + batch_size]))
+    return results
+
+
 async def _get_colliding_fingerprints(session: AsyncSession) -> set[str]:
     fp_res = await session.execute(select(CredentialFingerprint))
     fps = fp_res.scalars().all()
@@ -357,8 +369,8 @@ async def check_fleet_drift(session: AsyncSession) -> FleetDriftReport:
     ]
     colliding_fps = {c["fingerprint"] for c in collisions}
 
-    reports = await asyncio.gather(
-        *[check_agent_drift(session, a, colliding_fingerprints=colliding_fps) for a in agents]
+    reports = await probe_in_batches(
+        [check_agent_drift(session, a, colliding_fingerprints=colliding_fps) for a in agents]
     )
 
     # Also detect live deployed fingerprint collisions across agents

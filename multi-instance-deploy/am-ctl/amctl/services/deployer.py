@@ -33,7 +33,13 @@ from amctl.schemas.deploy import (
 from amctl.services.agent_zero import check_mcp_health
 from amctl.services.docker import _run, get_container_status, get_process_info, supervisor_action
 from amctl.services.health_engine import run_agent_health_checks
-from amctl.services.reconciler import TRACKED_ARTIFACTS, _file_sha256_prefix, check_agent_drift
+from amctl.services.reconciler import (
+    TRACKED_ARTIFACTS,
+    _file_sha256_prefix,
+    _get_colliding_fingerprints,
+    check_agent_drift,
+    probe_in_batches,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -496,6 +502,41 @@ def _version_detail(
     return detail or None
 
 
+async def _collect_agent_deploy_status(
+    agent: Agent,
+    last_dep: Deployment | None,
+    session: AsyncSession,
+    colliding_fps: set[str],
+) -> AgentDeployStatusItem:
+    """Probe one agent. Callers run this in batches; the DB work is already done."""
+    containers, pinfo, run_ver, mcp_res, drift = await asyncio.gather(
+        get_container_status(agent.name),
+        get_process_info(agent.name),
+        _get_running_a0_version(agent.name),
+        check_mcp_health(agent.name),
+        check_agent_drift(session, agent, colliding_fingerprints=colliding_fps),
+    )
+    comp_ver = _get_compose_a0_version(agent.name)
+    is_up = any(c.name == agent.name and c.running for c in containers)
+    mcp_st, mcp_det = mcp_res
+    mcp_label = f"r2:{mcp_det.get('version', '0.1.1')}" if mcp_st == "pass" else "down"
+    return AgentDeployStatusItem(
+        agent_name=agent.name,
+        instance_num=agent.instance_num,
+        container_state="up" if is_up else "down",
+        running_a0_version=run_ver,
+        compose_a0_version=comp_ver,
+        version_drift=(run_ver != comp_ver and comp_ver != "unknown"),
+        release_version=agent.release_version,
+        bot_count=pinfo.bot_count if pinfo else 0,
+        mcp_status=mcp_label,
+        supervisord=pinfo.supervisord_running if pinfo else False,
+        reconcile_clean=drift.clean,
+        last_deployment_at=last_dep.deployed_at if last_dep else None,
+        last_deployment_status=last_dep.status if last_dep else None,
+    )
+
+
 async def get_fleet_deploy_status(session: AsyncSession) -> FleetDeployStatusResponse:
     """Return fleet-wide deployment overview (absorbs update-fleet.sh --status)."""
     res = await session.execute(select(Agent).order_by(Agent.instance_num))
@@ -511,46 +552,21 @@ async def get_fleet_deploy_status(session: AsyncSession) -> FleetDeployStatusRes
         if d.agent_id not in latest_dep_by_agent:
             latest_dep_by_agent[d.agent_id] = d
 
-    items: list[AgentDeployStatusItem] = []
-    up_count = 0
-    clean_count = 0
-
+    # Load relationship collections and the collision set before any parallel probe.
+    # check_agent_drift then stays off the shared DB session.
+    colliding_fps = await _get_colliding_fingerprints(session)
     for a in agents:
-        containers, pinfo, run_ver, mcp_res, drift = await asyncio.gather(
-            get_container_status(a.name),
-            get_process_info(a.name),
-            _get_running_a0_version(a.name),
-            check_mcp_health(a.name),
-            check_agent_drift(session, a),
-        )
-        comp_ver = _get_compose_a0_version(a.name)
-        is_up = any(c.name == a.name and c.running for c in containers)
-        if is_up:
-            up_count += 1
-        if drift.clean:
-            clean_count += 1
+        list(a.credential_fingerprints)
+        list(a.required_rooms)
 
-        mcp_st, mcp_det = mcp_res
-        mcp_label = f"r2:{mcp_det.get('version', '0.1.1')}" if mcp_st == "pass" else "down"
-        last_dep = latest_dep_by_agent.get(a.id)
-
-        items.append(
-            AgentDeployStatusItem(
-                agent_name=a.name,
-                instance_num=a.instance_num,
-                container_state="up" if is_up else "down",
-                running_a0_version=run_ver,
-                compose_a0_version=comp_ver,
-                version_drift=(run_ver != comp_ver and comp_ver != "unknown"),
-                release_version=a.release_version,
-                bot_count=pinfo.bot_count if pinfo else 0,
-                mcp_status=mcp_label,
-                supervisord=pinfo.supervisord_running if pinfo else False,
-                reconcile_clean=drift.clean,
-                last_deployment_at=last_dep.deployed_at if last_dep else None,
-                last_deployment_status=last_dep.status if last_dep else None,
-            )
-        )
+    items = await probe_in_batches(
+        [
+            _collect_agent_deploy_status(a, latest_dep_by_agent.get(a.id), session, colliding_fps)
+            for a in agents
+        ]
+    )
+    up_count = sum(1 for item in items if item.container_state == "up")
+    clean_count = sum(1 for item in items if item.reconcile_clean)
 
     return FleetDeployStatusResponse(
         total_agents=len(items),
