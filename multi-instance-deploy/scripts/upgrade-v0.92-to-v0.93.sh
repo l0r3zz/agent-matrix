@@ -226,6 +226,7 @@ upgrade_one() {
         log "dry-run: add missing MCP bot lines; do not change the access token"
         log "dry-run: back up the binary, deploy ${IMAGE}, restart run_mcp only"
         log "dry-run: require /health version 0.3.0 and run_bot still stopped"
+        log "dry-run: restart the watchdog loop"
         if [[ "$KEEP_MAINT" -eq 1 ]]; then
             log "dry-run: leave ${name} in maintenance"
         else
@@ -268,6 +269,20 @@ upgrade_one() {
     require_v093_health "$name"
     count="$(bot_count "$name")"
     [[ "$count" == "0" ]] || die "${name} started matrix-bot-rust after the MCP restart"
+
+    # The watchdog loop keeps its v0.92 logic until it restarts. That logic reports a
+    # process failure, and am-ctl then restarts run_bot on an active agent.
+    docker exec "$name" bash -c '
+        pkill -f /a0/usr/workdir/watchdog.sh || true
+        sleep 1
+        rm -f /a0/usr/workdir/watchdog.lock
+    '
+    docker exec -d "$name" bash -c \
+        'nohup /a0/usr/workdir/watchdog.sh >> /a0/usr/workdir/startup-services.log 2>&1 &'
+    sleep 10
+    docker exec "$name" pgrep -f /a0/usr/workdir/watchdog.sh >/dev/null \
+        || die "${name} watchdog did not restart"
+    log "${name} watchdog restarted with the v0.93 process check"
     if [[ "$KEEP_MAINT" -eq 1 ]]; then
         log "${name} is on 0.3.0 and stays in maintenance"
         return

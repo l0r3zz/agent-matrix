@@ -105,7 +105,7 @@ Order for one agent:
 7. Add the MCP `.env` lines from the new-install list when they are missing. Do not change `MATRIX_ACCESS_TOKEN`, `E2EE_ENABLED`, or the crypto store.
 8. Install the `0.3.0` binary with `MMS_R2_TAG=0.3.0`. Replace the binary only while `run_bot` is stopped. Restart only `run_mcp`.
 9. Wait up to 120 seconds for `/health`. The first Matrix sync blocks it for about 30 seconds. Require `/health` to report `version` `0.3.0`, `e2ee` true, `crossSigned` true, and `botEnabled` true.
-10. Require `run_bot` to still be stopped after that restart.
+10. Require `run_bot` to still be stopped after that restart. Restart the watchdog loop. A running loop keeps the v0.92 process check until it restarts, and that check makes am-ctl restart `run_bot`.
 11. Return that agent to `active` only after steps 5, 9, and 10 pass. Skip this step with `--keep-maintenance`.
 
 `@agent0-5` already runs a hand-built 0.3.0 binary with `BOT_ENABLED=true`, and `run_bot` is already stopped. The script must accept that state. It must not start `run_bot` in order to stop it. It replaces the hand-built binary with the published `0.3.0` image only after the supervisord patch is in place.
