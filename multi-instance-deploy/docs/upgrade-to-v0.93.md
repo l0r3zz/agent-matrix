@@ -2,10 +2,10 @@
 
 **Date**: 2026-11-08
 **Branch**: `release/v0.93` (from `main` at `b34517b`)
-**Target image**: `ghcr.io/l0r3zz/matrix-mcp-server-r2:0.3.0`
+**Target image**: `ghcr.io/l0r3zz/matrix-mcp-server-r2:0.3.1`
 **Lab canary**: `@agent0-5` on g2s. Do not use another agent as the first live target.
 
-This plan changes Agent-Matrix so a new install and an upgraded v0.92 agent both run one Matrix client. That client is `matrix-mcp-server-r2` 0.3.0. It serves the MCP tools and answers Matrix triggers. The separate `run_bot` program stays installed and stays stopped.
+This plan changes Agent-Matrix so a new install and an upgraded v0.92 agent both run one Matrix client. That client is `matrix-mcp-server-r2` 0.3.1. It serves the MCP tools and answers Matrix triggers. The separate `run_bot` program stays installed and stays stopped.
 
 This document is the plan. It does not change the running fleet.
 
@@ -16,17 +16,17 @@ v0.92 keeps two programs under one Matrix user:
 - `run_mcp` opens `CRYPTO_STORE_PATH` and the device in `.device-id`.
 - `run_bot` is `matrix-bot-rust` on a second device, `AgentZeroBot`.
 
-`matrix-bot-rust` cannot read encrypted rooms. A second process on the same crypto store fails with `KeyStoreUnavailableError`. v0.3.0 of `matrix-mcp-server-r2` takes the inbound job on the existing MCP device when `BOT_ENABLED=true`. The default in the binary is still false. Agent-Matrix v0.93 is what turns the flag on and stops the old program from coming back.
+`matrix-bot-rust` cannot read encrypted rooms. A second process on the same crypto store fails with `KeyStoreUnavailableError`. v0.3.1 of `matrix-mcp-server-r2` takes the inbound job on the existing MCP device when `BOT_ENABLED=true`. The default in the binary is still false. Agent-Matrix v0.93 is what turns the flag on and stops the old program from coming back.
 
 Synapse is already `1.164.2` on `matrix.v-site.net`. This plan does not upgrade Synapse, Continuwuity, or Caddy.
 
 ## Prerequisite
 
-Do not run the live upgrade until GitHub has image tag `0.3.0`.
+Do not run the live upgrade until GitHub has image tag `0.3.1`.
 
 That tag is created on `matrix-mcp-server-r2` `main` after pull request #2 merges. The tag publishes the image and moves `:latest`. Until that tag exists, the Agent-Matrix code can still land on `release/v0.93`. The upgrade script must refuse to copy a binary when the tag is missing.
 
-The fleet script `deploy-mms-r2-to-agent.sh` still defaults to `0.2.0`. v0.93 changes that default to `0.3.0`.
+The fleet script `deploy-mms-r2-to-agent.sh` still defaults to `0.2.0`. v0.93 changes that default to `0.3.1`.
 
 ## Rules for every path
 
@@ -48,7 +48,7 @@ A new agent comes from `create-instance.sh`, then `scripts/finalize-instance.sh`
 
 v0.93 new installs must:
 
-1. Install `matrix-mcp-server-r2` from image tag `0.3.0`.
+1. Install `matrix-mcp-server-r2` from image tag `0.3.1`.
 2. Keep `E2EE_ENABLED=true` for a normal fleet agent.
 3. Write these lines into `/a0/usr/workdir/matrix-mcp-server/.env` when they are missing:
    - `BOT_ENABLED=true`
@@ -96,19 +96,19 @@ The script reads the am-ctl key from `$AMCTL_API_KEY` or from `am-ctl/.env`. Whe
 
 Order for one agent:
 
-1. Refuse to start when `ghcr.io/l0r3zz/matrix-mcp-server-r2:0.3.0` cannot be pulled.
+1. Refuse to start when `ghcr.io/l0r3zz/matrix-mcp-server-r2:0.3.1` cannot be pulled.
 2. Set the agent to `maintenance` in am-ctl before stopping `run_bot`.
 3. Record that `run_mcp` is healthy and `crossSigned` is true. Stop if it is not. Do not print tokens or the recovery key.
 4. Stop `run_bot`. Patch the live `[program:run_bot]` to `autostart=false` and `autorestart=false`. Run `supervisorctl reread` and `supervisorctl update`.
 5. Confirm `pgrep -fc '[m]atrix-bot-rust'` is 0.
 6. Copy the v0.93 `watchdog.sh` into `/a0/usr/workdir/watchdog.sh`. Back up `startup-services.sh` to `startup-services.sh.bak-v092`, then copy the v0.93 version.
 7. Add the MCP `.env` lines from the new-install list when they are missing. Do not change `MATRIX_ACCESS_TOKEN`, `E2EE_ENABLED`, or the crypto store.
-8. Install the `0.3.0` binary with `MMS_R2_TAG=0.3.0`. Replace the binary only while `run_bot` is stopped. Restart only `run_mcp`.
-9. Wait up to 120 seconds for `/health`. The first Matrix sync blocks it for about 30 seconds. Require `/health` to report `version` `0.3.0`, `e2ee` true, `crossSigned` true, and `botEnabled` true.
+8. Install the `0.3.1` binary with `MMS_R2_TAG=0.3.1`. Replace the binary only while `run_bot` is stopped. Restart only `run_mcp`.
+9. Wait up to 120 seconds for `/health`. The first Matrix sync blocks it for about 30 seconds. Require `/health` to report `version` `0.3.1`, `e2ee` true, `crossSigned` true, and `botEnabled` true.
 10. Require `run_bot` to still be stopped after that restart. Restart the watchdog loop. A running loop keeps the v0.92 process check until it restarts, and that check makes am-ctl restart `run_bot`.
 11. Return that agent to `active` only after steps 5, 9, and 10 pass. Skip this step with `--keep-maintenance`.
 
-`@agent0-5` already runs a hand-built 0.3.0 binary with `BOT_ENABLED=true`, and `run_bot` is already stopped. The script must accept that state. It must not start `run_bot` in order to stop it. It replaces the hand-built binary with the published `0.3.0` image only after the supervisord patch is in place.
+`@agent0-5` already runs a hand-built 0.3.1 binary with `BOT_ENABLED=true`, and `run_bot` is already stopped. The script must accept that state. It must not start `run_bot` in order to stop it. It replaces the hand-built binary with the published `0.3.1` image only after the supervisord patch is in place.
 
 Run agent 5 first. Run agents 1 through 4 only after agent 5 answers `ping` and `hello` in Fleet HQ Clean and in one encrypted room the agent is already in.
 
@@ -153,7 +153,7 @@ The MCP token refresh from v0.92 stays. It reuses the device already stored for 
 
 ### Operator docs
 
-Update `docs/operations-manual.md` so a new install does not log in as device `AgentZeroBot` and does not describe `matrix-bot-rust` as the program that reads encrypted rooms. Point the E2EE section at r2 `0.3.0` and at this plan. Leave the v0.92 device-split notes in place as the path this release retires.
+Update `docs/operations-manual.md` so a new install does not log in as device `AgentZeroBot` and does not describe `matrix-bot-rust` as the program that reads encrypted rooms. Point the E2EE section at r2 `0.3.1` and at this plan. Leave the v0.92 device-split notes in place as the path this release retires.
 
 ## Rollback
 
@@ -173,7 +173,7 @@ Do not restore by copying the bot token over the MCP token.
 
 An upgraded agent and a new v0.93 agent both meet these checks:
 
-- `/health` reports `version` `0.3.0`, `e2ee` true, `crossSigned` true, and `botEnabled` true.
+- `/health` reports `version` `0.3.1`, `e2ee` true, `crossSigned` true, and `botEnabled` true.
 - `run_bot` is stopped. A `docker restart` of that container leaves it stopped and brings `run_mcp` back.
 - `agent0-N: ping` returns one `PONG` in Fleet HQ Clean and in one encrypted room.
 - `agent0-N: hello` returns one hello line.
@@ -185,7 +185,7 @@ An upgraded agent and a new v0.93 agent both meet these checks:
 
 ## Out of scope
 
-- Merging r2 pull request #2 or pushing the `v0.3.0` tag. Those happen in `matrix-mcp-server-r2`.
+- Merging r2 pull request #2 or pushing the `v0.3.1` tag. Those happen in `matrix-mcp-server-r2`.
 - Deleting the `matrix-bot` source tree.
 - Changing Continuwuity, Caddy, or the Synapse Helm chart.
 - A fleet-wide `docker restart` before agent 5 has passed.

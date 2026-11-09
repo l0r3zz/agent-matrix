@@ -13,7 +13,7 @@ Not production-ready -- lab for agentic architectures on open standards.
 | Reverse proxy | Caddy (per-agent TLS) |
 | Federation hub | Synapse on K8s (public) |
 | MCP server | TypeScript (Express, matrix-js-sdk, OAuth/Keycloak) |
-| Matrix bot | matrix-mcp-server-r2 0.3.0 when BOT_ENABLED=true; matrix-bot-rust stays installed and stopped |
+| Matrix bot | matrix-mcp-server-r2 0.3.1 when BOT_ENABLED=true; matrix-bot-rust stays installed and stopped |
 | Networking | macvlan Docker, OpenVPN, DD-WRT edge router |
 | Orchestration | Docker Compose (agents), K8s (federation/monitoring) |
 | Automation | Bash, Python helpers |
@@ -25,7 +25,7 @@ multi-instance-deploy/
   create-instance.sh          -- Provisions agent triplet (Agent Zero + Continuwuity + Caddy)
   docs/
     operations-manual.md      -- Step-by-step deploy procedures
-    upgrade-to-v0.93.md       -- v0.92 to v0.93 plan for matrix-mcp-server-r2 0.3.0
+    upgrade-to-v0.93.md       -- v0.92 to v0.93 plan for matrix-mcp-server-r2 0.3.1
     agent-matrix-design.md    -- Living architecture doc
     theory-of-operations.md   -- Deeper ops theory
   templates/
@@ -68,7 +68,7 @@ cd multi-instance-deploy/templates/matrix-bot/rust && cargo build --release
 - **macvlan networking**: Docker containers appear as real LAN devices; per-agent /32 routes
 - **MCP tool tiers**: tier0 (read: rooms, messages, users) vs tier1 (write: room-admin, messaging) -- capability layering
 - **Federation via public K8s Synapse**: Private LAN agents federate through OpenVPN to public hub
-- **matrix-mcp-server-r2 (Rust)**: Sibling repo. v0.93 uses image tag `0.3.0` as the only Matrix client. `run_bot` stays stopped.
+- **matrix-mcp-server-r2 (Rust)**: Sibling repo. v0.93 uses image tag `0.3.1` as the only Matrix client. `run_bot` stays stopped.
 
 ## Boundaries
 

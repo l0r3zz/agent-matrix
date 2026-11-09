@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Upgrade one or more v0.92 agents to Agent-Matrix v0.93.
-# The live fleet change waits until ghcr.io/l0r3zz/matrix-mcp-server-r2:0.3.0 exists.
+# The live fleet change waits until ghcr.io/l0r3zz/matrix-mcp-server-r2:0.3.1 exists.
 # Run on the Docker host. Pass instance numbers. There is no default of every agent.
 #
 #   ./upgrade-v0.92-to-v0.93.sh --dry-run 5
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-IMAGE="ghcr.io/l0r3zz/matrix-mcp-server-r2:0.3.0"
+IMAGE="ghcr.io/l0r3zz/matrix-mcp-server-r2:0.3.1"
 WATCHDOG="${SCRIPT_DIR}/../templates/scripts/watchdog.sh"
 STARTUP="${SCRIPT_DIR}/../templates/scripts/startup-services.sh"
 DEPLOY="${SCRIPT_DIR}/../templates/scripts/deploy-mms-r2-to-agent.sh"
@@ -100,7 +100,7 @@ import json, sys
 data = json.load(sys.stdin)
 ok = (
     data.get("status") == "healthy"
-    and data.get("version") == "0.3.0"
+    and data.get("version") == "0.3.1"
     and data.get("e2ee") is True
     and data.get("crossSigned") is True
     and data.get("botEnabled") is True
@@ -109,7 +109,7 @@ if not ok:
     sys.exit(1)
 print("version={0} e2ee={1} crossSigned={2} botEnabled={3}".format(
     data.get("version"), data.get("e2ee"), data.get("crossSigned"), data.get("botEnabled")))
-' <<<"$raw" || die "${name} /health is not version 0.3.0 with the bot enabled"
+' <<<"$raw" || die "${name} /health is not version 0.3.1 with the bot enabled"
 }
 
 patch_supervisord() {
@@ -225,7 +225,7 @@ upgrade_one() {
         log "dry-run: copy watchdog.sh and startup-services.sh"
         log "dry-run: add missing MCP bot lines; do not change the access token"
         log "dry-run: back up the binary, deploy ${IMAGE}, restart run_mcp only"
-        log "dry-run: require /health version 0.3.0 and run_bot still stopped"
+        log "dry-run: require /health version 0.3.1 and run_bot still stopped"
         log "dry-run: restart the watchdog loop"
         if [[ "$KEEP_MAINT" -eq 1 ]]; then
             log "dry-run: leave ${name} in maintenance"
@@ -264,7 +264,7 @@ upgrade_one() {
             cp -a "$src" "$bak"
         fi
     '
-    MMS_R2_TAG=0.3.0 "$DEPLOY" "$num"
+    MMS_R2_TAG=0.3.1 "$DEPLOY" "$num"
     docker exec "$name" supervisorctl restart run_mcp >/dev/null
     require_v093_health "$name"
     count="$(bot_count "$name")"
@@ -284,15 +284,15 @@ upgrade_one() {
         || die "${name} watchdog did not restart"
     log "${name} watchdog restarted with the v0.93 process check"
     if [[ "$KEEP_MAINT" -eq 1 ]]; then
-        log "${name} is on 0.3.0 and stays in maintenance"
+        log "${name} is on 0.3.1 and stays in maintenance"
         return
     fi
     set_status "$name" active
-    log "${name} is active on 0.3.0"
+    log "${name} is active on 0.3.1"
 }
 
 log "Checking ${IMAGE}"
-docker manifest inspect "$IMAGE" >/dev/null || die "${IMAGE} is not available. Tag v0.3.0 before this upgrade."
+docker manifest inspect "$IMAGE" >/dev/null || die "${IMAGE} is not available. Tag v0.3.1 before this upgrade."
 if [[ "$DRY" -eq 1 ]]; then
     log "dry-run: image tag is present. No pull and no container change."
 else

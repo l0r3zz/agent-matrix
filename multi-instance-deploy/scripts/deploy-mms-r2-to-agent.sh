@@ -8,7 +8,7 @@
 #
 # Environment (optional):
 #   GHCR_IMAGE  -- image name without tag (default: ghcr.io/l0r3zz/matrix-mcp-server-r2)
-#   MMS_R2_TAG  -- image tag / semver (default: 0.3.0). 0.3.0 answers Matrix
+#   MMS_R2_TAG  -- image tag / semver (default: 0.3.1). 0.3.1 answers Matrix
 #                  triggers when BOT_ENABLED=true. See
 #                  docs/upgrade-to-v0.93.md in this repo.
 #
@@ -31,7 +31,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GHCR_IMAGE="${GHCR_IMAGE:-ghcr.io/l0r3zz/matrix-mcp-server-r2}"
-MMS_R2_TAG="${MMS_R2_TAG:-0.3.0}"
+MMS_R2_TAG="${MMS_R2_TAG:-0.3.1}"
 FULL_IMAGE="${GHCR_IMAGE}:${MMS_R2_TAG}"
 BINARY_NAME="matrix-mcp-server-r2"
 EXTRACT_NAME="mcp-extract-$$"
