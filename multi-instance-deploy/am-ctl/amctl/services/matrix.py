@@ -133,52 +133,92 @@ async def _get_synapse_pod_and_token() -> tuple[str | None, str | None]:
     return pod.strip(), admin_token
 
 
+# Continuwuity signs key responses valid for about 12 hours from each request.
+# Synapse refetches only when a POST query asks for more validity than its cache holds.
+FEDERATION_REFRESH_MARGIN_SECS = 6 * 3600
+FEDERATION_WARN_SECS = 2 * 3600
+
+
+async def _synapse_key_query(pod: str, admin_token: str, extra: list[str]) -> tuple[int, str]:
+    return await _run([
+        "kubectl", "exec", "-n", "matrix", pod, "-c", "matrix", "--",
+        "curl", "-sf", "--max-time", "15",
+        *extra,
+        "-H", f"Authorization: Bearer {admin_token}",
+    ], timeout=20.0)
+
+
+def _current_key(server_keys: list[dict]) -> tuple[str | None, int]:
+    """Return the key id with the latest valid_until_ts. Older entries are retired keys."""
+    best_kid, best_vu = None, 0
+    for k in server_keys:
+        vu = int(k.get("valid_until_ts", 0) or 0)
+        for kid in k.get("verify_keys", {}):
+            if vu > best_vu:
+                best_kid, best_vu = kid, vu
+    return best_kid, best_vu
+
+
 async def check_and_refresh_federation_keys(homeserver_fqdn: str) -> tuple[str, dict]:
-    """Query Synapse notary for the agent homeserver's signing keys.
-    Uses minimum_valid_until_ts (now + 2 days) to force Synapse to refresh its
-    cached keys from Continuwuity before the 2-day warning threshold is crossed.
-    Returns (status: 'pass' | 'warn' | 'fail', detail).
+    """Check the agent homeserver's current signing key as Synapse sees it.
+
+    Reads the Synapse key cache, then POSTs a notary query for the current key with
+    minimum_valid_until_ts = now + FEDERATION_REFRESH_MARGIN_SECS. Synapse ignores that
+    field on the GET form. Returns (status: 'pass' | 'warn' | 'fail', detail).
     """
     pod, admin_token = await _get_synapse_pod_and_token()
     if not pod or not admin_token:
         return "warn", {"error": "synapse_pod_or_token_unavailable"}
 
-    min_valid_ms = int((time.time() + 2 * 86400) * 1000)
-    rc, out = await _run([
-        "kubectl", "exec", "-n", "matrix", pod, "-c", "matrix", "--",
-        "curl", "-sf", "--max-time", "15",
-        f"http://localhost:8008/_matrix/key/v2/query/{homeserver_fqdn}?minimum_valid_until_ts={min_valid_ms}",
-        "-H", f"Authorization: Bearer {admin_token}",
-    ], timeout=20.0)
-
+    rc, out = await _synapse_key_query(
+        pod, admin_token, [f"http://localhost:8008/_matrix/key/v2/query/{homeserver_fqdn}"]
+    )
     if rc != 0 or not out:
         return "fail", {"error": "notary_query_failed", "fqdn": homeserver_fqdn}
-
     try:
-        data = json.loads(out)
-        server_keys = data.get("server_keys", [])
-        if not server_keys:
-            return "fail", {"error": "no_server_keys", "fqdn": homeserver_fqdn}
-
-        keys_info = []
-        expiring_soon = False
-        now = time.time()
-        for k in server_keys:
-            vu = k.get("valid_until_ts", 0)
-            days_left = (vu / 1000.0 - now) / 86400.0 if vu else 0
-            if 0 < days_left < 2:
-                expiring_soon = True
-            for kid in k.get("verify_keys", {}):
-                keys_info.append({
-                    "key_id": kid,
-                    "valid_until_ts": vu,
-                    "days_remaining": round(days_left, 2),
-                })
-
-        status = "warn" if expiring_soon else "pass"
-        return status, {"fqdn": homeserver_fqdn, "keys": keys_info}
+        cached = json.loads(out).get("server_keys", [])
     except json.JSONDecodeError:
         return "fail", {"error": "invalid_notary_json", "fqdn": homeserver_fqdn}
+
+    key_id, _ = _current_key(cached)
+    if not key_id:
+        return "fail", {"error": "no_server_keys", "fqdn": homeserver_fqdn}
+
+    min_valid_ms = int((time.time() + FEDERATION_REFRESH_MARGIN_SECS) * 1000)
+    body = json.dumps({
+        "server_keys": {homeserver_fqdn: {key_id: {"minimum_valid_until_ts": min_valid_ms}}}
+    })
+    rc, out = await _synapse_key_query(pod, admin_token, [
+        "-X", "POST", "http://localhost:8008/_matrix/key/v2/query",
+        "-H", "Content-Type: application/json",
+        "-d", body,
+    ])
+    refreshed = cached
+    refresh_ok = False
+    if rc == 0 and out:
+        try:
+            refreshed = json.loads(out).get("server_keys", []) or cached
+            refresh_ok = True
+        except json.JSONDecodeError:
+            pass
+
+    key_id, valid_until_ms = _current_key(refreshed)
+    secs_left = valid_until_ms / 1000.0 - time.time()
+    detail = {
+        "fqdn": homeserver_fqdn,
+        "refresh_ok": refresh_ok,
+        "keys": [{
+            "key_id": key_id,
+            "valid_until_ts": valid_until_ms,
+            "days_remaining": round(secs_left / 86400.0, 2),
+            "hours_remaining": round(secs_left / 3600.0, 1),
+        }],
+    }
+    if secs_left <= 0:
+        return "fail", {**detail, "error": "current_key_expired"}
+    if secs_left < FEDERATION_WARN_SECS:
+        return "warn", detail
+    return "pass", detail
 
 
 async def repair_room_membership(

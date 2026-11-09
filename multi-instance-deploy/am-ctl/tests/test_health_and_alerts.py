@@ -43,9 +43,7 @@ async def test_low_level_docker_agent_zero_and_matrix_probes(monkeypatch, tmp_pa
             return 0, '{"status": "healthy", "version": "0.1.1"}'
         if "kubectl get pods" in cmd_str:
             return 0, "matrix-synapse-0"
-        if "_matrix/key/v2/query/" in cmd_str:
-            # Verify minimum_valid_until_ts parameter is included
-            assert "minimum_valid_until_ts=" in cmd_str
+        if "_matrix/key/v2/query" in cmd_str:
             future_ts = int((time.time() + 5 * 86400) * 1000)
             return 0, json.dumps({
                 "server_keys": [{
@@ -84,6 +82,74 @@ async def test_low_level_docker_agent_zero_and_matrix_probes(monkeypatch, tmp_pa
     fed_st, fed_det = await matrix.check_and_refresh_federation_keys("agent0-1-mhs.cybertribe.com")
     assert fed_st == "pass"
     assert fed_det["keys"][0]["days_remaining"] > 2.0
+
+
+def _key_entry(kid: str, secs_from_now: float) -> dict:
+    return {
+        "valid_until_ts": int((time.time() + secs_from_now) * 1000),
+        "verify_keys": {kid: {"key": "abc"}},
+    }
+
+
+def _fake_key_run(cached: list[dict], refreshed: list[dict] | None, calls: list[list[str]]):
+    async def fake_run(cmd: list[str], timeout: float = 15.0):
+        cmd_str = " ".join(cmd)
+        if "kubectl get pods" in cmd_str:
+            return 0, "matrix-synapse-0"
+        calls.append(cmd)
+        if "-X POST" in cmd_str:
+            if refreshed is None:
+                return 22, ""
+            return 0, json.dumps({"server_keys": refreshed})
+        if "_matrix/key/v2/query/" in cmd_str:
+            return 0, json.dumps({"server_keys": cached})
+        return 0, ""
+    return fake_run
+
+
+@pytest.mark.asyncio
+async def test_federation_check_posts_refresh_for_current_key_only(monkeypatch, tmp_path):
+    tok_file = tmp_path / "synapse_admin_token"
+    tok_file.write_text("synapse-admin-tok")
+    monkeypatch.setattr(matrix, "SYNAPSE_ADMIN_TOKEN_FILE", tok_file)
+    calls: list[list[str]] = []
+    cached = [_key_entry("ed25519:old", -245 * 86400), _key_entry("ed25519:cur", 1800)]
+    refreshed = [_key_entry("ed25519:cur", 12 * 3600)]
+    monkeypatch.setattr(matrix, "_run", _fake_key_run(cached, refreshed, calls))
+
+    st, det = await matrix.check_and_refresh_federation_keys("agent0-5-mhs.cybertribe.com")
+
+    assert st == "pass"
+    assert det["refresh_ok"] is True
+    assert [k["key_id"] for k in det["keys"]] == ["ed25519:cur"]
+    assert det["keys"][0]["hours_remaining"] > 11
+    post = next(c for c in calls if "POST" in c)
+    body = json.loads(post[post.index("-d") + 1])
+    min_ts = body["server_keys"]["agent0-5-mhs.cybertribe.com"]["ed25519:cur"]["minimum_valid_until_ts"]
+    assert min_ts > (time.time() + 5 * 3600) * 1000
+    assert not any("minimum_valid_until_ts=" in " ".join(c) for c in calls)
+
+
+@pytest.mark.asyncio
+async def test_federation_check_warns_and_fails_on_current_key_only(monkeypatch, tmp_path):
+    tok_file = tmp_path / "synapse_admin_token"
+    tok_file.write_text("synapse-admin-tok")
+    monkeypatch.setattr(matrix, "SYNAPSE_ADMIN_TOKEN_FILE", tok_file)
+
+    # A 12-hour rolling key passes even though it is far below two days.
+    calls: list[list[str]] = []
+    monkeypatch.setattr(matrix, "_run", _fake_key_run([_key_entry("ed25519:cur", 12 * 3600)], None, calls))
+    st, det = await matrix.check_and_refresh_federation_keys("agent0-1-mhs.cybertribe.com")
+    assert st == "pass" and det["refresh_ok"] is False
+
+    monkeypatch.setattr(matrix, "_run", _fake_key_run([_key_entry("ed25519:cur", 1800)], None, calls))
+    st, det = await matrix.check_and_refresh_federation_keys("agent0-1-mhs.cybertribe.com")
+    assert st == "warn"
+
+    stale = [_key_entry("ed25519:cur", -60)]
+    monkeypatch.setattr(matrix, "_run", _fake_key_run(stale, stale, calls))
+    st, det = await matrix.check_and_refresh_federation_keys("agent0-1-mhs.cybertribe.com")
+    assert st == "fail" and det["error"] == "current_key_expired"
 
 
 @pytest.mark.asyncio
