@@ -149,6 +149,7 @@ else:
     checks.append({"check_type": "a0_auth", "status": "fail", "detail": {"error": "missing_secret_file"}})
 
 # mcp
+mdata = {}
 try:
     with urllib.request.urlopen("http://localhost:3000/health", timeout=5) as resp:
         mdata = json.loads(resp.read().decode())
@@ -160,12 +161,21 @@ except Exception as e:
     checks.append({"check_type": "mcp", "status": "fail", "detail": {"error": str(e)}})
 
 # process
+# v0.93 passes when run_bot is stopped and the MCP health says botEnabled.
+# v0.92 passes when exactly one matrix-bot-rust is running and the bot is off.
 bot_cnt_out = subprocess.getoutput("pgrep -fc '[m]atrix-bot-rust' || true").strip()
 bot_cnt = int(bot_cnt_out) if bot_cnt_out.isdigit() else 0
-if bot_cnt == 1:
-    checks.append({"check_type": "process", "status": "pass", "detail": {"bot_count": 1, "bot_runtime": "rust", "supervisord": True}})
+bot_enabled = mdata.get("botEnabled") is True
+mcp_healthy = mdata.get("status") == "healthy"
+proc_detail = {"bot_count": bot_cnt, "bot_enabled": bot_enabled, "supervisord": True}
+if bot_cnt == 0 and mcp_healthy and bot_enabled:
+    proc_detail["bot_runtime"] = "integrated"
+    checks.append({"check_type": "process", "status": "pass", "detail": proc_detail})
+elif bot_cnt == 1 and not bot_enabled:
+    proc_detail["bot_runtime"] = "rust"
+    checks.append({"check_type": "process", "status": "pass", "detail": proc_detail})
 else:
-    checks.append({"check_type": "process", "status": "fail", "detail": {"bot_count": bot_cnt, "supervisord": True}})
+    checks.append({"check_type": "process", "status": "fail", "detail": proc_detail})
 
 print(json.dumps({"reporter": f"watchdog:v3:{agent_name}", "checks": checks}))
 PYEOF

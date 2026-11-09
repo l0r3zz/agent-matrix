@@ -260,13 +260,16 @@ Save the access token returned by the `one-time bootstrap token from logs` comma
 
 If you need to obtain a fresh access token:
 
+v0.93 does not log in as device `AgentZeroBot`. `scripts/finalize-instance.sh` keeps the MCP device that owns the crypto store. A manual login must use that same device id. See `docs/upgrade-to-v0.93.md`.
+
 ```bash
+DEVICE=$(cat /a0/usr/workdir/matrix-mcp-server/crypto-store/.device-id)
 curl -s -X POST http://172.23.89.N:8008/_matrix/client/v3/login \
   -H 'Content-Type: application/json' \
-  -d '{"type":"m.login.password","identifier":{"type":"m.id.user","user":"agent0-N"},"password":"<password>","device_id":"AgentZeroBot"}' | python3 -m json.tool
+  -d '{"type":"m.login.password","identifier":{"type":"m.id.user","user":"agent0-N"},"password":"<password>","device_id":"'"$DEVICE"'"}' | python3 -m json.tool
 ```
 
-Copy the `access_token` from the response.
+Copy the `access_token` from the response. Do not print it into a log.
 
 ### 2.7 Update Agent-Internal Configuration
 
@@ -876,9 +879,15 @@ cd /a0/usr/workdir/matrix-mcp-server && nohup node dist/http-server.js >> mcp-se
 curl -s http://localhost:3000/health
 ```
 
-## 7.7 Separate Matrix Devices for the Bot and MCP Server (v0.92)
+## 7.7 One Matrix device (v0.93)
 
-The bot and the MCP server log in as the same Matrix user but must use **different devices**:
+v0.93 runs `matrix-mcp-server-r2` 0.3.0 as the only Matrix client. `run_bot` stays installed and stays stopped. `BOT_ENABLED=true` in `matrix-mcp-server/.env` makes that process answer triggers and trusted invites. The plan and the upgrade script are `docs/upgrade-to-v0.93.md` and `scripts/upgrade-v0.92-to-v0.93.sh`.
+
+`matrix-bot-rust` does not read encrypted rooms. Do not start it beside `run_mcp` while `BOT_ENABLED=true`.
+
+### Retired path: separate devices (v0.92)
+
+v0.92 logged the bot and the MCP server in as the same Matrix user on different devices:
 
 | Process | `.env` | Device |
 |---------|--------|--------|
@@ -890,7 +899,7 @@ Why: `matrix-mcp-server-r2` owns an E2EE crypto store bound to its device. Matri
 Rules:
 - Never copy one `MATRIX_ACCESS_TOKEN` into both `.env` files.
 - Refresh the MCP token only by logging in with its existing `device_id` (7.6 step 1). A new device orphans the crypto store.
-- `finalize-instance.sh` provisions both devices. For existing agents, run on g2s:
+- v0.92 `finalize-instance.sh` provisioned both devices. v0.93 keeps the MCP device only. The old split command was:
 
 ```bash
 templates/scripts/split-bot-device.sh --dry-run 5   # report only
@@ -899,11 +908,11 @@ templates/scripts/split-bot-device.sh 5             # move the bot to AgentZeroB
 
 The script is idempotent and never touches the MCP token, device, or crypto store.
 
-Known limit: `matrix-bot-rust` has no E2EE, so it does not answer in encrypted rooms. `matrix-mcp-server-r2` Stage 2 (`003-integrated-matrix-bot`) removes this limit.
+That split is the path v0.93 retires. `split-bot-device.sh` mints `AgentZeroBot`. A v0.93 install does not run it.
 
-### Enabling E2EE (matrix-mcp-server-r2 v0.2.0)
+### Enabling E2EE (matrix-mcp-server-r2 v0.3.0)
 
-Split the devices first, then follow the upgrade guide in the r2 repo: [`docs/upgrade-to-v0.2.0.md`](https://github.com/l0r3zz/matrix-mcp-server-r2/blob/main/docs/upgrade-to-v0.2.0.md). It covers the per-agent steps, verification, recovery-key backup, rollback, and a stale-password reset that keeps existing devices. If the MCP token device does not match `crypto-store/.device-id`, r2 v0.2.0 refuses to start.
+Follow `docs/upgrade-to-v0.93.md` in this repo. The image tag is `0.3.0`. The r2 v0.2.0 guide remains the history of the crypto store: [`docs/upgrade-to-v0.2.0.md`](https://github.com/l0r3zz/matrix-mcp-server-r2/blob/main/docs/upgrade-to-v0.2.0.md). If the MCP token device does not match `crypto-store/.device-id`, the server refuses to start.
 
 ### Pausing automation for one agent
 

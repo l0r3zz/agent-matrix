@@ -65,7 +65,7 @@ result = subprocess.run(
 already_has = int(result.stdout.strip()) if result.returncode == 0 else 0
 
 if already_has > 0:
-    print('  supervisord.conf already has run_mcp program, skipping')
+    print('  supervisord.conf already has run_mcp; correcting run_bot only')
 else:
     supervisord_block = """
 [program:run_mcp]
@@ -91,7 +91,8 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-autorestart=true
+autostart=false
+autorestart=false
 startretries=10
 stopasgroup=true
 killasgroup=true
@@ -100,6 +101,49 @@ killasgroup=true
         f"cat >> /etc/supervisor/conf.d/supervisord.conf << 'EOF'\n{supervisord_block}EOF"
     ], check=True)
     print('  supervisord.conf patched')
+
+patcher = r'''
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+lines = path.read_text().splitlines(keepends=True)
+out = []
+in_bot = False
+seen_auto = False
+seen_restart = False
+
+def close_bot():
+    if not seen_auto:
+        out.append("autostart=false\n")
+    if not seen_restart:
+        out.append("autorestart=false\n")
+
+for line in lines:
+    if line.startswith("["):
+        if in_bot:
+            close_bot()
+        in_bot = line.strip() == "[program:run_bot]"
+        seen_auto = False
+        seen_restart = False
+        out.append(line if line.endswith("\n") else line + "\n")
+        continue
+    if in_bot and line.startswith("autostart="):
+        out.append("autostart=false\n")
+        seen_auto = True
+        continue
+    if in_bot and line.startswith("autorestart="):
+        out.append("autorestart=false\n")
+        seen_restart = True
+        continue
+    out.append(line if line.endswith("\n") else line + "\n")
+if in_bot:
+    close_bot()
+path.write_text("".join(out))
+'''
+subprocess.run(
+    ['docker', 'exec', '-i', AGENT, 'python3', '-', '/etc/supervisor/conf.d/supervisord.conf'],
+    input=patcher, text=True, check=True,
+)
 
 # ── Step 3: Disable watchdog in startup-services.sh ──
 print('[3/5] Disabling watchdog in startup-services.sh...')
@@ -115,9 +159,8 @@ subprocess.run(['docker', 'exec', AGENT, 'bash', '-c',
 print('[4/5] Killing watchdog and stale processes...')
 subprocess.run(['docker', 'exec', AGENT, 'bash', '-c',
     'pkill -f watchdog.sh 2>/dev/null || true; '
-    'pkill -f matrix-mcp-server-r2 2>/dev/null || true; '
-    'pkill -f matrix-bot-rust 2>/dev/null || true; '
-    'sleep 2; echo "  Stale processes killed"'
+    'supervisorctl stop run_bot 2>/dev/null || true; '
+    'echo "  run_bot stopped; run_mcp was left running"'
 ], check=True)
 
 # ── Step 5: Reload supervisord ──
@@ -126,7 +169,8 @@ result = subprocess.run(
     ['docker', 'exec', AGENT, 'bash', '-c',
      'supervisorctl reread 2>&1; '
      'supervisorctl update 2>&1; '
-     'sleep 5; '
+     'supervisorctl stop run_bot 2>/dev/null || true; '
+     'sleep 2; '
      'supervisorctl status 2>&1'
     ],
     capture_output=True, text=True
@@ -135,4 +179,4 @@ print(result.stdout)
 if result.stderr and VERBOSE:
     print(result.stderr)
 
-print(f'\nDone! {AGENT} now has supervisord-managed MCP + Bot.')
+print(f'\nDone. {AGENT} runs run_mcp. run_bot stays stopped.')

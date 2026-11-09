@@ -238,3 +238,35 @@ async def test_report_on_non_active_agent_records_but_suppresses_actions(
 
     r_alerts = await client.get("/api/v1/alerts?status=open", headers=API_HEADERS)
     assert r_alerts.json() == []
+
+
+@pytest.mark.asyncio
+async def test_integrated_bot_process_failure_does_not_start_run_bot(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch
+):
+    calls = []
+
+    async def mock_sup(name: str, action: str, prog: str):
+        calls.append((name, action, prog))
+        return True, "ok"
+
+    monkeypatch.setattr("amctl.services.health_engine.supervisor_action", mock_sup)
+
+    r_rep = await client.post(
+        "/api/v1/health/agent0-1/report",
+        headers=API_HEADERS,
+        json={
+            "reporter": "watchdog.sh",
+            "checks": [
+                {
+                    "check_type": "process",
+                    "status": "fail",
+                    "detail": {"bot_count": 1, "bot_enabled": True},
+                }
+            ],
+        },
+    )
+    assert r_rep.status_code == 200
+    assert ("agent0-1", "stop", "run_bot") in calls
+    assert ("agent0-1", "restart", "run_bot") not in calls
+    assert ("agent0-1", "start", "run_bot") not in calls

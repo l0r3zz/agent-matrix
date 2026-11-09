@@ -93,7 +93,7 @@ autorestart=true
 startretries=10
 exitcodes=0,2,241
 
-# Matrix bot — managed by supervisord (replaces watchdog.sh)
+# Matrix bot stays installed. v0.93 does not start it.
 [program:run_bot]
 command=/a0/usr/workdir/matrix-bot/run-bot-wrapper.sh
 environment=
@@ -103,15 +103,63 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-autorestart=true
+autostart=false
+autorestart=false
 startretries=10
 exitcodes=0,2,241
 SUPEREOF
-    log "Phase 5: Supervisord config updated for run_mcp + run_bot"
+    log "Phase 5: Supervisord config updated for run_mcp; run_bot stays stopped"
     supervisorctl reread 2>/dev/null || true
     supervisorctl update 2>/dev/null || true
 else
-    log "Phase 5: Supervisord config already has run_mcp (skipping)"
+    log "Phase 5: Supervisord config already has run_mcp"
+fi
+
+# Correct an existing run_bot block. A container restart must not start it.
+if [ -f "$SUPERVISORD_CONF" ] && grep -q '\[program:run_bot\]' "$SUPERVISORD_CONF"; then
+    python3 - "$SUPERVISORD_CONF" << 'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+lines = path.read_text().splitlines(keepends=True)
+out = []
+in_bot = False
+seen_auto = False
+seen_restart = False
+
+def close_bot():
+    if not seen_auto:
+        out.append("autostart=false\n")
+    if not seen_restart:
+        out.append("autorestart=false\n")
+
+for line in lines:
+    if line.startswith("["):
+        if in_bot:
+            close_bot()
+        in_bot = line.strip() == "[program:run_bot]"
+        seen_auto = False
+        seen_restart = False
+        out.append(line if line.endswith("\n") else line + "\n")
+        continue
+    if in_bot and line.startswith("autostart="):
+        out.append("autostart=false\n")
+        seen_auto = True
+        continue
+    if in_bot and line.startswith("autorestart="):
+        out.append("autorestart=false\n")
+        seen_restart = True
+        continue
+    out.append(line if line.endswith("\n") else line + "\n")
+if in_bot:
+    close_bot()
+path.write_text("".join(out))
+PY
+    supervisorctl reread 2>/dev/null || true
+    supervisorctl update 2>/dev/null || true
+    supervisorctl stop run_bot 2>/dev/null || true
+    log "Phase 5: run_bot autostart disabled"
 fi
 
 # Kill any stale watchdog process

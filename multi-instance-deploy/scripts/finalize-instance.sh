@@ -222,7 +222,7 @@ else
 fi
 set -u
 
-info "Access token: ${ACCESS_TOKEN:0:20}..."
+info "Access token received"
 echo
 
 # =========================================================================
@@ -230,11 +230,8 @@ echo
 # =========================================================================
 echo "[4/7] Updating access tokens..."
 
-# The MCP server and the bot must be separate Matrix devices. The MCP server
-# (matrix-mcp-server-r2) binds its E2EE crypto store to its token's device;
-# a bot syncing on that same device consumes the to-device room keys.
-BOT_DEVICE_ID="AgentZeroBot"
-
+# v0.93 uses one Matrix device: the MCP crypto-store device.
+# Do not log in as AgentZeroBot. Do not copy the bot token into the MCP .env.
 token_device() {
     curl -s "http://${MHS_IP}:8008/_matrix/client/v3/account/whoami" \
         -H "Authorization: Bearer $1" 2>/dev/null | \
@@ -253,33 +250,53 @@ MCP_TOKEN="${ACCESS_TOKEN}"
 EXISTING_MCP_TOKEN="$(source_env "${MCP_ENV}" MATRIX_ACCESS_TOKEN)"
 if [[ -n "${EXISTING_MCP_TOKEN}" && "${EXISTING_MCP_TOKEN}" != PENDING_* ]]; then
     EXISTING_MCP_DEVICE="$(token_device "${EXISTING_MCP_TOKEN}")"
-    if [[ -n "${EXISTING_MCP_DEVICE}" && "${EXISTING_MCP_DEVICE}" != "${BOT_DEVICE_ID}" ]]; then
+    if [[ -n "${EXISTING_MCP_DEVICE}" && "${EXISTING_MCP_DEVICE}" != "AgentZeroBot" ]]; then
         MCP_TOKEN="${EXISTING_MCP_TOKEN}"
         info "Keeping existing MCP device ${EXISTING_MCP_DEVICE}"
-        curl -s -X POST "http://${MHS_IP}:8008/_matrix/client/v3/logout" \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" >/dev/null 2>&1 || true
+        # Log out only the spare registration from this run. Never log out the MCP device.
+        if [[ "${ACCESS_TOKEN}" != "${MCP_TOKEN}" ]]; then
+            curl -s -X POST "http://${MHS_IP}:8008/_matrix/client/v3/logout" \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" >/dev/null 2>&1 || true
+        fi
     fi
 fi
 MCP_DEVICE="$(token_device "${MCP_TOKEN}")"
-
-BOT_TOKEN="$(login_device "${BOT_DEVICE_ID}")"
-[[ -n "${BOT_TOKEN}" ]] || fail "Bot login as device ${BOT_DEVICE_ID} failed"
-BOT_DEVICE="$(token_device "${BOT_TOKEN}")"
-[[ -n "${MCP_DEVICE}" && "${BOT_DEVICE}" == "${BOT_DEVICE_ID}" && "${MCP_DEVICE}" != "${BOT_DEVICE}" ]] || \
-    fail "MCP and bot must use different devices (mcp=${MCP_DEVICE:-?} bot=${BOT_DEVICE:-?})"
-
-# Update bot .env
-sed -i "s|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${BOT_TOKEN}|" "${BOT_ENV}"
-if grep -q "^MATRIX_DEVICE_ID=" "${BOT_ENV}"; then
-    sed -i "s|^MATRIX_DEVICE_ID=.*|MATRIX_DEVICE_ID=${BOT_DEVICE_ID}|" "${BOT_ENV}"
-else
-    echo "MATRIX_DEVICE_ID=${BOT_DEVICE_ID}" >> "${BOT_ENV}"
-fi
-ok "Bot .env updated (device ${BOT_DEVICE_ID})"
+[[ -n "${MCP_DEVICE}" ]] || fail "MCP token has no device id"
 
 # Update MCP .env
 sed -i "s|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${MCP_TOKEN}|" "${MCP_ENV}"
 ok "MCP .env updated (device ${MCP_DEVICE})"
+
+ensure_env_line() {
+    local file="$1" key="$2" value="$3"
+    if grep -q "^${key}=" "$file"; then
+        return
+    fi
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+}
+
+DISPLAY_NAME="$(source_env "${BOT_ENV}" BOT_DISPLAY_NAME)"
+if [[ -z "${DISPLAY_NAME}" ]]; then
+    DISPLAY_NAME="Agent0-${INSTANCE_NUM}"
+fi
+ensure_env_line "${MCP_ENV}" BOT_ENABLED true
+ensure_env_line "${MCP_ENV}" BOT_DISPLAY_NAME "${DISPLAY_NAME}"
+ensure_env_line "${MCP_ENV}" AGENT_IDENTITY "${DISPLAY_NAME}"
+ensure_env_line "${MCP_ENV}" A0_API_URL "http://localhost:80/api/api_message"
+ensure_env_line "${MCP_ENV}" E2EE_ENABLED true
+
+AMCTL_KEY="${AMCTL_API_KEY:-}"
+AMCTL_ENV_FILE="/opt/agent-zero/multi-instance-deploy/am-ctl/.env"
+if [[ -z "${AMCTL_KEY}" && -f "${AMCTL_ENV_FILE}" ]]; then
+    AMCTL_KEY="$(grep -E '^AMCTL_API_KEY=' "${AMCTL_ENV_FILE}" | tail -n1 | cut -d= -f2-)"
+fi
+if [[ -n "${AMCTL_KEY}" ]]; then
+    ensure_env_line "${MCP_ENV}" AMCTL_API_KEY "${AMCTL_KEY}"
+else
+    warn "AMCTL_API_KEY was not found. The MCP .env has no AMCTL_API_KEY line."
+fi
+unset AMCTL_KEY
+ok "MCP bot settings written"
 
 # Also update main .env for reference (MCP token; fleet-token-healthcheck.sh persists it here)
 if grep -q "^MATRIX_ACCESS_TOKEN=" "${INSTANCE_DIR}/.env"; then
