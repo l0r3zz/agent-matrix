@@ -245,20 +245,13 @@ async def deploy_release_to_agent(
             tmp_dst.replace(dst_file)
             installed.append(label)
 
-        # Ensure canonical secret file is freshly derived
+        # Ensure canonical secret file is freshly derived.
+        # v0.93 leaves run_bot stopped. The integrated bot reads this same key file.
         await _run([
             "docker", "exec", agent.name,
             "/a0/usr/workdir/derive-a0-token.sh",
             "--output", "/a0/usr/workdir/matrix-bot/.a0-api-key",
         ], timeout=25.0)
-
-        # Start bot and wait for process to come up
-        await supervisor_action(agent.name, "start", "run_bot")
-        for _ in range(10):
-            await asyncio.sleep(1)
-            pinfo = await get_process_info(agent.name)
-            if pinfo and pinfo.bot_count == 1:
-                break
 
     finally:
         shutil.rmtree(extract_dir, ignore_errors=True)
@@ -450,7 +443,7 @@ async def update_agent_image_version(
             cur_v = await _get_running_a0_version(agent.name)
             if on_line is not None and attempt % 5 == 0:
                 await on_line(f"Waiting for {agent.name} to report {image_version} (saw {cur_v})")
-            if pinfo and pinfo.bot_count == 1 and cur_v == image_version:
+            if pinfo and pinfo.supervisord_running and cur_v == image_version:
                 break
 
     health_results = await run_agent_health_checks(

@@ -269,17 +269,30 @@ async def check_agent_drift(
         )
     )
 
-    # 5. Process & container invariants (3 containers up, 1 bot process of declared runtime, supervisord, MCP healthy)
-    mcp_status, _ = mcp_res
+    # 5. Process & container invariants.
+    # v0.93 is clean with zero matrix-bot-rust processes when /health botEnabled is true.
+    # v0.92 is clean with exactly one matrix-bot-rust process when the MCP bot is off.
+    mcp_status, mcp_detail = mcp_res
+    bot_enabled = isinstance(mcp_detail, dict) and mcp_detail.get("botEnabled") is True
     all_containers_up = len(containers) == 3 and all(c.running for c in containers)
-    proc_clean = (
+    integrated_ok = (
+        all_containers_up
+        and proc_info is not None
+        and proc_info.bot_count == 0
+        and proc_info.supervisord_running
+        and mcp_status == "pass"
+        and bot_enabled
+    )
+    legacy_ok = (
         all_containers_up
         and proc_info is not None
         and proc_info.bot_count == 1
         and proc_info.bot_runtime == agent.bot_runtime
         and proc_info.supervisord_running
         and mcp_status == "pass"
+        and not bot_enabled
     )
+    proc_clean = integrated_ok or legacy_ok
     checks.append(
         DriftItem(
             drift_type="process",
@@ -294,6 +307,7 @@ async def check_agent_drift(
                 "containers": {c.name: c.running for c in containers},
                 "bot_count": proc_info.bot_count if proc_info else 0,
                 "bot_runtime": proc_info.bot_runtime if proc_info else None,
+                "bot_enabled": bot_enabled,
                 "supervisord": proc_info.supervisord_running if proc_info else False,
                 "mcp_status": mcp_status,
             },
@@ -434,7 +448,6 @@ async def compute_agent_plan(session: AsyncSession, agent: Agent) -> ReconcilePl
             )
         )
         step += 1
-        needs_bot_restart = True
 
     if (sec_chk and sec_chk.status == "drift") or (cred_chk and cred_chk.status == "drift"):
         sec_detail = (sec_chk.detail or {}) if sec_chk else {}
@@ -460,7 +473,6 @@ async def compute_agent_plan(session: AsyncSession, agent: Agent) -> ReconcilePl
             )
         )
         step += 1
-        needs_bot_restart = True
 
     mem_chk = by_type.get("membership")
     if mem_chk and mem_chk.status == "drift":
@@ -507,7 +519,8 @@ async def compute_agent_plan(session: AsyncSession, agent: Agent) -> ReconcilePl
                 )
             )
             step += 1
-        if p_detail.get("bot_count") != 1:
+        # v0.93 does not start run_bot to repair a stopped integrated bot.
+        if p_detail.get("bot_enabled") is not True and p_detail.get("bot_count") != 1:
             needs_bot_restart = True
 
     if needs_bot_restart:

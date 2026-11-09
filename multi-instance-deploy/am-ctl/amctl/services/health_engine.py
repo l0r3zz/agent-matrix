@@ -161,16 +161,38 @@ async def _record_check_and_act(
     elif action == "restart":
         max_retries = rule.max_retries if rule else 3
         if state.fail_count <= max_retries:
-            target_prog = "run_mcp" if check_type == "mcp" else "run_bot"
-            ok, sup_out = await supervisor_action(agent.name, "restart", target_prog)
-            detail["restarted_program"] = target_prog
-            detail["restart_ok"] = ok
-            session.add(AuditLog(
-                agent_id=agent.id,
-                action=f"auto_restart_{target_prog}",
-                detail={"check_type": check_type, "fail_count": state.fail_count, "output": sup_out},
-                operator=operator,
-            ))
+            bot_enabled = bool(detail.get("bot_enabled") or detail.get("botEnabled"))
+            # v0.93: a process failure must not start run_bot while the MCP bot is on.
+            if check_type == "process" and bot_enabled:
+                bot_count = int(detail.get("bot_count") or 0)
+                if bot_count > 0:
+                    ok, sup_out = await supervisor_action(agent.name, "stop", "run_bot")
+                    detail["bot_stopped"] = ok
+                    detail["supervisor_output"] = sup_out
+                    session.add(AuditLog(
+                        agent_id=agent.id,
+                        action="auto_stop_run_bot",
+                        detail={"check_type": check_type, "fail_count": state.fail_count, "output": sup_out},
+                        operator=operator,
+                    ))
+                else:
+                    session.add(AuditLog(
+                        agent_id=agent.id,
+                        action="auto_restart_skipped",
+                        detail={"check_type": check_type, "reason": "integrated_bot", "fail_count": state.fail_count},
+                        operator=operator,
+                    ))
+            else:
+                target_prog = "run_mcp" if check_type == "mcp" else "run_bot"
+                ok, sup_out = await supervisor_action(agent.name, "restart", target_prog)
+                detail["restarted_program"] = target_prog
+                detail["restart_ok"] = ok
+                session.add(AuditLog(
+                    agent_id=agent.id,
+                    action=f"auto_restart_{target_prog}",
+                    detail={"check_type": check_type, "fail_count": state.fail_count, "output": sup_out},
+                    operator=operator,
+                ))
         else:
             await _ensure_open_alert(
                 session,
@@ -368,11 +390,28 @@ async def run_agent_health_checks(
     terminal_stopped = any(
         results[k]["status"] == "fail" for k in ("matrix_auth", "identity", "a0_auth")
     )
-    if proc_info and all_containers_up and proc_info.bot_count == 1 and proc_info.supervisord_running:
+    bot_enabled = bool(isinstance(mcp_detail, dict) and mcp_detail.get("botEnabled") is True)
+    integrated_ok = (
+        proc_info
+        and all_containers_up
+        and proc_info.supervisord_running
+        and proc_info.bot_count == 0
+        and bot_enabled
+        and mcp_status == "pass"
+    )
+    legacy_ok = (
+        proc_info
+        and all_containers_up
+        and proc_info.supervisord_running
+        and proc_info.bot_count == 1
+        and not bot_enabled
+    )
+    if integrated_ok or legacy_ok:
         p_status = "pass"
         p_detail = {
             "bot_count": proc_info.bot_count,
-            "bot_runtime": proc_info.bot_runtime,
+            "bot_runtime": "integrated" if integrated_ok else proc_info.bot_runtime,
+            "bot_enabled": bot_enabled,
             "supervisord": proc_info.supervisord_running,
             "containers_up": 3,
         }
@@ -387,6 +426,7 @@ async def run_agent_health_checks(
         p_status = "fail"
         p_detail = {
             "bot_count": proc_info.bot_count if proc_info else 0,
+            "bot_enabled": bot_enabled,
             "supervisord": proc_info.supervisord_running if proc_info else False,
             "containers": {c.name: c.running for c in containers},
         }

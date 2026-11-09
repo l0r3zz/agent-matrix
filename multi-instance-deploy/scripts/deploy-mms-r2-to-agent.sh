@@ -8,14 +8,14 @@
 #
 # Environment (optional):
 #   GHCR_IMAGE  -- image name without tag (default: ghcr.io/l0r3zz/matrix-mcp-server-r2)
-#   MMS_R2_TAG  -- image tag / semver (default: 0.2.0). 0.2.0 includes E2EE,
-#                  which stays off until E2EE_ENABLED=true. Enable it only per
-#                  docs/upgrade-to-v0.2.0.md in matrix-mcp-server-r2.
+#   MMS_R2_TAG  -- image tag / semver (default: 0.3.0). 0.3.0 answers Matrix
+#                  triggers when BOT_ENABLED=true. See
+#                  docs/upgrade-to-v0.93.md in this repo.
 #
 # Usage (from multi-instance-deploy/templates/scripts/):
 #   ./deploy-mms-r2-to-agent.sh 5
 #   ./deploy-mms-r2-to-agent.sh 1 2 3
-#   MMS_R2_TAG=0.1.1 ./deploy-mms-r2-to-agent.sh 5   # pin the pre-E2EE release
+#   MMS_R2_TAG=0.2.0 ./deploy-mms-r2-to-agent.sh 5   # pin the v0.92 image
 #   ./deploy-mms-r2-to-agent.sh all
 #
 # What it does:
@@ -31,7 +31,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GHCR_IMAGE="${GHCR_IMAGE:-ghcr.io/l0r3zz/matrix-mcp-server-r2}"
-MMS_R2_TAG="${MMS_R2_TAG:-0.2.0}"
+MMS_R2_TAG="${MMS_R2_TAG:-0.3.0}"
 FULL_IMAGE="${GHCR_IMAGE}:${MMS_R2_TAG}"
 BINARY_NAME="matrix-mcp-server-r2"
 EXTRACT_NAME="mcp-extract-$$"

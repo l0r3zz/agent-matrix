@@ -2,9 +2,9 @@
 # =============================================================================
 # Fleet Matrix Token Health-Check Script
 # 
-# Tests Matrix MCP and bot tokens across all agent containers.
-# If a token is expired (401), generates a fresh token via login API,
-# updates MCP .env + settings.json, and restarts the MCP server and bot.
+# Tests the Matrix MCP token across agent containers.
+# If that token is expired (401), logs in again as the stored MCP device,
+# updates the MCP .env and settings.json, and restarts run_mcp only.
 #
 # Usage: ./fleet-token-healthcheck.sh [agent-number ...]
 #   If agent-number(s) provided, only check those agents.
@@ -92,14 +92,7 @@ update_mcp_env() {
          sed -i 's|^MATRIX_USER_ID=.*|MATRIX_USER_ID=${user_id}|' /a0/usr/workdir/matrix-mcp-server/.env"
 }
 
-update_bot_env() {
-    local agent_num=$1
-    local token=$2
-    local user_id=$3
-    docker exec "agent0-${agent_num}" bash -c \
-        "sed -i 's|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${token}|' /a0/usr/workdir/matrix-bot/.env && \
-         sed -i 's|^MATRIX_USER_ID=.*|MATRIX_USER_ID=${user_id}|' /a0/usr/workdir/matrix-bot/.env"
-}
+# v0.93 does not write a token into matrix-bot/.env and does not log in as AgentZeroBot.
 
 sync_settings() {
     local agent_num=$1
@@ -110,7 +103,7 @@ sync_settings() {
 restart_services() {
     local agent_num=$1
     docker exec "agent0-${agent_num}" bash -c \
-        "supervisorctl restart run_mcp run_bot 2>/dev/null" || \
+        "supervisorctl restart run_mcp 2>/dev/null" || \
         log "  WARN: supervisorctl restart failed on agent0-${agent_num}"
 }
 
@@ -127,9 +120,6 @@ for agent_num in "${AGENTS[@]}"; do
     MCP_USER_ID=$(get_container_mcp_env_value "$agent_num" "MATRIX_USER_ID")
     HOMESERVER=$(get_container_mcp_env_value "$agent_num" "MATRIX_HOMESERVER_URL")
     
-    # Get bot token from container
-    BOT_TOKEN=$(get_container_bot_env_value "$agent_num" "MATRIX_ACCESS_TOKEN")
-    
     # Get password from deployment .env
     DEPLOY_PASSWORD=$(get_deploy_env_value "$agent_num" "MATRIX_PASSWORD")
     
@@ -138,9 +128,6 @@ for agent_num in "${AGENTS[@]}"; do
     
     log "  MCP User: ${MCP_USER_ID}"
     log "  Homeserver: ${HOMESERVER}"
-    log "  MCP Token: ${MCP_TOKEN:0:12}..."
-    log "  Bot Token: ${BOT_TOKEN:0:12}..."
-    log "  Deploy Password: ${DEPLOY_PASSWORD:0:8}..."
     log "  Login Username: ${USERNAME}"
     
     if [[ -z "$MCP_TOKEN" || -z "$HOMESERVER" ]]; then
@@ -152,63 +139,43 @@ for agent_num in "${AGENTS[@]}"; do
     MCP_STATUS=$(test_token "$agent_num" "$HOMESERVER" "$MCP_TOKEN")
     log "  MCP token status: HTTP ${MCP_STATUS}"
     
-    # Test bot token
-    BOT_STATUS=$(test_token "$agent_num" "$HOMESERVER" "$BOT_TOKEN")
-    log "  Bot token status: HTTP ${BOT_STATUS}"
-    
     NEW_MCP_TOKEN=""
-    NEW_BOT_TOKEN=""
-    
-    if [[ "$MCP_STATUS" == "401" || "$BOT_STATUS" == "401" ]]; then
-        log "  Token(s) expired — attempting refresh..."
+
+    if [[ "$MCP_STATUS" == "401" ]]; then
+        log "  MCP token expired — attempting refresh..."
         MCP_DEVICE_ID=$(get_mcp_device_id "$agent_num")
         MCP_DEVICE_ID=${MCP_DEVICE_ID:-matrix-mcp-server-device}
         log "  MCP device: ${MCP_DEVICE_ID}"
-        
-        # Try login with deployment password
+
+        # Reuse the stored MCP device. Do not log in as AgentZeroBot.
         if [[ -n "$DEPLOY_PASSWORD" ]]; then
             NEW_MCP_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "$DEPLOY_PASSWORD" "$MCP_DEVICE_ID")
-            NEW_BOT_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "$DEPLOY_PASSWORD" "AgentZeroBot")
         fi
-        
-        # If deployment password fails, try "password" (common default)
+
         if [[ -z "$NEW_MCP_TOKEN" ]]; then
             log "  Deployment password failed, trying default password..."
             NEW_MCP_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "password" "$MCP_DEVICE_ID")
-            NEW_BOT_TOKEN=$(generate_new_token "$agent_num" "$HOMESERVER" "$USERNAME" "password" "AgentZeroBot")
         fi
-        
-        if [[ -n "$NEW_MCP_TOKEN" && -n "$NEW_BOT_TOKEN" ]]; then
-            log "  Refresh successful: MCP=${NEW_MCP_TOKEN:0:12}... Bot=${NEW_BOT_TOKEN:0:12}..."
-            
-            # Update MCP .env
+
+        if [[ -n "$NEW_MCP_TOKEN" ]]; then
+            log "  MCP token refresh succeeded"
             update_mcp_env "$agent_num" "$NEW_MCP_TOKEN" "$MCP_USER_ID"
             log "  Updated MCP .env"
-            
-            # Update bot .env
-            update_bot_env "$agent_num" "$NEW_BOT_TOKEN" "$MCP_USER_ID"
-            log "  Updated bot .env"
-            
-            # Sync settings.json
             sync_settings "$agent_num"
             log "  Synced settings.json"
-            
-            # Restart services
             restart_services "$agent_num"
-            log "  Restarted MCP + bot"
-            
-            # Update deployment .env for persistence
+            log "  Restarted run_mcp"
             sed -i "s|^MATRIX_ACCESS_TOKEN=.*|MATRIX_ACCESS_TOKEN=${NEW_MCP_TOKEN}|" \
                 "${AGENT_ZERO_DIR}/agent0-${agent_num}/.env" 2>/dev/null || true
             log "  Updated deployment .env"
         else
-            log "  ERROR: Could not generate new token — login failed with all passwords"
+            log "  ERROR: Could not generate a new MCP token"
             log "  Manual intervention required for agent0-${agent_num}"
         fi
-    elif [[ "$MCP_STATUS" == "200" && "$BOT_STATUS" == "200" ]]; then
-        log "  All tokens valid"
+    elif [[ "$MCP_STATUS" == "200" ]]; then
+        log "  MCP token valid"
     else
-        log "  WARN: Unexpected status — MCP:${MCP_STATUS} Bot:${BOT_STATUS}"
+        log "  WARN: Unexpected MCP status: ${MCP_STATUS}"
     fi
     
     log "--- agent0-${agent_num} done ---"
