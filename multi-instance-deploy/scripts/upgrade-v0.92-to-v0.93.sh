@@ -6,17 +6,22 @@
 #   ./upgrade-v0.92-to-v0.93.sh --dry-run 5
 #   ./upgrade-v0.92-to-v0.93.sh 5
 #   ./upgrade-v0.92-to-v0.93.sh 1 2 3 4
+#   ./upgrade-v0.92-to-v0.93.sh --keep-maintenance 3 4
 #
 # Agent 5 is the canary. Upgrade it before agents 1-4.
+# Use --keep-maintenance while the host am-ctl still runs v0.92 code.
+# v0.92 am-ctl expects one run_bot process and can start run_bot on an active agent.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 IMAGE="ghcr.io/l0r3zz/matrix-mcp-server-r2:0.3.0"
 WATCHDOG="${SCRIPT_DIR}/../templates/scripts/watchdog.sh"
-DEPLOY="${SCRIPT_DIR}/deploy-mms-r2-to-agent.sh"
+STARTUP="${SCRIPT_DIR}/../templates/scripts/startup-services.sh"
+DEPLOY="${SCRIPT_DIR}/../templates/scripts/deploy-mms-r2-to-agent.sh"
 AMCTL_URL="${AMCTL_URL:-http://127.0.0.1:8077}"
 AMCTL_ENV_FILE="${AMCTL_ENV_FILE:-/opt/agent-zero/multi-instance-deploy/am-ctl/.env}"
 DRY=0
+KEEP_MAINT=0
 INSTANCES=()
 
 log() { echo "[v0.93] $*"; }
@@ -25,6 +30,7 @@ die() { echo "[v0.93] ERROR: $*" >&2; exit 1; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run) DRY=1; shift ;;
+        --keep-maintenance) KEEP_MAINT=1; shift ;;
         --) shift; break ;;
         -*) die "Unknown option: $1" ;;
         *) INSTANCES+=("$1"); shift ;;
@@ -32,11 +38,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ${#INSTANCES[@]} -eq 0 ]]; then
-    echo "Usage: $0 [--dry-run] N [N ...]"
+    echo "Usage: $0 [--dry-run] [--keep-maintenance] N [N ...]"
     exit 1
 fi
 
 [[ -x "$WATCHDOG" || -f "$WATCHDOG" ]] || die "Missing ${WATCHDOG}"
+[[ -f "$STARTUP" ]] || die "Missing ${STARTUP}"
 [[ -x "$DEPLOY" || -f "$DEPLOY" ]] || die "Missing ${DEPLOY}"
 
 amctl_key() {
@@ -80,9 +87,14 @@ print("healthy crossSigned={0} version={1} botEnabled={2}".format(
 }
 
 require_v093_health() {
-    local name="$1" raw
-    raw="$(docker exec "$name" curl -sf --max-time 10 http://127.0.0.1:3000/health)" \
-        || die "${name} /health did not answer after restart"
+    local name="$1" raw="" i
+    # The first Matrix sync blocks /health for about 30 seconds.
+    for i in $(seq 1 24); do
+        raw="$(docker exec "$name" curl -sf --max-time 5 http://127.0.0.1:3000/health || true)"
+        [[ -n "$raw" ]] && break
+        sleep 5
+    done
+    [[ -n "$raw" ]] || die "${name} /health did not answer within 120 seconds of the restart"
     python3 -c '
 import json, sys
 data = json.load(sys.stdin)
@@ -200,7 +212,8 @@ bot_count() {
 }
 
 upgrade_one() {
-    local num="$1" name="agent0-${num}" count key
+    local num="$1"
+    local name="agent0-${num}" count key
     log "=== ${name} ==="
     docker ps --format '{{.Names}}' | grep -qx "$name" || die "${name} is not running"
     require_current_health "$name"
@@ -209,11 +222,15 @@ upgrade_one() {
         log "dry-run: set ${name} to maintenance"
         log "dry-run: stop run_bot and set autostart=false autorestart=false"
         log "dry-run: require matrix-bot-rust count 0"
-        log "dry-run: copy watchdog.sh"
+        log "dry-run: copy watchdog.sh and startup-services.sh"
         log "dry-run: add missing MCP bot lines; do not change the access token"
         log "dry-run: back up the binary, deploy ${IMAGE}, restart run_mcp only"
         log "dry-run: require /health version 0.3.0 and run_bot still stopped"
-        log "dry-run: set ${name} to active"
+        if [[ "$KEEP_MAINT" -eq 1 ]]; then
+            log "dry-run: leave ${name} in maintenance"
+        else
+            log "dry-run: set ${name} to active"
+        fi
         return
     fi
 
@@ -228,6 +245,14 @@ upgrade_one() {
 
     docker cp "$WATCHDOG" "${name}:/a0/usr/workdir/watchdog.sh"
     docker exec "$name" chmod 755 /a0/usr/workdir/watchdog.sh
+    docker exec "$name" bash -c '
+        f=/a0/usr/workdir/startup-services.sh
+        if [ -f "$f" ] && [ ! -f "$f.bak-v092" ]; then
+            cp -a "$f" "$f.bak-v092"
+        fi
+    '
+    docker cp "$STARTUP" "${name}:/a0/usr/workdir/startup-services.sh"
+    docker exec "$name" chmod 755 /a0/usr/workdir/startup-services.sh
     key="$(amctl_key || true)"
     write_mcp_env "$name" "$num" "$key"
 
@@ -240,10 +265,13 @@ upgrade_one() {
     '
     MMS_R2_TAG=0.3.0 "$DEPLOY" "$num"
     docker exec "$name" supervisorctl restart run_mcp >/dev/null
-    sleep 3
     require_v093_health "$name"
     count="$(bot_count "$name")"
     [[ "$count" == "0" ]] || die "${name} started matrix-bot-rust after the MCP restart"
+    if [[ "$KEEP_MAINT" -eq 1 ]]; then
+        log "${name} is on 0.3.0 and stays in maintenance"
+        return
+    fi
     set_status "$name" active
     log "${name} is active on 0.3.0"
 }

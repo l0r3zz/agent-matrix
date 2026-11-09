@@ -85,9 +85,14 @@ Usage:
 ./upgrade-v0.92-to-v0.93.sh --dry-run 5
 ./upgrade-v0.92-to-v0.93.sh 5
 ./upgrade-v0.92-to-v0.93.sh 1 2 3 4
+./upgrade-v0.92-to-v0.93.sh --keep-maintenance 3 4
 ```
 
 `--dry-run` prints the actions and changes nothing. The script takes instance numbers. It does not default to every agent.
+
+Warning: use `--keep-maintenance` while the host am-ctl still runs v0.92 code. That code expects one `run_bot` process. It can start `run_bot` on an `active` agent.
+
+The script reads the am-ctl key from `$AMCTL_API_KEY` or from `am-ctl/.env`. When am-ctl uses its built-in default, export the key from `amctl.config.settings.api_key`. Do not print it.
 
 Order for one agent:
 
@@ -96,12 +101,12 @@ Order for one agent:
 3. Record that `run_mcp` is healthy and `crossSigned` is true. Stop if it is not. Do not print tokens or the recovery key.
 4. Stop `run_bot`. Patch the live `[program:run_bot]` to `autostart=false` and `autorestart=false`. Run `supervisorctl reread` and `supervisorctl update`.
 5. Confirm `pgrep -fc '[m]atrix-bot-rust'` is 0.
-6. Copy the v0.93 `watchdog.sh` into `/a0/usr/workdir/watchdog.sh`.
+6. Copy the v0.93 `watchdog.sh` into `/a0/usr/workdir/watchdog.sh`. Back up `startup-services.sh` to `startup-services.sh.bak-v092`, then copy the v0.93 version.
 7. Add the MCP `.env` lines from the new-install list when they are missing. Do not change `MATRIX_ACCESS_TOKEN`, `E2EE_ENABLED`, or the crypto store.
 8. Install the `0.3.0` binary with `MMS_R2_TAG=0.3.0`. Replace the binary only while `run_bot` is stopped. Restart only `run_mcp`.
-9. Require `/health` to report `version` `0.3.0`, `e2ee` true, `crossSigned` true, and `botEnabled` true.
+9. Wait up to 120 seconds for `/health`. The first Matrix sync blocks it for about 30 seconds. Require `/health` to report `version` `0.3.0`, `e2ee` true, `crossSigned` true, and `botEnabled` true.
 10. Require `run_bot` to still be stopped after that restart.
-11. Return that agent to `active` only after steps 5, 9, and 10 pass.
+11. Return that agent to `active` only after steps 5, 9, and 10 pass. Skip this step with `--keep-maintenance`.
 
 `@agent0-5` already runs a hand-built 0.3.0 binary with `BOT_ENABLED=true`, and `run_bot` is already stopped. The script must accept that state. It must not start `run_bot` in order to stop it. It replaces the hand-built binary with the published `0.3.0` image only after the supervisord patch is in place.
 
