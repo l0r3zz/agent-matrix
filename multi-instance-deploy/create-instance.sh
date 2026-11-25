@@ -99,6 +99,11 @@ if [ -f "${TEMPLATE_DIR}/startup-services.sh.template" ]; then
     cp "${TEMPLATE_DIR}/startup-services.sh.template" "${INSTANCE_DIR}/usr/workdir/startup-services.sh"
     chmod +x "${INSTANCE_DIR}/usr/workdir/startup-services.sh"
 fi
+for prompt_file in "${TEMPLATE_DIR}"/*.promptinclude.md; do
+    if [ -f "$prompt_file" ]; then
+        cp "$prompt_file" "${INSTANCE_DIR}/usr/workdir/"
+    fi
+done
 
 # --- 5. Agent Settings (MCP server definitions) ---
 # Generate settings.json with Matrix + open-brain MCP definitions.
