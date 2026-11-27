@@ -42,14 +42,23 @@ async def _get_mcp_token(agent_name: str) -> str | None:
     return None
 
 
+async def _get_matrix_token(agent_name: str) -> str | None:
+    """Return the token that can call this agent's homeserver.
+
+    v0.94 keeps the live token in the gateway env. The bot env stays
+    PENDING_REGISTRATION because run_bot is not the Matrix client.
+    """
+    return await _get_bot_token(agent_name) or await _get_mcp_token(agent_name)
+
+
 def _internal_hs_url(homeserver_url: str) -> str:
     """Use the internal HTTP port (8008) for direct access, not the TLS port."""
     return homeserver_url.replace("https://", "http://").replace(":8448", ":8008")
 
 
 async def get_whoami(agent_name: str, homeserver_url: str) -> MatrixIdentity:
-    """Call /whoami on the agent's homeserver using its bot token."""
-    token = await _get_bot_token(agent_name)
+    """Call /whoami on the agent's homeserver using its live Matrix token."""
+    token = await _get_matrix_token(agent_name)
     if not token:
         return MatrixIdentity(error="no_token")
 
@@ -75,7 +84,7 @@ async def get_whoami(agent_name: str, homeserver_url: str) -> MatrixIdentity:
 
 async def get_joined_rooms(agent_name: str, homeserver_url: str) -> tuple[bool, list[str], str | None]:
     """Return (ok, room_ids, error) from the agent's local Continuwuity homeserver."""
-    token = await _get_bot_token(agent_name)
+    token = await _get_matrix_token(agent_name)
     if not token:
         return False, [], "no_token"
 
@@ -96,7 +105,7 @@ async def get_joined_rooms(agent_name: str, homeserver_url: str) -> tuple[bool, 
 
 async def check_sync_cursor(agent_name: str, homeserver_url: str) -> tuple[bool, dict]:
     """Verify Matrix /sync endpoint responds with a valid next_batch cursor."""
-    token = await _get_bot_token(agent_name)
+    token = await _get_matrix_token(agent_name)
     if not token:
         return False, {"error": "no_token"}
 
@@ -230,13 +239,13 @@ async def repair_room_membership(
     """Auto-repair missing room membership:
     1. Obtain @admin:v-site.net token via Synapse admin API
     2. Send room invite from @admin:v-site.net to matrix_user_id
-    3. Accept invite on agent's Continuwuity homeserver using bot token
+    3. Accept invite on agent's Continuwuity homeserver using its live token
     """
     pod, admin_token = await _get_synapse_pod_and_token()
     if not pod or not admin_token:
         return False, {"error": "synapse_pod_or_token_unavailable"}
 
-    bot_token = await _get_bot_token(agent_name)
+    bot_token = await _get_matrix_token(agent_name)
     if not bot_token:
         return False, {"error": "no_bot_token"}
 
@@ -304,7 +313,7 @@ async def repair_room_membership(
 
 async def leave_room_as_agent(agent_name: str, homeserver_url: str, room_id: str) -> tuple[bool, str]:
     """Helper to make an agent leave a room on its homeserver."""
-    bot_token = await _get_bot_token(agent_name)
+    bot_token = await _get_matrix_token(agent_name)
     if not bot_token:
         return False, "no_bot_token"
     encoded_room = urllib.parse.quote(room_id, safe="")

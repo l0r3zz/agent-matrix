@@ -66,15 +66,29 @@ agent_name = os.environ["AGENT_NAME"]
 expected_uid = reg.get("matrix_user_id", "")
 req_rooms = [r["room_id"] for r in reg.get("required_rooms", [])]
 
-bot_env = {}
-if os.path.isfile("/a0/usr/workdir/matrix-bot/.env"):
-    for ln in open("/a0/usr/workdir/matrix-bot/.env"):
-        if "=" in ln and not ln.strip().startswith("#"):
-            k, v = ln.strip().split("=", 1)
-            bot_env[k] = v.strip('"').strip("'")
+def load_env(path):
+    env = {}
+    if os.path.isfile(path):
+        for ln in open(path):
+            if "=" in ln and not ln.strip().startswith("#"):
+                k, v = ln.strip().split("=", 1)
+                env[k] = v.strip('"').strip("'")
+    return env
 
-hs_url = bot_env.get("MATRIX_HOMESERVER_URL", "http://localhost:8008").rstrip("/")
-token = bot_env.get("MATRIX_ACCESS_TOKEN", "")
+def usable(token):
+    token = (token or "").strip()
+    if not token or token.startswith("PENDING"):
+        return ""
+    return token
+
+bot_env = load_env("/a0/usr/workdir/matrix-bot/.env")
+mcp_env = load_env("/a0/usr/workdir/matrix-mcp-server/.env")
+token = usable(bot_env.get("MATRIX_ACCESS_TOKEN"))
+hs_url = bot_env.get("MATRIX_HOMESERVER_URL", "")
+if not token:
+    token = usable(mcp_env.get("MATRIX_ACCESS_TOKEN"))
+    hs_url = mcp_env.get("MATRIX_HOMESERVER_URL", hs_url)
+hs_url = (hs_url or "http://localhost:8008").rstrip("/")
 
 checks = []
 

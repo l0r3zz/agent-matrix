@@ -14,6 +14,7 @@ Run on the Docker host:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import re
@@ -116,6 +117,51 @@ def address_for(instance_num: int) -> InstanceAddress:
     )
 
 
+def fleet_agent_row(address: InstanceAddress) -> tuple:
+    """Row for fleet_ops.agents. am-ctl status reads this table, not Docker."""
+    return (
+        address.instance_num,
+        address.name,
+        address.matrix_user_id,
+        f"https://{address.homeserver_ip}:8448",
+        address.homeserver_fqdn,
+        "http://localhost:80",
+        "rust",
+        "active",
+    )
+
+
+def register_in_fleet(address: InstanceAddress) -> None:
+    """Insert the instance into the fleet registry. A second insert is a no-op."""
+    try:
+        asyncio.run(_insert_fleet_agent(fleet_agent_row(address)))
+    except Exception as exc:
+        raise ProvisionError(f"could not add {address.name} to the fleet registry") from exc
+    print(f"Registered {address.name} in the fleet registry.")
+
+
+async def _insert_fleet_agent(row: tuple) -> None:
+    import asyncpg
+
+    from amctl.config import settings
+
+    dsn = settings.database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+    conn = await asyncpg.connect(dsn)
+    try:
+        await conn.execute(
+            """
+            INSERT INTO agents (
+                instance_num, name, matrix_user_id, homeserver_url, homeserver_fqdn,
+                agent_zero_endpoint, bot_runtime, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (instance_num) DO NOTHING
+            """,
+            *row,
+        )
+    finally:
+        await conn.close()
+
+
 def default_template_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "templates"
 
@@ -138,6 +184,25 @@ def health_is_plugged(body: dict, tag: str) -> bool:
         and body.get("botEnabled") is True
         and body.get("crossSigned") is True
     )
+
+
+def supervisord_is_ready(result: CmdResult) -> bool:
+    """True when supervisorctl reached the daemon.
+
+    Exit 0 means every program is running. Exit 3 means the daemon answered
+    and at least one program is stopped, exiting, or in backoff. run_bot stays
+    stopped, and run_mcp stays in backoff until the gateway binary is installed.
+    """
+    return result.returncode in (0, 3)
+
+
+def _status_tail(result: CmdResult) -> str:
+    text = (result.stdout or result.stderr).strip()
+    lines = [line.strip() for line in text.splitlines()[-4:] if line.strip()]
+    tail = " | ".join(lines) if lines else "no status output"
+    if len(tail) > 240:
+        tail = tail[:240]
+    return tail
 
 
 def parse_env(text: str) -> dict[str, str]:
@@ -561,10 +626,25 @@ def _try_step_ca(host, address: InstanceAddress, instance_dir: Path) -> None:
         args.extend(["--provisioner-password-file", str(passwd)])
     host.run(args)
     os.chmod(key, 0o600)
-    host.run(
-        ["docker", "exec", f"{address.name}-mhs", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"],
-        check=False,
-    )
+    _append_step_root(host, crt)
+    # Caddy reads the certificate at start. A reload can keep serving the
+    # placeholder, and Synapse then cannot verify the homeserver.
+    host.run(["docker", "restart", f"{address.name}-mhs"], check=False)
+
+
+def _append_step_root(host, crt: Path) -> None:
+    """Add the step-ca root so the file matches the chain Synapse already trusts."""
+    root_path = crt.with_name("root.crt")
+    fetched = host.run(["step", "ca", "root", str(root_path), "--force"], check=False)
+    if fetched.returncode != 0 or not root_path.is_file():
+        return
+    bundle = crt.read_text()
+    root = root_path.read_text().strip()
+    if root and root not in bundle:
+        if bundle and not bundle.endswith("\n"):
+            bundle += "\n"
+        crt.write_text(bundle + root + "\n")
+    root_path.unlink(missing_ok=True)
 
 
 def bring_up(
@@ -627,17 +707,28 @@ def bring_up(
 
     _try_step_ca(host, address, instance_dir)
 
-    def supervisord_ready() -> bool:
-        result = host.run(["docker", "exec", address.name, "supervisorctl", "status"], check=False)
-        return result.returncode == 0
+    last_status = CmdResult(1, "", "")
 
-    _wait(
-        supervisord_ready,
-        timeouts.supervisord,
-        timeouts.interval,
-        sleep,
-        "supervisord did not become ready",
-    )
+    def supervisord_ready() -> bool:
+        nonlocal last_status
+        last_status = host.run(
+            ["docker", "exec", address.name, "supervisorctl", "status"],
+            check=False,
+        )
+        return supervisord_is_ready(last_status)
+
+    try:
+        _wait(
+            supervisord_ready,
+            timeouts.supervisord,
+            timeouts.interval,
+            sleep,
+            "supervisord did not become ready",
+        )
+    except ProvisionError as exc:
+        raise ProvisionError(
+            f"{exc} (supervisorctl exit {last_status.returncode}: {_status_tail(last_status)})"
+        ) from exc
 
     deploy = template_dir / "scripts" / "deploy-mms-r2-to-agent.sh"
     if not deploy.is_file():
@@ -712,6 +803,7 @@ def provision_agent(
     environ: dict[str, str] | None = None,
     timeouts: Timeouts | None = None,
     sleep=time.sleep,
+    register=None,
 ) -> Path:
     if render_only and plug_only:
         raise ProvisionError("pass only one of --render-only and --plug-only")
@@ -748,6 +840,8 @@ def provision_agent(
             timeouts=timeouts,
             sleep=sleep,
         )
+        if register is not None:
+            register(address)
     return instance_dir
 
 
@@ -784,6 +878,7 @@ def main(argv: list[str] | None = None) -> int:
             plug_only=args.plug_only,
             force=args.force,
             tag=args.mms_tag,
+            register=None if args.render_only else register_in_fleet,
         )
     except ProvisionError as exc:
         print(f"error: {exc}", file=sys.stderr)

@@ -41,6 +41,7 @@ async def test_matrix_service_branches(monkeypatch, tmp_path):
 
     assert await matrix._get_bot_token("agent0-1") == "syt_bot_token_123"
     assert await matrix._get_mcp_token("agent0-1") == "syt_mcp_token_456"
+    assert await matrix._get_matrix_token("agent0-1") == "syt_bot_token_123"
 
     # Mock httpx.AsyncClient for get_whoami, get_joined_rooms, check_sync_cursor, repair_room_membership, leave_room
     class FakeAsyncClient:
@@ -87,6 +88,21 @@ async def test_matrix_service_branches(monkeypatch, tmp_path):
 
     lv_ok, _ = await matrix.leave_room_as_agent("agent0-1", "https://172.23.89.1:8448", "!r1:v-site.net")
     assert lv_ok is True
+
+
+@pytest.mark.asyncio
+async def test_matrix_token_uses_gateway_when_bot_token_is_pending(monkeypatch):
+    async def fake_run(cmd: list[str], timeout: float = 15.0):
+        s = " ".join(cmd)
+        if "matrix-bot/.env" in s:
+            return 0, "PENDING_REGISTRATION"
+        if "matrix-mcp-server/.env" in s:
+            return 0, "syt_mcp_token_456"
+        return 1, ""
+
+    monkeypatch.setattr(matrix, "_run", fake_run)
+    assert await matrix._get_bot_token("agent0-6") is None
+    assert await matrix._get_matrix_token("agent0-6") == "syt_mcp_token_456"
 
 
 @pytest.mark.asyncio

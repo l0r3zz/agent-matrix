@@ -12,10 +12,12 @@ from amctl.provision import (
     Timeouts,
     address_for,
     extract_bootstrap_token,
+    fleet_agent_row,
     health_is_plugged,
     main,
     parse_env,
     provision_agent,
+    supervisord_is_ready,
 )
 from amctl_cli.cli import main as cli_main
 
@@ -46,6 +48,26 @@ def test_address_rejects_values_outside_the_octet_pool():
 def test_extract_bootstrap_token_ignores_ansi():
     logs = "\x1b[32mregistration token Abcd1234\x1b[0m"
     assert extract_bootstrap_token(logs) == "Abcd1234"
+
+
+def test_fleet_agent_row_matches_the_registry_shape():
+    assert fleet_agent_row(address_for(6)) == (
+        6,
+        "agent0-6",
+        "@agent0-6:agent0-6-mhs.cybertribe.com",
+        "https://172.23.89.6:8448",
+        "agent0-6-mhs.cybertribe.com",
+        "http://localhost:80",
+        "rust",
+        "active",
+    )
+
+
+def test_supervisord_is_ready_accepts_a_stopped_program():
+    assert supervisord_is_ready(CmdResult(0, "run_mcp RUNNING\n", ""))
+    assert supervisord_is_ready(CmdResult(3, "run_bot STOPPED\nrun_mcp BACKOFF\n", ""))
+    assert not supervisord_is_ready(CmdResult(1, "", "container is restarting"))
+    assert not supervisord_is_ready(CmdResult(4, "", "refused connection"))
 
 
 def test_health_requires_the_gateway_tag_and_bot():
@@ -169,6 +191,8 @@ class FakeHost:
             return CmdResult(0, body + "\n", "")
         if args[-2:] == ["status", "run_bot"]:
             return CmdResult(0, "run_bot                         STOPPED\n", "")
+        if args[-1:] == ["status"] and "supervisorctl" in args:
+            return CmdResult(3, "run_bot STOPPED\nrun_mcp BACKOFF\n", "")
         if "matrix-bot-rust" in joined:
             return CmdResult(0, "0\n", "")
         return CmdResult(0, "", "")
@@ -209,6 +233,35 @@ def test_bring_up_installs_the_gateway_and_leaves_the_bot_stopped(tmp_path: Path
     mcp = parse_env((instance / "usr/workdir/matrix-mcp-server/.env").read_text())
     assert mcp["MATRIX_ACCESS_TOKEN"] == "syt_test_token"
     assert mcp["BOT_ENABLED"] == "true"
+
+
+def test_bring_up_reports_the_supervisorctl_exit_when_the_daemon_is_down(tmp_path: Path):
+    instance = provision_agent(6, base_dir=tmp_path, template_dir=TEMPLATE_DIR, render_only=True, environ={})
+
+    class Unreachable(FakeHost):
+        def run(self, args, cwd=None, check=True, env=None):
+            if args[-1:] == ["status"] and "supervisorctl" in args and args[-2:] != ["status", "run_bot"]:
+                self.calls.append(args)
+                return CmdResult(4, "", "refused connection")
+            return super().run(args, cwd=cwd, check=check, env=env)
+
+    host = Unreachable(instance / "usr/workdir/matrix-mcp-server/.env")
+    try:
+        provision_agent(
+            6,
+            base_dir=tmp_path,
+            template_dir=TEMPLATE_DIR,
+            plug_only=True,
+            host=host,
+            timeouts=FAST,
+            sleep=lambda _seconds: None,
+            environ={},
+        )
+    except ProvisionError as exc:
+        assert "supervisorctl exit 4" in str(exc)
+        assert "refused connection" in str(exc)
+        return
+    raise AssertionError("unreachable supervisord was treated as ready")
 
 
 def test_module_cli_render_only(tmp_path: Path):
