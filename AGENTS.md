@@ -30,7 +30,7 @@ docs/                         -- Operator and design docs (peer of multi-instanc
   legacy-docs/                -- Retired Synapse-era material
   sessions/                   -- Captured terminal and debug sessions
 multi-instance-deploy/
-  create-instance.sh          -- Provisions agent triplet (Agent Zero + Continuwuity + Caddy)
+  create-instance.sh          -- Wrapper for the Python provisioner (plugged agent0-N)
   templates/
     docker-compose.yml.template
     Caddyfile.template
@@ -50,8 +50,9 @@ networking/                   -- Router/OpenVPN/DNS docs, DD-WRT config
 ## Key Commands
 
 ```bash
-# Provision a new agent instance (triplet: Agent Zero + Continuwuity + Caddy)
+# Provision a plugged agent (triplet + matrix-mcp-server-r2 0.4.0, run_bot stopped)
 ./multi-instance-deploy/create-instance.sh <instance-number>
+am-ctl create <instance-number>
 
 # MCP server (inside templates/matrix-mcp-server/)
 npm install && npm run build
@@ -75,13 +76,13 @@ cd multi-instance-deploy/templates/matrix-bot/rust && cargo build --release
 ## Boundaries
 
 ### Always Do
-- Use `create-instance.sh` for new agents -- don't hand-build triplets
+- Use `create-instance.sh` or `am-ctl create` for new agents. Both call `multi-instance-deploy/am-ctl/amctl/provision.py`. Do not hand-build triplets and do not run `finalize-instance.sh` afterward.
 - Consult `docs/operations-manual.md` before deploying
 - Run collect scripts before migration restore scripts
 - Keep deterministic IP/port scheme consistent with instance numbers
 
 ### Ask First
-- Before modifying `create-instance.sh` (affects all future instances)
+- Before modifying `create-instance.sh` or `amctl/provision.py` (affects all future instances)
 - Before changing Caddy or Continuwuity templates (affects existing agents)
 - Before running `destroy-and-rebuild.sh` scripts
 

@@ -8,15 +8,16 @@ alwaysApply: false
 
 ## Provisioning New Agents
 
-Always use `create-instance.sh` -- never hand-build triplets:
+Always use `create-instance.sh` or `am-ctl create`. Both call `amctl.provision` and install matrix-mcp-server-r2 0.4.0. Do not run `finalize-instance.sh` and do not hand-build triplets:
 ```bash
 ./multi-instance-deploy/create-instance.sh <instance-number>
+am-ctl create <instance-number>
 ```
 
 Instance number determines:
 - IP addresses: 172.23.88.N (agent), 172.23.89.N (homeserver)
 - Port mappings: derived from instance number
-- Container names: agent<N>, continuwuity<N>, caddy<N>
+- Container names: agent0-N, agent0-N-continuwuity, agent0-N-mhs
 
 ## Templates
 

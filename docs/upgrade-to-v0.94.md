@@ -58,6 +58,6 @@ Stop `run_mcp`, copy `matrix-mcp-server-r2.bak-pre-040` back to `matrix-mcp-serv
 
 ## Out of scope
 
-- Creating a new agent. `create-instance.sh` is unchanged in this step.
+- Creating a new agent. `create-instance.sh` and `am-ctl create` install 0.4.0. This upgrade script does not create agents.
 - Setting `MODEL_ACCEPTS_IMAGES`.
 - Upgrading Synapse, Continuwuity, Caddy, or Agent Zero.

@@ -21,7 +21,7 @@ if [[ $# -lt 1 ]]; then
     echo "Usage: $(basename "$0") <instance-number> [OPTIONS]"
     echo "Example: $(basename "$0") 3 --api-key-openrouter sk-or-v1-..."
     echo ""
-    echo "Options (passed through to finalize-instance.sh):"
+    echo "Options (exported into create-instance.sh):"
     echo "  --api-key-openrouter KEY   OpenRouter API key"
     echo "  --api-key-openai KEY       OpenAI API key"
     echo "  --api-key NAME=VALUE       Any other API key"
@@ -35,14 +35,21 @@ shift
 
 SKIP_SYNAPSE_PURGE=false
 NO_CONFIRM=false
-FINALIZE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skip-synapse-purge) SKIP_SYNAPSE_PURGE=true; shift ;;
         --no-confirm)         NO_CONFIRM=true; shift ;;
-        --api-key-openrouter|--api-key-openai|--api-key-anthropic|--api-key-google|--api-key-groq|--api-key)
-            FINALIZE_ARGS+=("$1" "$2"); shift 2 ;;
+        --api-key-openrouter) export API_KEY_OPENROUTER="$2"; shift 2 ;;
+        --api-key-openai)     export API_KEY_OPENAI="$2"; shift 2 ;;
+        --api-key-anthropic)  export API_KEY_ANTHROPIC="$2"; shift 2 ;;
+        --api-key-google)     export API_KEY_GOOGLE="$2"; shift 2 ;;
+        --api-key-groq)       export API_KEY_GROQ="$2"; shift 2 ;;
+        --api-key)
+            _name="${2%%=*}"
+            _value="${2#*=}"
+            export "API_KEY_${_name^^}=${_value}"
+            shift 2 ;;
         *) fail "Unknown argument: $1" ;;
     esac
 done
@@ -219,23 +226,12 @@ done
 # PHASE 2: REBUILD
 # =============================================
 
-step 6 "Rebuild instance with create-instance.sh"
+step 6 "Provision plugged ${INSTANCE_NAME}"
 cd "${DEPLOY_DIR}"
 ./create-instance.sh "${INSTANCE_NUM}"
-ok "Instance scaffolded"
+ok "Instance plugged"
 
-step 7 "Finalize instance"
-if [[ ${#FINALIZE_ARGS[@]} -gt 0 ]]; then
-    info "Passing to finalize: ${FINALIZE_ARGS[*]}"
-fi
-if [[ ${#FINALIZE_ARGS[@]} -gt 0 ]]; then
-    ./scripts/finalize-instance.sh "${INSTANCE_NUM}" "${FINALIZE_ARGS[@]}"
-else
-    ./scripts/finalize-instance.sh "${INSTANCE_NUM}"
-fi
-ok "Instance finalized"
-
-step 8 "Verify federation endpoint"
+step 7 "Verify federation endpoint"
 sleep 5
 info "Testing federation at https://${MHS_IP}:8448..."
 FED_RESPONSE=$(curl -ksf "https://${MHS_IP}:8448/_matrix/key/v2/server" 2>/dev/null) || true

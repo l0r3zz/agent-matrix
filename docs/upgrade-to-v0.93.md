@@ -46,6 +46,8 @@ These rules apply to a new install and to an upgrade:
 
 A new agent comes from `create-instance.sh`, then `scripts/finalize-instance.sh`, then the supervisord block in `startup-services.sh`.
 
+v0.94 replaced that sequence. `create-instance.sh` runs the Python provisioner and installs `matrix-mcp-server-r2` 0.4.0. Do not run `finalize-instance.sh` after it.
+
 v0.93 new installs must:
 
 1. Install `matrix-mcp-server-r2` from image tag `0.3.1`.

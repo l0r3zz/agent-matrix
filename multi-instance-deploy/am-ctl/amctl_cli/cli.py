@@ -789,5 +789,40 @@ def models_diagnose_cmd(ctx, cmd_output):
         print_models_diagnose(data)
 
 
+@main.command("create")
+@click.argument("instance_num", type=int)
+@click.option(
+    "-p",
+    "--profile",
+    default="agent0",
+    type=click.Choice(["agent0", "hacker", "researcher", "developer"]),
+    show_default=True,
+)
+@click.option("--render-only", is_flag=True, help="Write files and do not start Docker")
+@click.option("--plug-only", is_flag=True, help="Install the gateway into an existing instance directory")
+@click.option("--base-dir", default="/opt/agent-zero", show_default=True, help="Directory that holds agent0-N folders")
+@click.option("--force", is_flag=True, help="Rewrite generated files. Keep Continuwuity data and an existing password.")
+@click.option("--mms-tag", default="0.4.0", show_default=True, help="matrix-mcp-server-r2 image tag")
+def create_cmd(instance_num, profile, render_only, plug_only, base_dir, force, mms_tag):
+    """Provision a plugged agent0-N on this Docker host."""
+    from pathlib import Path
+
+    from amctl.provision import ProvisionError, provision_agent
+
+    try:
+        provision_agent(
+            instance_num,
+            profile=profile,
+            base_dir=Path(base_dir),
+            render_only=render_only,
+            plug_only=plug_only,
+            force=force,
+            tag=mms_tag,
+        )
+    except ProvisionError as exc:
+        console.print(f"[red]{exc}[/red]")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     main()

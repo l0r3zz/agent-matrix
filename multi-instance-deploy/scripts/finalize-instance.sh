@@ -26,6 +26,16 @@
 # =============================================================================
 set -euo pipefail
 
+# v0.94 plugs a new agent from create-instance.sh. This script restarts the
+# triplet and installs the old TypeScript server, so it is not the install path.
+if [[ "${1:-}" != "--i-know-this-is-the-old-path" ]]; then
+    echo "finalize-instance.sh is retired for v0.94." >&2
+    echo "Run: create-instance.sh <instance-number>" >&2
+    echo "That command renders the triplet, registers the Matrix user, and installs matrix-mcp-server-r2 0.4.0." >&2
+    exit 1
+fi
+shift
+
 # --- Colors ---
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}✅ $*${NC}"; }
