@@ -13,6 +13,7 @@ ARTIFACT_ROOT="${BASE_DIR}/decommission-artifacts"
 ASSUME_YES=false
 SAVE_CREDS=false
 ARCHIVE=false
+FORCE=false
 
 red()   { printf '\033[1;31m%s\033[0m\n' "$*"; }
 yel()   { printf '\033[1;33m%s\033[0m\n' "$*"; }
@@ -27,6 +28,7 @@ Decommission instance N (agent0-N / agent0-N-mhs).
 
 Options:
   -y, --yes         Skip interactive confirmation prompt
+  --force           Delete root-owned instance files from a container
   --save-creds      Save certs/keys and env files to artifact bundle
   --archive         Archive instance directory and attached docker volumes
   --base-dir PATH   Base instances directory (default: /opt/agent-zero)
@@ -35,12 +37,58 @@ Options:
 Examples:
   $SCRIPT_NAME 2
   $SCRIPT_NAME --save-creds --archive 3
+  $SCRIPT_NAME -y --force 6
   $SCRIPT_NAME -y --save-creds --archive --base-dir /opt/agent-zero 4
 USAGE
 }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || { red "Missing required command: $1"; exit 1; }
+}
+
+remove_instance_dir() {
+  local dir="$1"
+  local parent name
+
+  if [[ ! -d "$dir" ]]; then
+    yel "Instance directory already absent: $dir"
+    return 0
+  fi
+
+  parent="$(dirname -- "$dir")"
+  name="$(basename -- "$dir")"
+  if [[ "$parent" == "/" || -z "$name" || "$name" == "." || "$name" == ".." || "$name" != "$INSTANCE_NAME" ]]; then
+    red "Refusing to delete unexpected path: $dir"
+    exit 1
+  fi
+
+  if rm -rf "$dir"; then
+    grn "Removed instance directory: $dir"
+    return 0
+  fi
+
+  if [[ ! -e "$dir" ]]; then
+    grn "Removed instance directory: $dir"
+    return 0
+  fi
+
+  if [[ "$FORCE" != true ]]; then
+    red "Root-owned files remain under ${dir}."
+    red "Re-run with --force to delete them from a container."
+    exit 1
+  fi
+
+  blu "Root-owned files remain under ${dir}. Deleting them from a container."
+  docker run --rm \
+    -v "${parent}:/host" \
+    alpine:3.20 \
+    rm -rf "/host/${name}"
+
+  if [[ -e "$dir" ]]; then
+    red "Instance directory still present: $dir"
+    exit 1
+  fi
+  grn "Removed instance directory: $dir"
 }
 
 archive_volume() {
@@ -88,6 +136,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -y|--yes)
       ASSUME_YES=true
+      shift
+      ;;
+    --force)
+      FORCE=true
       shift
       ;;
     --save-creds)
@@ -142,6 +194,7 @@ echo "Continuwuity:   ${CONTINUWUITY_NAME}"
 echo "Instance dir:   ${INSTANCE_DIR}"
 echo "Save creds:     ${SAVE_CREDS}"
 echo "Archive:        ${ARCHIVE}"
+echo "Force:          ${FORCE}"
 echo "Artifact dir:   ${ARTIFACT_DIR}"
 yel "NOTE: Networking constructs will NOT be modified (routes/DNS/firewall untouched)."
 echo
@@ -211,12 +264,7 @@ docker rm -f "$CONTINUWUITY_NAME" >/dev/null 2>&1 || true
 
 grn "Containers removed (if present): $INSTANCE_NAME, $MHS_NAME, $CONTINUWUITY_NAME"
 
-if [[ -d "$INSTANCE_DIR" ]]; then
-  rm -rf "$INSTANCE_DIR"
-  grn "Removed instance directory: $INSTANCE_DIR"
-else
-  yel "Instance directory already absent: $INSTANCE_DIR"
-fi
+remove_instance_dir "$INSTANCE_DIR"
 
 echo
 blu "=== Completed ==="

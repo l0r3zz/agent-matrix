@@ -12,6 +12,7 @@ The decommission script handles **instance teardown only**:
 
 - Stops/removes instance containers (`agent0-N`, `agent0-N-mhs`)
 - Removes instance directory (`/opt/agent-zero/agent0-N`)
+- With `--force`, deletes root-owned files in that directory from a container
 - Optionally saves credentials/certs/keys (`--save-creds`)
 - Optionally archives data + docker volumes (`--archive`)
 
@@ -55,6 +56,9 @@ Where `N` is the instance number (`agent0-N`).
 
 - `-y`, `--yes`  
   Skip interactive confirmation.
+
+- `--force`  
+  Delete root-owned files under the instance directory from a short-lived container. Without this flag, those files stop the script and the directory stays in place.
 
 - `--save-creds`  
   Save certs/keys/env files into artifact bundle.
