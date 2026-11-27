@@ -678,8 +678,8 @@ Agents can send outbound email via Gmail SMTP. Configuration is per-instance via
 
 ### 7.2 Room Creation and Invitation Flow
 
-1. Agent creates room on Continuwuity via MCP `create-room` tool
-2. Agent invites human via MCP `invite-user` tool with `@user:v-site.net`
+1. Agent creates room on Continuwuity via MCP `create_room` tool
+2. Agent invites human via MCP `invite_user` tool with `@user:v-site.net`
 3. Continuwuity sends invite to Synapse (outbound federation via Caddy TLS)
 4. Synapse delivers invite to user's sync stream
 5. Human sees invite in Element, clicks "Accept"
@@ -935,7 +935,7 @@ A Rust-based MCP server is scaffolded (Phase 0 complete) to replace the Node.js 
 - Federation TLS uses step-ca certs via Caddy -- the Rust client must trust the custom CA
 - Per-agent homeserver means each agent has independent key management
 
-See [rust-matrix-mcp-server-plan.md](../../docs/rust-matrix-mcp-server-plan.md) for the full roadmap.
+See [rust-matrix-mcp-server-plan.md](rust-matrix-mcp-server-plan.md) for the full roadmap.
 
 ---
 

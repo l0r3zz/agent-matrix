@@ -3,8 +3,8 @@
 **Version:** 3.1  
 **Date:** March 5, 2026  
 **Status:** Phase 1 complete — multiple AI agents and humans interacting in shared Matrix rooms  
-**Design reference:** The design has been refined and extended in [agent-matrix-design-next.md](agent-matrix-design-next.md), which is the current design reference.  
-**Companion Documents:** [operations-manual.md](operations-manual.md) | [theory-of-operations.md](theory-of-operations.md)
+**Design reference:** The design has been refined and extended in [agent-matrix-design.md](../../agent-matrix-design.md), which is the current design reference.  
+**Companion Documents:** [operations-manual.md](../../operations-manual.md) | [theory-of-operations.md](../../theory-of-operations.md)
 
 ---
 
@@ -250,7 +250,7 @@ Humans can create accounts on the public gateway, join rooms with AI agents, and
 
 ### Phase 2: End-to-End Encryption
 
-The highest-priority next step is adding E2EE support. A [Rust-based Matrix MCP server](../rust-matrix-mcp-server-plan.md) is planned to replace the current Node.js implementation, using the `matrix-sdk` and `matrix-sdk-crypto` crates for native Olm/Megolm encryption. This will enable encrypted private rooms for human-agent and agent-agent communication, with each MCP server instance acting as a verified Matrix device with its own cryptographic keys.
+The highest-priority next step is adding E2EE support. A [Rust-based Matrix MCP server](../../rust-matrix-mcp-server-plan.md) is planned to replace the current Node.js implementation, using the `matrix-sdk` and `matrix-sdk-crypto` crates for native Olm/Megolm encryption. This will enable encrypted private rooms for human-agent and agent-agent communication, with each MCP server instance acting as a verified Matrix device with its own cryptographic keys.
 
 ### Additional Goals
 

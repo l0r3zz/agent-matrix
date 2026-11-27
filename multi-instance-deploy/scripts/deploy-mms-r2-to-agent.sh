@@ -8,30 +8,32 @@
 #
 # Environment (optional):
 #   GHCR_IMAGE  -- image name without tag (default: ghcr.io/l0r3zz/matrix-mcp-server-r2)
-#   MMS_R2_TAG  -- image tag / semver (default: 0.3.1). 0.3.1 answers Matrix
+#   MMS_R2_TAG  -- image tag / semver (default: 0.4.0). 0.4.0 is the
+#                  Agent-Matrix v0.94 Matrix client. It answers Matrix
 #                  triggers when BOT_ENABLED=true. See
-#                  docs/upgrade-to-v0.93.md in this repo.
+#                  docs/upgrade-to-v0.94.md in this repo.
 #
 # Usage (from multi-instance-deploy/templates/scripts/):
 #   ./deploy-mms-r2-to-agent.sh 5
 #   ./deploy-mms-r2-to-agent.sh 1 2 3
-#   MMS_R2_TAG=0.2.0 ./deploy-mms-r2-to-agent.sh 5   # pin the v0.92 image
+#   MMS_R2_TAG=0.3.1 ./deploy-mms-r2-to-agent.sh 5   # pin the v0.93 image
 #   ./deploy-mms-r2-to-agent.sh all
 #
 # What it does:
 #   1. docker pull the published GHCR image
 #   2. Extracts matrix-mcp-server-r2 binary from the image
-#   3. Copies the binary + switch script into each agent instance
+#   3. Stops run_mcp, copies the binary, and starts run_mcp only
 #
-# After deploy, switch the running MCP to Rust:
-#   docker exec agent0-N /a0/usr/workdir/switch-mcp-server.sh rust
+# Do not run switch-mcp-server.sh rust or rust-restart after this script.
+# A second opener of the crypto store fails with KeyStoreUnavailableError.
+# Do not restart the agent container. Do not start run_bot.
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GHCR_IMAGE="${GHCR_IMAGE:-ghcr.io/l0r3zz/matrix-mcp-server-r2}"
-MMS_R2_TAG="${MMS_R2_TAG:-0.3.1}"
+MMS_R2_TAG="${MMS_R2_TAG:-0.4.0}"
 FULL_IMAGE="${GHCR_IMAGE}:${MMS_R2_TAG}"
 BINARY_NAME="matrix-mcp-server-r2"
 EXTRACT_NAME="mcp-extract-$$"
@@ -94,17 +96,25 @@ for N in "${INSTANCES[@]}"; do
 
     log "Deploying to $CONTAINER..."
 
+    # Stop before the copy so the new file is the one run_mcp execs.
+    # An already-stopped program makes supervisorctl return non-zero.
+    docker exec "$CONTAINER" supervisorctl stop run_mcp >/dev/null 2>&1 || true
+    state="$(docker exec "$CONTAINER" supervisorctl status run_mcp 2>/dev/null | awk '{print $2}' || true)"
+    if [ "$state" = "RUNNING" ]; then
+        log "ERROR: $CONTAINER run_mcp is still RUNNING. Binary was not replaced."
+        exit 1
+    fi
+
     docker cp "$TMPDIR/$BINARY_NAME" "${CONTAINER}:${MCP_PATH}/${BINARY_NAME}"
     docker exec "$CONTAINER" chmod +x "${MCP_PATH}/${BINARY_NAME}"
 
     docker cp "$SCRIPT_DIR/switch-mcp-server.sh" "${CONTAINER}:/a0/usr/workdir/switch-mcp-server.sh"
     docker exec "$CONTAINER" chmod +x "/a0/usr/workdir/switch-mcp-server.sh"
 
-    log "$CONTAINER: Binary and switch script deployed"
-    log "$CONTAINER: Switch with: docker exec $CONTAINER /a0/usr/workdir/switch-mcp-server.sh rust"
+    docker exec "$CONTAINER" supervisorctl start run_mcp >/dev/null
+    log "$CONTAINER: ${FULL_IMAGE} installed. run_mcp started. run_bot was not started."
 done
 
-log "Done. To switch an agent to Rust:"
-log "  docker exec agent0-N /a0/usr/workdir/switch-mcp-server.sh rust"
-log "To switch back:"
-log "  docker exec agent0-N /a0/usr/workdir/switch-mcp-server.sh ts"
+log "Done. Restarted run_mcp only."
+log "Do not run switch-mcp-server.sh rust or rust-restart."
+log "Do not restart the agent container. Do not start run_bot."

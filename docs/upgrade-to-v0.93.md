@@ -26,7 +26,7 @@ Do not run the live upgrade until GitHub has image tag `0.3.1`.
 
 That tag is created on `matrix-mcp-server-r2` `main` after pull request #2 merges. The tag publishes the image and moves `:latest`. Until that tag exists, the Agent-Matrix code can still land on `release/v0.93`. The upgrade script must refuse to copy a binary when the tag is missing.
 
-The fleet script `deploy-mms-r2-to-agent.sh` still defaults to `0.2.0`. v0.93 changes that default to `0.3.1`.
+The fleet script `deploy-mms-r2-to-agent.sh` still defaults to `0.2.0`. v0.93 changes that default to `0.3.1`. v0.94 later moved the same default to `0.4.0`. This plan's script still passes `MMS_R2_TAG=0.3.1`.
 
 ## Rules for every path
 

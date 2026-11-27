@@ -3,7 +3,7 @@
 **Version:** 0.9.0 (Initial Foundation Draft -- Stage 1 for Galadriel Expansion)
 **Date:** 2026-10-18
 **Status:** Living Draft -- Ready for Multi-Agent Expansion (`Galadriel`)
-**Repository:** `agent-matrix-repo/multi-instance-deploy/docs/agent-matrix-users-guide.md`
+**Repository:** `agent-matrix-repo/docs/agent-matrix-users-guide.md`
 **Related Specifications:**
 - [Agent-Matrix Architecture Design](agent-matrix-design.md)
 - [Theory of Operations](theory-of-operations.md)
@@ -150,7 +150,7 @@ Unlike simple chat wrappers that only generate text completions, **Agent Zero is
    - **Multi-Tier Model Routing (Presets)**: Each agent separates its **Chat Model** (heavy reasoning, e.g., `anthropic/claude-sonnet-4-6` or `openrouter/...`), **Utility Model** (fast summarization, memory extraction, and background tasks), and **Embedding Model** (local `sentence-transformers/all-MiniLM-L6-v2` or cloud embeddings). Operators can switch presets (`Default`, `Efficiency`, `Power`) fleet-wide via `am-ctl models`.
 4. **Dual-Bridge Matrix Integration**:
    - **Inbound (`matrix-bot-rust`)**: Watches the agent's Matrix rooms in real time. When a message arrives that targets the agent, the bot forwards the sender, room context, and message body to Agent Zero's internal HTTP API (`/api_message`) using a runtime-derived, mode-`0600` secret token (`.a0-api-key`), then posts the agent's response back to the Matrix room.
-   - **Outbound (`matrix-mcp-server-r2`)**: Gives the reasoning loop direct MCP tool calls (`list-joined-rooms`, `get-room-messages`, `send-message`, `search-messages`, `invite-user`, etc.) so an agent can proactively check other rooms or message a sibling agent mid-task.
+   - **Outbound (`matrix-mcp-server-r2`)**: Gives the reasoning loop direct MCP tool calls (`list_joined_rooms`, `get_room_messages`, `send_message`, `invite_user`, etc.) so an agent can proactively check other rooms or message a sibling agent mid-task.
 5. **Dual-Layer Memory**:
    - **Local Episodic/FAISS Memory**: Per-instance conversation history and local knowledge fragments in `/a0/usr/memory/`.
    - **Shared Fleet Memory (`Open Brain` / `OB1`)**: Fleet-wide PostgreSQL + `pgvector` knowledge graph (`search_thoughts`, `capture_thought`, `list_thoughts`, `thought_stats`) shared across all agents.

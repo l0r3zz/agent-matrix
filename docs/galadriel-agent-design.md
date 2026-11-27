@@ -272,7 +272,7 @@ Compiled wiki artifacts SHOULD live in:
 If mirrored into the repository, use:
 
 ```text
-multi-instance-deploy/docs/galadriel/wiki/
+docs/galadriel/wiki/
 ```
 
 ### 8.6 Compilation Triggers
@@ -549,8 +549,8 @@ These items were originally marked as blanket "required before implementation" g
 - [Agent Zero connectivity](https://raw.githubusercontent.com/agent0ai/agent-zero/main/docs/developer/connectivity.md)
 - [Open Brain (OB1)](https://github.com/NateBJones-Projects/OB1)
 - [Agent-Matrix Open Brain design](agent-matrix-open-brain-design.md)
-- [Open Brain Agent Zero guide](../../open-brain/docs/open-brain-agent-zero-guide.md)
-- [Open Brain self-hosted guide](../../open-brain/docs/open-brain-self-hosted-guide.md)
+- [Open Brain Agent Zero guide](../open-brain/docs/open-brain-agent-zero-guide.md)
+- [Open Brain self-hosted guide](../open-brain/docs/open-brain-self-hosted-guide.md)
 - [Nate's Substack: Karpathy's Memory System](https://natesnewsletter.substack.com/p/your-ai-re-derives-everything-it)
 - [Nate's Substack: The Hybrid I'd Actually Build Next](https://natesnewsletter.substack.com/i/194981463/the-hybrid-id-actually-build-next)
 
@@ -560,7 +560,7 @@ These items were originally marked as blanket "required before implementation" g
 
 ### A.1 Canonical Specification File
 
-- **Decision:** `multi-instance-deploy/docs/galadriel-agent-design.md` is the canonical design specification.
+- **Decision:** `docs/galadriel-agent-design.md` is the canonical design specification.
 - **Status:** Accepted.
 
 ### A.2 Communication Channel Arbitration

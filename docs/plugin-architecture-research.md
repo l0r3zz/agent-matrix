@@ -372,12 +372,12 @@ MCP Client (Agent Zero)
 
 | Category | Tools |
 |----------|-------|
-| Rooms | list-joined-rooms, get-room-info, create-room, join-room, leave-room |
-| Messages | get-room-messages, get-messages-by-date, send-message, send-direct-message |
-| Members | get-room-members, invite-user, identify-active-users |
-| Profiles | get-user-profile, get-my-profile, get-all-users |
-| Admin | set-room-name, set-room-topic |
-| Discovery | search-public-rooms, get-notification-counts, get-direct-messages |
+| Rooms | list_joined_rooms, get_room_info, create_room, join_room, leave_room |
+| Messages | get_room_messages, get_messages_by_date, send_message, send_direct_message |
+| Members | get_room_members, invite_user, identify_active_users |
+| Profiles | get_user_profile, get_my_profile, get_all_users |
+| Admin | set_room_name, set_room_topic |
+| Discovery | search_public_rooms, get_notification_counts, get_direct_messages |
 
 ### Tech Stack
 

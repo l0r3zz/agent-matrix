@@ -260,7 +260,7 @@ Save the access token returned by the `one-time bootstrap token from logs` comma
 
 If you need to obtain a fresh access token:
 
-v0.93 does not log in as device `AgentZeroBot`. `scripts/finalize-instance.sh` keeps the MCP device that owns the crypto store. A manual login must use that same device id. See `docs/upgrade-to-v0.93.md`.
+v0.93 does not log in as device `AgentZeroBot`. `multi-instance-deploy/scripts/finalize-instance.sh` keeps the MCP device that owns the crypto store. A manual login must use that same device id. See `docs/upgrade-to-v0.93.md`.
 
 ```bash
 DEVICE=$(cat /a0/usr/workdir/matrix-mcp-server/crypto-store/.device-id)
@@ -438,7 +438,7 @@ docker exec agent0-N curl -s -X POST http://localhost:3000/mcp \
   -H "matrix_homeserver_url: http://agent0-N-mhs:8008" \
   -H "matrix_user_id: @agent0-N:agent0-N-mhs.cybertribe.com" \
   -H "matrix_access_token: <TOKEN>" \
-  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"create-room","arguments":{"name":"federation-test","topic":"Testing federation"}},"id":1}'
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"create_room","arguments":{"name":"federation-test","topic":"Testing federation"}},"id":1}'
 ```
 
 Then from an Element client connected to matrix.v-site.net, try joining the room and sending a message. Verify the agent responds.
@@ -694,7 +694,7 @@ curl -s "http://localhost:8008/_synapse/admin/v1/federation/destinations" \
 docker exec agent0-N curl -s -X POST http://localhost:3000/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list-joined-rooms","arguments":{}}}' | python3 -m json.tool
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_joined_rooms","arguments":{}}}' | python3 -m json.tool
 ```
 
 ### 7.8 Check Fleet Model Configuration
@@ -846,7 +846,7 @@ A scheduled task runs every 30 minutes and performs:
 1. MCP process alive check
 2. Matrix auth validation
 3. Token sync verification
-4. MCP tool response test (`list-joined-rooms`)
+4. MCP tool response test (`list_joined_rooms`)
 5. User notification on failure
 
 Create via A0 scheduler or verify with `scheduler:list_tasks`.
@@ -879,9 +879,9 @@ cd /a0/usr/workdir/matrix-mcp-server && nohup node dist/http-server.js >> mcp-se
 curl -s http://localhost:3000/health
 ```
 
-## 7.7 One Matrix device (v0.93)
+## 7.7 One Matrix device (v0.94)
 
-v0.93 runs `matrix-mcp-server-r2` 0.3.0 as the only Matrix client. `run_bot` stays installed and stays stopped. `BOT_ENABLED=true` in `matrix-mcp-server/.env` makes that process answer triggers and trusted invites. The plan and the upgrade script are `docs/upgrade-to-v0.93.md` and `scripts/upgrade-v0.92-to-v0.93.sh`.
+v0.94 runs `matrix-mcp-server-r2` 0.4.0 as the only Matrix client. `run_bot` stays installed and stays stopped. `BOT_ENABLED=true` in `matrix-mcp-server/.env` makes that process answer triggers and trusted invites. A v0.93 agent moves to this binary with `docs/upgrade-to-v0.94.md` and `multi-instance-deploy/scripts/upgrade-v0.93-to-v0.94.sh`. The v0.92 to v0.93 plan stays at `docs/upgrade-to-v0.93.md` and `multi-instance-deploy/scripts/upgrade-v0.92-to-v0.93.sh`. The deploy scripts default to image tag `0.4.0`.
 
 `matrix-bot-rust` does not read encrypted rooms. Do not start it beside `run_mcp` while `BOT_ENABLED=true`.
 
@@ -910,9 +910,9 @@ The script is idempotent and never touches the MCP token, device, or crypto stor
 
 That split is the path v0.93 retires. `split-bot-device.sh` mints `AgentZeroBot`. A v0.93 install does not run it.
 
-### Enabling E2EE (matrix-mcp-server-r2 v0.3.0)
+### Enabling E2EE (matrix-mcp-server-r2 v0.4.0)
 
-Follow `docs/upgrade-to-v0.93.md` in this repo. The image tag is `0.3.0`. The r2 v0.2.0 guide remains the history of the crypto store: [`docs/upgrade-to-v0.2.0.md`](https://github.com/l0r3zz/matrix-mcp-server-r2/blob/main/docs/upgrade-to-v0.2.0.md). If the MCP token device does not match `crypto-store/.device-id`, the server refuses to start.
+A new deploy uses image tag `0.4.0`. From a v0.93 agent, follow `docs/upgrade-to-v0.94.md`. From a v0.92 agent, follow `docs/upgrade-to-v0.93.md` first. The r2 v0.2.0 guide remains the history of the crypto store: [`docs/upgrade-to-v0.2.0.md`](https://github.com/l0r3zz/matrix-mcp-server-r2/blob/main/docs/upgrade-to-v0.2.0.md). If the MCP token device does not match `crypto-store/.device-id`, the server refuses to start.
 
 ### Pausing automation for one agent
 

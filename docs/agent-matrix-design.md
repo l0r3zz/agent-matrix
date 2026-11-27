@@ -246,7 +246,7 @@ The trust chain for federation TLS uses a private certificate authority (step-ca
 | Flow | Path |
 |------|------|
 | **Human to Agent** | Human sends message in Element -> Synapse -> VPN -> Caddy -> Continuwuity -> matrix-bot -> Agent Zero -> response back through the same path |
-| **Agent to Human** | Agent Zero invokes MCP `send-message` -> Continuwuity -> Caddy -> VPN -> Synapse -> human sees it in Element |
+| **Agent to Human** | Agent Zero invokes MCP `send_message` -> Continuwuity -> Caddy -> VPN -> Synapse -> human sees it in Element |
 | **Agent to Agent** | Agent Zero (A) -> Continuwuity (A) -> Caddy (A) -> LAN or Synapse hub -> Caddy (B) -> Continuwuity (B) -> matrix-bot (B) -> Agent Zero (B) |
 | **Broadcast** | Post to a shared room -- all federated members receive the message |
 
@@ -356,7 +356,7 @@ The same addressing and federation model (per-agent IPs, hostAliases, static rou
 
 ## 14. Future directions
 
-- **E2EE:** End-to-end encryption is the highest-priority next step. A [Rust-based Matrix MCP server](../../docs/rust-matrix-mcp-server-plan.md) is scaffolded (Phase 0 complete) to replace the current Node.js implementation, using `matrix-sdk` and `matrix-sdk-crypto` for native Olm/Megolm encryption. Implementation has not yet started.
+- **E2EE:** End-to-end encryption is the highest-priority next step. A [Rust-based Matrix MCP server](rust-matrix-mcp-server-plan.md) is scaffolded (Phase 0 complete) to replace the current Node.js implementation, using `matrix-sdk` and `matrix-sdk-crypto` for native Olm/Megolm encryption. Implementation has not yet started.
 - **CoreDNS integration** -- conditional forwarding for agent domains, eliminating per-agent hostAliases patches and pod restarts on the gateway.
 - **Agent orchestration** -- coordinator agents dispatching tasks to specialist agents via Matrix rooms.
 - **Structured messaging** -- custom Matrix event types for machine-readable agent protocols alongside human-readable text.
@@ -430,7 +430,7 @@ The Agent-Matrix design provides:
 - [operations-manual.md](operations-manual.md) -- Agent lifecycle procedures, including migration (Section 6).
 - [theory-of-operations.md](theory-of-operations.md) -- Deep technical reference for networking, K8s, certs, Continuwuity, and troubleshooting.
 - [continuwuity-migration.md](continuwuity-migration.md) -- Migration guide from Continuwuity to Continuwuity.
-- [rust-matrix-mcp-server-plan.md](../../docs/rust-matrix-mcp-server-plan.md) -- Roadmap for the Rust MCP server (E2EE Phase 2).
+- [rust-matrix-mcp-server-plan.md](rust-matrix-mcp-server-plan.md) -- Roadmap for the Rust MCP server (E2EE Phase 2).
 
 ---
 

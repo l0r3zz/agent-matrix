@@ -1,6 +1,6 @@
 # AGENTS.md -- Agent Matrix
 
-Decentralized, federated AI agent platform where each agent has a real Matrix identity (Continuwuity homeserver + Caddy TLS), with Agent Zero as the reasoning stack. Humans use normal Matrix clients. On v0.93, matrix-mcp-server-r2 serves the MCP tools and the inbound Matrix replies. matrix-bot-rust stays installed and stopped.
+Decentralized, federated AI agent platform where each agent has a real Matrix identity (Continuwuity homeserver + Caddy TLS), with Agent Zero as the reasoning stack. Humans use normal Matrix clients. On v0.94, matrix-mcp-server-r2 0.4.0 serves the MCP tools and the inbound Matrix replies. matrix-bot-rust stays installed and stopped.
 
 Not production-ready -- lab for agentic architectures on open standards.
 
@@ -13,7 +13,7 @@ Not production-ready -- lab for agentic architectures on open standards.
 | Reverse proxy | Caddy (per-agent TLS) |
 | Federation hub | Synapse on K8s (public) |
 | MCP server | TypeScript (Express, matrix-js-sdk, OAuth/Keycloak) |
-| Matrix bot | matrix-mcp-server-r2 0.3.1 when BOT_ENABLED=true; matrix-bot-rust stays installed and stopped |
+| Matrix bot | matrix-mcp-server-r2 0.4.0 when BOT_ENABLED=true; matrix-bot-rust stays installed and stopped |
 | Networking | macvlan Docker, OpenVPN, DD-WRT edge router |
 | Orchestration | Docker Compose (agents), K8s (federation/monitoring) |
 | Automation | Bash, Python helpers |
@@ -21,13 +21,16 @@ Not production-ready -- lab for agentic architectures on open standards.
 ## Project Structure
 
 ```
+docs/                         -- Operator and design docs (peer of multi-instance-deploy)
+  operations-manual.md        -- Step-by-step deploy procedures
+  upgrade-to-v0.93.md         -- v0.92 to v0.93 plan for matrix-mcp-server-r2 0.3.1
+  upgrade-to-v0.94.md         -- v0.93 to v0.94 plan for matrix-mcp-server-r2 0.4.0
+  agent-matrix-design.md      -- Living architecture doc
+  theory-of-operations.md     -- Deeper ops theory
+  legacy-docs/                -- Retired Synapse-era material
+  sessions/                   -- Captured terminal and debug sessions
 multi-instance-deploy/
   create-instance.sh          -- Provisions agent triplet (Agent Zero + Continuwuity + Caddy)
-  docs/
-    operations-manual.md      -- Step-by-step deploy procedures
-    upgrade-to-v0.93.md       -- v0.92 to v0.93 plan for matrix-mcp-server-r2 0.3.1
-    agent-matrix-design.md    -- Living architecture doc
-    theory-of-operations.md   -- Deeper ops theory
   templates/
     docker-compose.yml.template
     Caddyfile.template
@@ -37,12 +40,11 @@ multi-instance-deploy/
     clear-rules/              -- CLEAR writing skill source
     clear-rules.zip           -- Agent Zero skill import (Settings, Skills, Import)
     repo-spec-audit/          -- Read-only repo + Spec Kit audit skill (SKILL.md, install.sh)
-  scripts/                    -- Host-side helpers, including upgrade-v0.92-to-v0.93.sh
+  scripts/                    -- Host-side helpers, including upgrade-v0.92-to-v0.93.sh and upgrade-v0.93-to-v0.94.sh
 migration/
   tarnover-refresh/           -- Host OS refresh runbook + scripts
   README-agent0-1-g2s.md     -- Agent relocation runbook
 networking/                   -- Router/OpenVPN/DNS docs, DD-WRT config
-legacy-docs/                  -- Retired Synapse-era material
 ```
 
 ## Key Commands
@@ -68,7 +70,7 @@ cd multi-instance-deploy/templates/matrix-bot/rust && cargo build --release
 - **macvlan networking**: Docker containers appear as real LAN devices; per-agent /32 routes
 - **MCP tool tiers**: tier0 (read: rooms, messages, users) vs tier1 (write: room-admin, messaging) -- capability layering
 - **Federation via public K8s Synapse**: Private LAN agents federate through OpenVPN to public hub
-- **matrix-mcp-server-r2 (Rust)**: Sibling repo. v0.93 uses image tag `0.3.1` as the only Matrix client. `run_bot` stays stopped.
+- **matrix-mcp-server-r2 (Rust)**: Sibling repo. v0.94 uses image tag `0.4.0` as the only Matrix client. `run_bot` stays stopped.
 
 ## Boundaries
 
@@ -89,8 +91,9 @@ cd multi-instance-deploy/templates/matrix-bot/rust && cargo build --release
 - Run restore scripts without first running the matching collect script
 
 ## Key Documentation
-- `multi-instance-deploy/docs/agent-matrix-design.md` -- Architecture (v5.1+)
-- `multi-instance-deploy/docs/operations-manual.md` -- Deploy procedures
-- `multi-instance-deploy/docs/upgrade-to-v0.93.md` -- v0.92 to v0.93 upgrade plan
-- `multi-instance-deploy/docs/theory-of-operations.md` -- Ops theory
+- `docs/agent-matrix-design.md` -- Architecture (v5.1+)
+- `docs/operations-manual.md` -- Deploy procedures
+- `docs/upgrade-to-v0.93.md` -- v0.92 to v0.93 upgrade plan
+- `docs/upgrade-to-v0.94.md` -- v0.93 to v0.94 upgrade plan (matrix-mcp-server-r2 0.4.0)
+- `docs/theory-of-operations.md` -- Ops theory
 - `migration/tarnover-refresh/RUNBOOK.md` -- Host refresh runbook
