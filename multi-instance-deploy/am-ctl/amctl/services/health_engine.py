@@ -15,6 +15,7 @@ from amctl.models.health import Alert, AlertRule, HealthCheck, HealthState
 from amctl.services.agent_zero import check_a0_auth, check_mcp_health
 from amctl.services.backup import check_backup_freshness
 from amctl.services.docker import get_container_status, get_process_info, supervisor_action
+from amctl.oplog.track import tracked
 from amctl.services.matrix import (
     check_and_refresh_federation_keys,
     check_sync_cursor,
@@ -234,6 +235,7 @@ async def _ensure_open_alert(
         ))
 
 
+@tracked(action="health_check", stage="checks")
 async def run_agent_health_checks(
     session: AsyncSession,
     agent: Agent,

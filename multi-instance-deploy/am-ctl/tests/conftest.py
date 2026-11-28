@@ -3,8 +3,10 @@
 from collections.abc import AsyncGenerator
 import os
 
-# Disable background health loop during tests before importing app
+# Disable background health loop and the live-database oplog sweep before importing app.
 os.environ["AMCTL_ENABLE_BACKGROUND_MONITOR"] = "false"
+os.environ["AMCTL_OPLOG"] = "off"
+os.environ["AMCTL_OPLOG_SWEEP"] = "false"
 
 import pytest
 import pytest_asyncio

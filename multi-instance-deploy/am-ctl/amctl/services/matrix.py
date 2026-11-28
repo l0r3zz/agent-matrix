@@ -8,6 +8,7 @@ from pathlib import Path
 
 import httpx
 
+from amctl.oplog.track import tracked
 from amctl.schemas.agent import MatrixIdentity
 from amctl.services.docker import _run
 
@@ -230,6 +231,7 @@ async def check_and_refresh_federation_keys(homeserver_fqdn: str) -> tuple[str, 
     return "pass", detail
 
 
+@tracked(action="repair", stage="membership", target="arg0")
 async def repair_room_membership(
     agent_name: str,
     matrix_user_id: str,

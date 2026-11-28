@@ -490,7 +490,18 @@ Restart Synapse:
 kubectl rollout restart deployment matrix-synapse -n matrix
 ```
 
-### 5.4 Clean Up Host Data (Optional)
+### 5.4 Operational runs
+
+Creation, teardown, health checks, repairs, releases, backups, credential checks, and model changes each write one operational run. Read them with the existing API key:
+
+```bash
+curl -s -H "X-API-Key: $AMCTL_API_KEY" "http://127.0.0.1:8077/api/v1/runs?target=agent0-N&limit=20"
+curl -s -H "X-API-Key: $AMCTL_API_KEY" "http://127.0.0.1:8077/api/v1/runs/RUN_ID"
+```
+
+`am-ctl runs` calls those two endpoints. The same records are appended as OTLP JSON lines under `/opt/agent-zero/oplog/oplog.jsonl`. The server keeps rows and JSONL lines for 30 days. Run rows age from `ended_at`. Stage rows age from `observed_at`.
+
+### 5.5 Clean Up Host Data (Optional)
 
 ```bash
 # Only after confirming the agent is no longer needed

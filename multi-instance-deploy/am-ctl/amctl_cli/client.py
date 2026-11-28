@@ -278,5 +278,20 @@ class AmCtlClient:
         resp.raise_for_status()
         return resp.json()
 
+    def list_runs(self, target: str | None = None, action: str | None = None, limit: int = 20) -> list[dict]:
+        params = {"limit": limit}
+        if target:
+            params["target"] = target
+        if action:
+            params["action"] = action
+        resp = self._client.get("/api/v1/runs", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_run(self, run_id: str) -> dict:
+        resp = self._client.get(f"/api/v1/runs/{run_id}")
+        resp.raise_for_status()
+        return resp.json()
+
     def close(self):
         self._client.close()

@@ -29,6 +29,7 @@ from amctl.schemas.backup import (
     BackupSuiteRunResponse,
     BackupVerifyResponse,
 )
+from amctl.oplog.track import tracked
 from amctl.services.docker import _run
 
 logger = logging.getLogger(__name__)
@@ -174,6 +175,7 @@ async def sync_to_offsite(local_dir: Path, tier: str) -> tuple[bool, str]:
     return rc == 0, out if rc != 0 else f"{OFFSITE_HOST}:{remote_dir}"
 
 
+@tracked(action="backup", stage="suite", target="none")
 async def execute_backup_suite(
     session: AsyncSession,
     backup_type: str = "manual",

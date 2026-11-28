@@ -8,6 +8,8 @@ set -euo pipefail
 # - Optional: archive instance data and docker volumes
 
 SCRIPT_NAME="$(basename "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+AMCTL_ROOT="${AMCTL_ROOT:-${SCRIPT_DIR}/../am-ctl}"
 BASE_DIR="/opt/agent-zero"
 ARTIFACT_ROOT="${BASE_DIR}/decommission-artifacts"
 ASSUME_YES=false
@@ -19,6 +21,20 @@ red()   { printf '\033[1;31m%s\033[0m\n' "$*"; }
 yel()   { printf '\033[1;33m%s\033[0m\n' "$*"; }
 grn()   { printf '\033[1;32m%s\033[0m\n' "$*"; }
 blu()   { printf '\033[1;34m%s\033[0m\n' "$*"; }
+
+oplog() {
+  if [[ "${AMCTL_OPLOG:-}" == "off" ]]; then
+    if [[ "${1:-}" == "start" ]]; then
+      printf '%s\n' "oplog-off"
+    fi
+    return 0
+  fi
+  local py="${AMCTL_PYTHON:-python3}"
+  if ! PYTHONPATH="${AMCTL_ROOT}${PYTHONPATH:+:$PYTHONPATH}" "$py" -m amctl.oplog "$@"; then
+    printf 'Operational record failed.\n' >&2
+    return 0
+  fi
+}
 
 usage() {
   cat <<USAGE
@@ -75,7 +91,7 @@ remove_instance_dir() {
   if [[ "$FORCE" != true ]]; then
     red "Root-owned files remain under ${dir}."
     red "Re-run with --force to delete them from a container."
-    exit 1
+    return 1
   fi
 
   blu "Root-owned files remain under ${dir}. Deleting them from a container."
@@ -86,7 +102,7 @@ remove_instance_dir() {
 
   if [[ -e "$dir" ]]; then
     red "Instance directory still present: $dir"
-    exit 1
+    return 1
   fi
   grn "Removed instance directory: $dir"
 }
@@ -254,6 +270,9 @@ fi
 
 blu "Stopping/removing instance containers..."
 
+OPLOG_RUN="$(oplog start --action teardown --target "$INSTANCE_NAME" --actor "${USER:-operator}" || true)"
+oplog stage --run-id "$OPLOG_RUN" --stage containers_removed --phase start --body "Removing containers." || true
+
 if [[ -f "$INSTANCE_DIR/docker-compose.yml" ]]; then
   (cd "$INSTANCE_DIR" && docker compose down --remove-orphans) || yel "docker compose down reported issues; continuing"
 fi
@@ -263,8 +282,17 @@ docker rm -f "$MHS_NAME" >/dev/null 2>&1 || true
 docker rm -f "$CONTINUWUITY_NAME" >/dev/null 2>&1 || true
 
 grn "Containers removed (if present): $INSTANCE_NAME, $MHS_NAME, $CONTINUWUITY_NAME"
+oplog stage --run-id "$OPLOG_RUN" --stage containers_removed --phase finish --severity INFO --body "Containers are removed." || true
+oplog stage --run-id "$OPLOG_RUN" --stage directory_removed --phase start --body "Removing the instance directory." || true
 
-remove_instance_dir "$INSTANCE_DIR"
+if remove_instance_dir "$INSTANCE_DIR"; then
+  oplog stage --run-id "$OPLOG_RUN" --stage directory_removed --phase finish --severity INFO --body "The instance directory is absent." --instance-present false || true
+  oplog finish --run-id "$OPLOG_RUN" --outcome succeeded --instance-present false || true
+else
+  oplog stage --run-id "$OPLOG_RUN" --stage directory_removed --phase finish --severity ERROR --body "Directory removal stopped." --cause "directory_removed stopped. The instance may still exist." --instance-present true || true
+  oplog finish --run-id "$OPLOG_RUN" --outcome failed --instance-present true || true
+  exit 1
+fi
 
 echo
 blu "=== Completed ==="

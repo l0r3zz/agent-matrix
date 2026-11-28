@@ -55,6 +55,8 @@ _HEALTH_PY = (
 class ProvisionError(Exception):
     """A provisioning step failed. The message must not contain a secret."""
 
+    recorded = False
+
 
 @dataclass(frozen=True)
 class InstanceAddress:
@@ -519,13 +521,16 @@ class LocalHost:
         return response.status_code, payload
 
 
-def _wait(predicate, timeout: float, interval: float, sleep, failure: str):
+def _wait(predicate, timeout: float, interval: float, sleep, failure: str, stage: str):
     deadline = time.monotonic() + timeout
+    last = None
     while True:
-        if predicate():
+        last = predicate()
+        if last:
             return
         if time.monotonic() >= deadline:
-            raise ProvisionError(failure)
+            shown = last if last not in (None, "") else "no result"
+            raise ProvisionError(f"{failure}. stage={stage} limit={timeout}s last={shown!r}")
         sleep(interval)
 
 
@@ -598,17 +603,17 @@ def _device_id(host, address: InstanceAddress, token: str) -> str | None:
     return device
 
 
-def _try_step_ca(host, address: InstanceAddress, instance_dir: Path) -> None:
+def _try_step_ca(host, address: InstanceAddress, instance_dir: Path) -> str:
     which = host.run(["bash", "-lc", "command -v step"], check=False)
     if which.returncode != 0:
         print("step CLI not found. Federation keeps the placeholder certificate.")
-        return
+        return "absent"
     crt = instance_dir / "mhs" / "server.crt"
     key = instance_dir / "mhs" / "server.key"
     issuer = host.run(["openssl", "x509", "-in", str(crt), "-noout", "-issuer"], check=False)
     if "CyberTribe CA" in (issuer.stdout + issuer.stderr):
         print("Step-CA certificate already present.")
-        return
+        return "ready"
     args = [
         "step",
         "ca",
@@ -630,6 +635,7 @@ def _try_step_ca(host, address: InstanceAddress, instance_dir: Path) -> None:
     # Caddy reads the certificate at start. A reload can keep serving the
     # placeholder, and Synapse then cannot verify the homeserver.
     host.run(["docker", "restart", f"{address.name}-mhs"], check=False)
+    return "ready"
 
 
 def _append_step_root(host, crt: Path) -> None:
@@ -647,6 +653,92 @@ def _append_step_root(host, crt: Path) -> None:
     root_path.unlink(missing_ok=True)
 
 
+def _stage(
+    run_id,
+    stage: str,
+    phase: str,
+    *,
+    severity: str = "INFO",
+    body: str = "",
+    cause: str | None = None,
+    exit_status: int | None = None,
+    stdout: str = "",
+    stderr: str = "",
+    instance_present: bool | None = None,
+) -> None:
+    from amctl.oplog import record as oplog
+
+    try:
+        oplog.stage_sync(
+            run_id=run_id,
+            stage=stage,
+            phase=phase,
+            severity=severity,
+            body=body or f"{stage} {phase}.",
+            cause=cause,
+            exit_status=exit_status,
+            stdout=stdout,
+            stderr=stderr,
+            instance_present=instance_present,
+        )
+    except Exception as exc:
+        print(f"operational record failed: {exc}")
+
+
+def _begin(action: str, target: str) -> str | None:
+    from amctl.oplog import record as oplog
+
+    try:
+        return oplog.start_run_sync(
+            action=action,
+            target=target,
+            actor=os.environ.get("USER") or "operator",
+        )
+    except Exception as exc:
+        print(f"operational record failed: {exc}")
+        return None
+
+
+def _end(run_id, outcome: str, instance_present: bool | None = None) -> None:
+    from amctl.oplog import record as oplog
+
+    try:
+        oplog.finish_sync(run_id=run_id, outcome=outcome, instance_present=instance_present)
+    except Exception as exc:
+        print(f"operational record failed: {exc}")
+
+
+def _mark(run_id, stage: str, exc: ProvisionError, **extra) -> None:
+    _stage(
+        run_id,
+        stage,
+        "finish",
+        severity="ERROR",
+        body=str(exc),
+        cause=str(exc),
+        **extra,
+    )
+    exc.recorded = True
+    raise exc
+
+
+def _command(run_id, stage: str, host, args, **kwargs) -> CmdResult:
+    _stage(run_id, stage, "start", body=f"Starting {stage}.")
+    result = host.run(args, check=False, **kwargs)
+    if result.returncode != 0:
+        error = ProvisionError(f"{stage} failed with exit {result.returncode}.")
+        _mark(
+            run_id,
+            stage,
+            error,
+            exit_status=result.returncode,
+            stdout=result.stdout,
+            stderr=result.stderr,
+        )
+    _stage(run_id, stage, "finish", body=f"{stage} finished.")
+    return result
+
+
 def bring_up(
     address: InstanceAddress,
     instance_dir: Path,
@@ -657,6 +749,7 @@ def bring_up(
     image: str = DEFAULT_IMAGE,
     timeouts: Timeouts | None = None,
     sleep=time.sleep,
+    run_id: str | None = None,
 ) -> None:
     """Start the triplet, register the Matrix user, and install the gateway."""
     host = host or LocalHost()
@@ -667,7 +760,7 @@ def bring_up(
         raise ProvisionError("instance .env has no MATRIX_PASSWORD")
 
     print(f"Starting {address.name}")
-    host.run(["docker", "compose", "up", "-d"], cwd=instance_dir)
+    _command(run_id, "containers_started", host, ["docker", "compose", "up", "-d"], cwd=instance_dir)
 
     versions = f"http://{address.homeserver_ip}:8008/_matrix/client/versions"
 
@@ -675,26 +768,37 @@ def bring_up(
         status, _body = host.request("GET", versions)
         return status == 200
 
-    _wait(
-        homeserver_ready,
-        timeouts.homeserver,
-        timeouts.interval,
-        sleep,
-        "Continuwuity did not become ready",
-    )
+    _stage(run_id, "homeserver_ready", "start", body="Waiting for the homeserver.")
+    try:
+        _wait(
+            homeserver_ready,
+            timeouts.homeserver,
+            timeouts.interval,
+            sleep,
+            "Continuwuity did not become ready",
+            "homeserver_ready",
+        )
+    except ProvisionError as exc:
+        _mark(run_id, "homeserver_ready", exc)
+    _stage(run_id, "homeserver_ready", "finish", body="The homeserver is ready.")
 
-    mcp_env = instance_dir / "usr" / "workdir" / "matrix-mcp-server" / ".env"
-    existing = parse_env(mcp_env.read_text()).get("MATRIX_ACCESS_TOKEN", "")
-    token = ""
-    if existing and not existing.startswith("PENDING_"):
-        token = existing if _device_id(host, address, existing) else ""
-    if not token:
-        token = _register(host, address, password)
-        if not _device_id(host, address, token):
-            raise ProvisionError("MCP token has no device id")
-    set_env_key(mcp_env, "MATRIX_ACCESS_TOKEN", token)
-    set_env_key(env_path, "MATRIX_ACCESS_TOKEN", token)
-    print("Gateway token written.")
+    _stage(run_id, "matrix_identity_registered", "start", body="Registering the Matrix identity.")
+    try:
+        mcp_env = instance_dir / "usr" / "workdir" / "matrix-mcp-server" / ".env"
+        existing = parse_env(mcp_env.read_text()).get("MATRIX_ACCESS_TOKEN", "")
+        token = ""
+        if existing and not existing.startswith("PENDING_"):
+            token = existing if _device_id(host, address, existing) else ""
+        if not token:
+            token = _register(host, address, password)
+            if not _device_id(host, address, token):
+                raise ProvisionError("MCP token has no device id")
+        set_env_key(mcp_env, "MATRIX_ACCESS_TOKEN", token)
+        set_env_key(env_path, "MATRIX_ACCESS_TOKEN", token)
+        print("Gateway token written.")
+    except ProvisionError as exc:
+        _mark(run_id, "matrix_identity_registered", exc)
+    _stage(run_id, "matrix_identity_registered", "finish", body="The Matrix identity is registered.")
 
     derive = ["/a0/usr/workdir/derive-a0-token.sh"]
 
@@ -702,10 +806,32 @@ def bring_up(
         result = host.run(["docker", "exec", address.name, *derive], check=False)
         return result.returncode == 0 and bool(result.stdout.strip())
 
-    _wait(derived, timeouts.derive, timeouts.interval, sleep, "could not derive the Agent Zero credential")
+    _stage(run_id, "agent_zero_credential_derived", "start", body="Deriving the Agent Zero credential.")
+    try:
+        _wait(
+            derived,
+            timeouts.derive,
+            timeouts.interval,
+            sleep,
+            "could not derive the Agent Zero credential",
+            "agent_zero_credential_derived",
+        )
+    except ProvisionError as exc:
+        _mark(run_id, "agent_zero_credential_derived", exc)
     print("Agent Zero credential derived.")
+    _stage(run_id, "agent_zero_credential_derived", "finish", body="The Agent Zero credential is derived.")
 
-    _try_step_ca(host, address, instance_dir)
+    _stage(run_id, "certificate_issued", "start", body="Checking the homeserver certificate.")
+    if _try_step_ca(host, address, instance_dir) == "absent":
+        _stage(
+            run_id,
+            "certificate_issued",
+            "finish",
+            severity="WARN",
+            body="The step CLI is absent. Creation continues.",
+        )
+    else:
+        _stage(run_id, "certificate_issued", "finish", body="The certificate step finished.")
 
     last_status = CmdResult(1, "", "")
 
@@ -717,6 +843,7 @@ def bring_up(
         )
         return supervisord_is_ready(last_status)
 
+    _stage(run_id, "supervisord_ready", "start", body="Waiting for supervisord.")
     try:
         _wait(
             supervisord_ready,
@@ -724,20 +851,31 @@ def bring_up(
             timeouts.interval,
             sleep,
             "supervisord did not become ready",
+            "supervisord_ready",
         )
     except ProvisionError as exc:
-        raise ProvisionError(
+        wrapped = ProvisionError(
             f"{exc} (supervisorctl exit {last_status.returncode}: {_status_tail(last_status)})"
-        ) from exc
+        )
+        _mark(run_id, "supervisord_ready", wrapped)
+    _stage(run_id, "supervisord_ready", "finish", body="Supervisord is ready.")
 
     deploy = template_dir / "scripts" / "deploy-mms-r2-to-agent.sh"
     if not deploy.is_file():
-        raise ProvisionError(f"missing {deploy}")
+        error = ProvisionError(f"missing {deploy}")
+        _mark(run_id, "gateway_installed", error)
     deploy_env = os.environ.copy()
     deploy_env["MMS_R2_TAG"] = tag
     deploy_env["GHCR_IMAGE"] = image
     print(f"Installing {image}:{tag}")
-    host.run([str(deploy), str(address.instance_num)], cwd=deploy.parent, env=deploy_env)
+    _command(
+        run_id,
+        "gateway_installed",
+        host,
+        [str(deploy), str(address.instance_num)],
+        cwd=deploy.parent,
+        env=deploy_env,
+    )
 
     version = host.run(
         [
@@ -750,7 +888,8 @@ def bring_up(
     )
     expected = f"matrix-mcp-server-r2 {tag}"
     if expected not in version.stdout:
-        raise ProvisionError(f"gateway --version was not {expected}")
+        error = ProvisionError(f"gateway --version was not {expected}")
+        _mark(run_id, "gateway_installed", error)
 
     def healthy() -> bool:
         result = host.run(["docker", "exec", address.name, "python3", "-c", _HEALTH_PY], check=False)
@@ -762,25 +901,35 @@ def bring_up(
             return False
         return isinstance(body, dict) and health_is_plugged(body, tag)
 
-    _wait(
-        healthy,
-        timeouts.health,
-        timeouts.interval,
-        sleep,
-        f"/health did not report {tag} with e2ee, botEnabled, and crossSigned",
-    )
+    _stage(run_id, "gateway_health_confirmed", "start", body="Waiting for gateway health.")
+    try:
+        _wait(
+            healthy,
+            timeouts.health,
+            timeouts.interval,
+            sleep,
+            f"/health did not report {tag} with e2ee, botEnabled, and crossSigned",
+            "gateway_health_confirmed",
+        )
+    except ProvisionError as exc:
+        _mark(run_id, "gateway_health_confirmed", exc)
+    _stage(run_id, "gateway_health_confirmed", "finish", body="Gateway health is confirmed.")
 
+    _stage(run_id, "retired_bot_stopped", "start", body="Confirming the retired bot is stopped.")
     bot = host.run(["docker", "exec", address.name, "supervisorctl", "status", "run_bot"], check=False)
     parts = bot.stdout.split()
     if len(parts) >= 2 and parts[1] == "RUNNING":
-        raise ProvisionError("run_bot is RUNNING")
+        error = ProvisionError("run_bot is RUNNING")
+        _mark(run_id, "retired_bot_stopped", error)
     rust = host.run(
         ["docker", "exec", address.name, "sh", "-c", "pgrep -fc '[m]atrix-bot-rust' || true"],
         check=False,
     )
     count = rust.stdout.strip() or "0"
     if count != "0":
-        raise ProvisionError("matrix-bot-rust is running")
+        error = ProvisionError("matrix-bot-rust is running")
+        _mark(run_id, "retired_bot_stopped", error)
+    _stage(run_id, "retired_bot_stopped", "finish", body="The retired bot is stopped.")
 
     print(f"{address.name} is plugged.")
     print(f"  run_mcp reports {expected}")
@@ -817,31 +966,51 @@ def provision_agent(
     print(f"  homeserver IP: {address.homeserver_ip}")
     print(f"  gateway: {DEFAULT_IMAGE}:{tag}")
 
-    if not plug_only:
-        render_instance(
-            address,
-            base_dir,
-            template_dir,
-            profile=profile,
-            force=force,
-            environ=environ,
-        )
-        print(f"Rendered {instance_dir}")
-    elif not instance_dir.is_dir():
-        raise ProvisionError(f"{instance_dir} does not exist")
+    run_id = None if render_only else _begin("create", address.name)
+    try:
+        if not plug_only:
+            if run_id:
+                _stage(run_id, "files_prepared", "start", body="Preparing instance files.")
+            render_instance(
+                address,
+                base_dir,
+                template_dir,
+                profile=profile,
+                force=force,
+                environ=environ,
+            )
+            print(f"Rendered {instance_dir}")
+            if run_id:
+                _stage(run_id, "files_prepared", "finish", body="Instance files are prepared.")
+        elif not instance_dir.is_dir():
+            raise ProvisionError(f"{instance_dir} does not exist")
 
-    if not render_only:
-        bring_up(
-            address,
-            instance_dir,
-            template_dir,
-            host=host,
-            tag=tag,
-            timeouts=timeouts,
-            sleep=sleep,
-        )
-        if register is not None:
-            register(address)
+        if not render_only:
+            bring_up(
+                address,
+                instance_dir,
+                template_dir,
+                host=host,
+                tag=tag,
+                timeouts=timeouts,
+                sleep=sleep,
+                run_id=run_id,
+            )
+            if register is not None:
+                register(address)
+            _end(run_id, "succeeded")
+    except ProvisionError as exc:
+        if run_id and not exc.recorded:
+            _stage(run_id, "create", "finish", severity="ERROR", body=str(exc), cause=str(exc))
+        if run_id:
+            _end(run_id, "failed")
+        raise
+    except Exception as exc:
+        if run_id:
+            cause = str(exc).strip() or "no result"
+            _stage(run_id, "create", "finish", severity="ERROR", body=cause, cause=cause)
+            _end(run_id, "failed")
+        raise
     return instance_dir
 
 

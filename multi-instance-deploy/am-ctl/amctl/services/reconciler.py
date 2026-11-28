@@ -34,6 +34,7 @@ from amctl.services.agent_zero import (
     derive_canonical_a0_fingerprint,
 )
 from amctl.services.docker import _run, get_container_status, get_process_info, supervisor_action
+from amctl.oplog.track import tracked
 from amctl.services.matrix import get_joined_rooms, get_whoami, repair_room_membership
 
 logger = logging.getLogger(__name__)
@@ -565,6 +566,7 @@ def _create_pre_apply_snapshot(agent_name: str) -> str:
     return str(snap_dir)
 
 
+@tracked(action="repair", stage="reconciliation")
 async def apply_agent_reconciliation(
     session: AsyncSession,
     agent: Agent,

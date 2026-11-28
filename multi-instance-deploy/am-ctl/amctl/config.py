@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     federation_check_interval_secs: int = 1800  # every 30 min (or on explicit check)
     enable_background_monitor: bool = True
 
+    # Operational run records (JSONL). The database rows live in fleet_ops.
+    oplog_dir: str = "/opt/agent-zero/oplog/"
+    oplog_sweep: bool = True
+
     model_config = {"env_prefix": "AMCTL_", "env_file": ".env"}
 
 

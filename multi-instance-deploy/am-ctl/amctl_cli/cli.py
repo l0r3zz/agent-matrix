@@ -127,6 +127,37 @@ def agents_show(ctx, name, live, cmd_output):
         print_agent_status(data)
 
 
+@main.command("runs")
+@click.argument("run_id", required=False)
+@click.option("--target", default=None, help="Instance name, for example agent0-6")
+@click.option("--action", default=None, help="Action name, for example create")
+@click.option("--limit", default=20, show_default=True, type=int, help="How many runs to list")
+@click.option("--output", "cmd_output", type=click.Choice(["table", "json"]), default=None, help="Output format")
+@click.pass_context
+def runs_cmd(ctx, run_id, target, action, limit, cmd_output):
+    """List operational runs, or show one run and its stages."""
+    client = get_client(ctx)
+    fmt = cmd_output or ctx.obj["output_format"]
+    try:
+        if run_id:
+            data = client.get_run(run_id)
+        else:
+            data = client.list_runs(target=target, action=action, limit=limit)
+    except httpx.ConnectError:
+        console.print("[red]Cannot connect to am-ctl server[/red]")
+        sys.exit(1)
+    except httpx.HTTPStatusError as exc:
+        console.print(exc.response.text)
+        sys.exit(exc.response.status_code)
+    if fmt == "json" or run_id:
+        print_json(data)
+        return
+    for row in data:
+        console.print(
+            f"{row.get('run_id')}  {row.get('action')}  {row.get('target') or '-'}  {row.get('outcome') or 'open'}"
+        )
+
+
 @main.command("health")
 @click.argument("agent_name", required=False)
 @click.option("--check", "run_check", is_flag=True, help="Trigger an immediate live health check")

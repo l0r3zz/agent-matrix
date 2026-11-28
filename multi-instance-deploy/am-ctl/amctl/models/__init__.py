@@ -10,6 +10,7 @@ from amctl.models.reconcile import ReconcileRun
 from amctl.models.backup import BackupRun
 from amctl.models.deploy import Release, Deployment
 from amctl.models.model_config import ModelConfig
+from amctl.models.oplog import OperationalRun, OperationalStage
 
 __all__ = [
     "Base",
@@ -27,4 +28,6 @@ __all__ = [
     "Release",
     "Deployment",
     "ModelConfig",
+    "OperationalRun",
+    "OperationalStage",
 ]

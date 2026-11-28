@@ -59,6 +59,27 @@ async def verify_agent_credentials(
     """Validate that the agent's deployed credential matches Agent Zero's canonical
     create_auth_token() and passes an authenticated API probe.
     """
+    from amctl.oplog.track import call
+
+    return await call(
+        session,
+        action="credential_check",
+        target=name,
+        actor="api:credentials_verify",
+        stage="credentials",
+        work=lambda: _verify_agent_credentials(name, sync_registry, session, _key),
+    )
+
+
+verify_agent_credentials._oplog_action = "credential_check"
+
+
+async def _verify_agent_credentials(
+    name: str,
+    sync_registry: bool,
+    session: AsyncSession,
+    _key: str,
+):
     res = await session.execute(select(Agent).where(Agent.name == name))
     agent = res.scalar_one_or_none()
     if not agent:

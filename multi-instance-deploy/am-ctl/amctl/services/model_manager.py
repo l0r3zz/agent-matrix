@@ -23,6 +23,7 @@ from amctl.schemas.model_config import (
     FleetModelsResponse,
     ModelDiagnoseItem,
 )
+from amctl.oplog.track import tracked
 from amctl.services.docker import _run
 
 logger = logging.getLogger(__name__)
@@ -215,6 +216,7 @@ def _update_host_env_model(agent_name: str, env_key: str, value: str) -> None:
     env_file.write_text("\n".join(new_lines) + "\n")
 
 
+@tracked(action="model_change", stage="configuration")
 async def set_agent_model_config(
     session: AsyncSession,
     agent: Agent,

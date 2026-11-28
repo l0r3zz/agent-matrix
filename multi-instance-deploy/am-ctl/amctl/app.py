@@ -16,6 +16,7 @@ from amctl.routers.deploy import router as deploy_router
 from amctl.routers.health import router as health_router
 from amctl.routers.models import router as models_router
 from amctl.routers.reconcile import router as reconcile_router
+from amctl.routers.runs import router as runs_router
 from amctl.services.health_engine import background_health_loop
 
 logging.basicConfig(
@@ -24,8 +25,24 @@ logging.basicConfig(
 )
 
 
+async def _sweep_operational_runs() -> None:
+    """Mark dead writers interrupted and delete records older than 30 days."""
+    if not settings.oplog_sweep:
+        return
+    from amctl.db import async_session
+    from amctl.oplog.record import interrupt_orphans, purge_expired
+
+    try:
+        async with async_session() as session:
+            await interrupt_orphans(session)
+            await purge_expired(session)
+    except Exception:
+        logging.getLogger("amctl.oplog").exception("operational log sweep failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await _sweep_operational_runs()
     task = None
     if settings.enable_background_monitor:
         task = asyncio.create_task(background_health_loop())
@@ -54,6 +71,7 @@ app.include_router(reconcile_router)
 app.include_router(backups_router)
 app.include_router(deploy_router)
 app.include_router(models_router)
+app.include_router(runs_router)
 
 
 @app.get("/api/v1/health")

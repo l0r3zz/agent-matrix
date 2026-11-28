@@ -32,6 +32,7 @@ from amctl.schemas.deploy import (
 )
 from amctl.services.agent_zero import check_mcp_health
 from amctl.services.docker import _run, get_container_status, get_process_info, supervisor_action
+from amctl.oplog.track import tracked
 from amctl.services.health_engine import run_agent_health_checks
 from amctl.services.reconciler import (
     TRACKED_ARTIFACTS,
@@ -161,6 +162,7 @@ async def create_or_register_release(
     return ReleaseResponse.model_validate(rel)
 
 
+@tracked(action="release", stage="deploy")
 async def deploy_release_to_agent(
     session: AsyncSession,
     agent: Agent,
