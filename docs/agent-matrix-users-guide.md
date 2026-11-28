@@ -2,6 +2,7 @@
 
 **Version:** 0.9.0 (Initial Foundation Draft -- Stage 1 for Galadriel Expansion)
 **Date:** 2026-10-18
+**Updated:** 2026-11-27 -- `am-ctl create`, `am-ctl runs`, and the decommission operational record
 **Status:** Living Draft -- Ready for Multi-Agent Expansion (`Galadriel`)
 **Repository:** `agent-matrix-repo/docs/agent-matrix-users-guide.md`
 **Related Specifications:**
@@ -245,7 +246,7 @@ AM-CTL(1)                   Agent-Matrix Manual                   AM-CTL(1)
 
 ### NAME
 
-**`am-ctl`** (also referred to as **`am-cli`**) -- unified command-line interface for the Agent-Matrix fleet management, health monitoring, credential authority, drift reconciliation, backup verification, release deployment, and LLM model routing platform.
+**`am-ctl`** (also referred to as **`am-cli`**) -- unified command-line interface for the Agent-Matrix fleet management, instance provisioning, health monitoring, credential authority, drift reconciliation, backup verification, release deployment, LLM model routing, and operational-run inspection platform.
 
 ### SYNOPSIS
 
@@ -257,7 +258,9 @@ am-ctl [--server URL] [--api-key KEY] [--output table|json] COMMAND [SUBCOMMAND]
 
 **`am-ctl`** is a thin, stateless Python/Click/Rich CLI client that communicates over HTTP with the **`am-ctl` server daemon** (`am-ctl.service`, listening on `http://127.0.0.1:8077` and `http://172.23.90.1:8077` on `g2s`).
 
-Every command supports both human-readable Rich terminal tables (`--output table`, the default) and strict machine-parsable JSON (`--output json`) with identical underlying data fields. All state-mutating operations (`PUT /api/v1/agents/{name}`, `reconcile apply`, `backup run`, `backup verify`, `deploy`, `models set`, `alerts ack`) are recorded in the PostgreSQL `fleet_ops.audit_log` table with an operator attribution tag.
+Every HTTP command supports both human-readable Rich terminal tables (`--output table`, the default) and strict machine-parsable JSON (`--output json`) with identical underlying data fields. State-mutating HTTP operations (`PUT /api/v1/agents/{name}`, `reconcile apply`, `backup run`, `backup verify`, `deploy`, `models set`, `alerts ack`) are recorded in the PostgreSQL `fleet_ops.audit_log` table with an operator attribution tag.
+
+`am-ctl create` runs on the Docker host. It does not call the HTTP API. Creation, teardown, health checks, repairs, releases, backups, credential checks, and model changes also write an operational run. Read those runs with `am-ctl runs`. An operational run is a separate record from `audit_log`.
 
 ### GLOBAL OPTIONS
 
@@ -276,6 +279,7 @@ These options may be passed before the subcommand (e.g., `am-ctl --output json s
 
 - **`AMCTL_SERVER`**: Overrides the default `--server` URL (`http://localhost:8077`).
 - **`AMCTL_API_KEY`**: Overrides the default `--api-key` value sent in `X-API-Key`.
+- **`AMCTL_OPLOG`**: Set to `off` to skip writing an operational run for that process. The reader is unchanged.
 
 ---
 
@@ -401,6 +405,7 @@ Replaces `sync-fleet.sh`, `update-fleet.sh`, `update-fleet-v2.sh`, and `deploy-s
 - **`am-ctl deploy <AGENT_NAME> --release <VER> [--output table|json]`**
   *(or `am-ctl deploy agent <AGENT_NAME> --release <VER>`)*
   Deploys registered release `<VER>` to `<AGENT_NAME>`. Verifies SHA-256 checksums before and after copying files into the instance's bind-mounted workdir, **preserves instance-local state** (`matrix-bot/.env` and `room_contexts.json`), restarts `matrix-bot` via `supervisorctl`, and runs post-deploy health and reconciliation drift checks.
+  - `am-ctl deploy agent0-N --release <VER>` is a hidden shortcut for instance numbers 1 through 5. Instance 6 and above use `am-ctl deploy agent agent0-N --release <VER>`.
   - **API Endpoint**: `POST /api/v1/deploy/{name}`
 
 - **`am-ctl deploy version --version <TAG> [--instances 2,3,...] [--skip-restart] [--force] [--verbose] [--output table|json]`**
@@ -424,6 +429,7 @@ Replaces `fleet-models.sh`. Manages Agent Zero v2.14+ model presets (`usr/settin
 - **`am-ctl models show <AGENT_NAME> [--output table|json]`**
   *(or shorthand `am-ctl models <AGENT_NAME>`)*
   Displays detailed model and preset configuration for a single agent, including all defined presets (`Default`, `Efficiency`, `Power`) in `presets.yaml`.
+  - `am-ctl models agent0-N` is a hidden shortcut for instance numbers 1 through 5. Instance 6 and above use `am-ctl models show agent0-N`.
   - **API Endpoint**: `GET /api/v1/models/{name}`
 
 - **`am-ctl models set <AGENT_NAME> [--chat-model M] [--utility-model M] [--embedding-model M] [--preset P] [--operator TEXT] [--output table|json]`**
@@ -433,6 +439,55 @@ Replaces `fleet-models.sh`. Manages Agent Zero v2.14+ model presets (`usr/settin
 - **`am-ctl models diagnose [--output table|json]`**
   Audits all agents to verify that `settings.json` exists, required model fields are populated, and the corresponding provider API keys (`api_keys.json` / `.env`) are present for the configured providers.
   - **API Endpoint**: `POST /api/v1/models/diagnose`
+
+---
+
+#### 10. `am-ctl create` -- Provision a Plugged Agent
+
+Runs on the Docker host that will own the containers. The same provisioner is `python -m amctl.provision` and `multi-instance-deploy/create-instance.sh`.
+
+- **`am-ctl create <N> [-p agent0|hacker|researcher|developer] [--render-only] [--plug-only] [--base-dir PATH] [--force] [--mms-tag TAG]`**
+  Provision `agent0-N`. The default profile is `agent0`. The default base directory is `/opt/agent-zero`. The default gateway image tag is `matrix-mcp-server-r2` `0.4.0`.
+  - `--render-only`: Write the instance files and do not start Docker.
+  - `--plug-only`: Install the gateway into an instance directory that already exists. Pass only one of `--render-only` and `--plug-only`.
+  - `--force`: Rewrite generated files. Keep Continuwuity data and an existing password.
+  - A full create renders the triplet, starts the containers, waits until Continuwuity answers, registers the Matrix user, derives the Agent Zero credential, installs the gateway, confirms `/health`, and leaves `run_bot` stopped. `matrix-mcp-server-r2` is the Matrix client.
+  - If the `step` CLI is absent, certificate issuance is recorded as a warning and creation continues with the placeholder certificate.
+  - `create-instance.sh` and `python -m amctl.provision` insert the new agent into `fleet_ops.agents` after a successful plug. A second insert for the same instance number does nothing. `am-ctl create` uses the same plug sequence and leaves the fleet row to that wrapper.
+  - There is no HTTP endpoint. Exit code `1` means a provisioning step failed. The message does not contain a secret.
+  - After the run finishes, `am-ctl runs --target agent0-N --action create` shows the outcome and the stage that stopped.
+
+A successful create finishes these stages: `files_prepared`, `containers_started`, `homeserver_ready`, `matrix_identity_registered`, `agent_zero_credential_derived`, `gateway_installed`, `gateway_health_confirmed`, and `retired_bot_stopped`. `certificate_issued` is an extra stage. `supervisord_ready` is the wait between the credential and the gateway install.
+
+---
+
+#### 11. `am-ctl runs` -- Operational Run Reader
+
+Read why a control-plane action stopped after the session that ran it is gone. The server writes each stage to `fleet_ops.operational_runs` and `fleet_ops.operational_stages`, and appends the same record as one OpenTelemetry JSON line at `/opt/agent-zero/oplog/oplog.jsonl`.
+
+- **`am-ctl runs [--target NAME] [--action ACTION] [--limit N] [--output table|json]`**
+  List the newest matching runs. `--limit` defaults to 20 and the server returns at most 100. The list has `run_id`, `action`, `target`, `actor`, `outcome`, `started_at`, and `ended_at`. An open run has a null outcome. The list does not include stage tails.
+  - **API Endpoint**: `GET /api/v1/runs`
+
+- **`am-ctl runs <RUN_ID> [--output table|json]`**
+  Show one run and its stages in write order. Each stage includes the name, phase (`start` or `finish`), severity (`INFO`, `WARN`, or `ERROR`), body, `observed_at`, and any stored cause. Duration is the finish `observed_at` minus the start `observed_at`.
+  - An unknown `RUN_ID` returns HTTP 404 with `{"outcome":"not_found","run_id":"<id>","stages":[]}`.
+  - **API Endpoint**: `GET /api/v1/runs/{run_id}`
+
+`action` is one of `create`, `teardown`, `health_check`, `repair`, `release`, `backup`, `credential_check`, or `model_change`. `target` is an instance name such as `agent0-6`. A fleet backup has a null target. A fleet health cycle writes one `health_check` run per agent. A membership repair is a separate `repair` run.
+
+The server keeps rows and JSONL lines for 30 days. Run rows age from `ended_at`. Stage rows age from `observed_at`. On server start, a run whose writer process is gone is marked `interrupted`.
+
+Teardown is `multi-instance-deploy/scripts/decommission-instance.sh`, not an `am-ctl` subcommand. It records its own `teardown` run and does not change the create run's outcome.
+
+```bash
+# Remove instance 6. --force deletes root-owned files from a short-lived container.
+./multi-instance-deploy/scripts/decommission-instance.sh -y --force 6
+```
+
+A finished teardown has stages `containers_removed` and `directory_removed`, and `instance.present` is false. A stopped teardown names the step that stopped and says the instance may still exist. `--save-creds` and `--archive` are described in [decommission-guide.md](decommission-guide.md). The script does not change routes, DNS, or firewall rules.
+
+Set `AMCTL_OPLOG=off` to skip operational records for a local run. The reader still uses `X-API-Key`.
 
 ---
 
@@ -450,6 +505,9 @@ Replaces `fleet-models.sh`. Manages Agent Zero v2.14+ model presets (`usr/settin
 - `/etc/systemd/system/am-ctl-backup.timer` -- Daily `03:00 UTC` systemd timer triggering `fleet-backup.sh`.
 - `/opt/agent-zero/releases/am-release-vX.Y.Z.tar.gz` -- Immutable release bundles built via `make release`.
 - `/opt/agent-zero/backups/` -- Local staging directory for `open_brain`, `fleet_ops`, `globals`, and `infra_configs` backups.
+- `/opt/agent-zero/oplog/oplog.jsonl` -- OpenTelemetry JSON lines for operational runs. The matching rows are `fleet_ops.operational_runs` and `fleet_ops.operational_stages`.
+- `multi-instance-deploy/am-ctl/migrations/001_operational_runs.sql` -- Hand-applied table definitions for those two tables. It does not alter `audit_log`.
+- `multi-instance-deploy/scripts/decommission-instance.sh` -- Instance teardown. It records a `teardown` operational run.
 
 ### EXAMPLES
 
@@ -480,6 +538,15 @@ am-ctl models diagnose
 # 6. Run an immediate pre-deploy backup and verify it via scratch-DB restore
 am-ctl backup run --type pre_deploy
 am-ctl backup verify
+
+# 7. Provision agent0-6 on this Docker host, then read the create record
+./multi-instance-deploy/create-instance.sh 6
+am-ctl runs --target agent0-6 --action create
+am-ctl runs RUN_ID
+
+# 8. Tear the instance down and confirm that run is separate from the create run
+./multi-instance-deploy/scripts/decommission-instance.sh -y --force 6
+am-ctl runs --target agent0-6 --action teardown
 ```
 
 ---
@@ -559,6 +626,14 @@ To help operators and AI agents (`Galadriel` and sibling nodes) understand *why*
   - Built `scripts/build-release.py` and the `Makefile` (`make release` / `make verify-reproducible`). It normalizes every tar entry (`mtime=0`, `uid=0`, `gid=0`, `uname=""`, `gname=""`, `PAX_FORMAT`, lexicographically sorted entries) and sets `gzip` header `mtime=0`, guaranteeing byte-for-byte identical release tarballs across builds (`v1.2.0` SHA-256: `6a6572f0b6ee2e895f297c613986667c890613aab574a4be299cd0782c11c324`).
   - Added a built-in secret scanner that aborts the build if any artifact contains `syt_` or `A0_API_KEY=`.
   - Authored [am-ctl-v2-design.md](am-ctl-v2-design.md) specifying the v2 provisioning API (`create`, `finalize`, `decommission`, `rebuild`), multi-host scaling (`hosts` table + mTLS `am-node-agent`), and JWT RBAC.
+
+### Provisioning (`create-instance.sh`, `am-ctl create`)
+
+`create-instance.sh` is a wrapper around `python -m amctl.provision`. It renders `agent0-N`, starts the Agent Zero, Continuwuity, and Caddy triplet, registers the Matrix user, installs `matrix-mcp-server-r2` 0.4.0, and leaves `run_bot` stopped. On success it inserts `fleet_ops.agents` so `am-ctl status` can see the new instance. `am-ctl create` runs that plug sequence on the Docker host and leaves the fleet insert to the wrapper. Instance numbers are explicit. There is no default `agent0-1`.
+
+### Operational runs (`am-ctl runs`)
+
+The control plane writes one operational run per action: `create`, `teardown`, `health_check`, `repair`, `release`, `backup`, `credential_check`, and `model_change`. Each stage is stored in `fleet_ops` and appended under `/opt/agent-zero/oplog/oplog.jsonl`. `am-ctl runs` reads those records. `audit_log` remains the mutation history. A model change stores the result, not the model prompt. Message contents and homeserver internals are not stored. Rows and JSONL lines are kept for 30 days.
 
 <!-- GALADRIEL_TODO: Add a "Troubleshooting & Common Operator Recipes" appendix linking common symptoms (e.g., agent not replying in a room, adding a new trusted external user to fleet_ops.trusted_senders) to the exact am-ctl commands above. -->
 > **[GALADRIEL EXPANSION]**
