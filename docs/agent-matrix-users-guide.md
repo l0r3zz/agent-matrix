@@ -453,7 +453,7 @@ Runs on the Docker host that will own the containers. The same provisioner is `p
   - `--force`: Rewrite generated files. Keep Continuwuity data and an existing password.
   - A full create renders the triplet, starts the containers, waits until Continuwuity answers, registers the Matrix user, derives the Agent Zero credential, installs the gateway, confirms `/health`, and leaves `run_bot` stopped. `matrix-mcp-server-r2` is the Matrix client.
   - If the `step` CLI is absent, certificate issuance is recorded as a warning and creation continues with the placeholder certificate.
-  - `create-instance.sh` and `python -m amctl.provision` insert the new agent into `fleet_ops.agents` after a successful plug. A second insert for the same instance number does nothing. `am-ctl create` uses the same plug sequence and leaves the fleet row to that wrapper.
+  - `am-ctl create`, `create-instance.sh`, and `python -m amctl.provision` insert the new agent into `fleet_ops.agents` after a successful plug. `--render-only` skips that insert. A second insert for the same instance number does nothing.
   - There is no HTTP endpoint. Exit code `1` means a provisioning step failed. The message does not contain a secret.
   - After the run finishes, `am-ctl runs --target agent0-N --action create` shows the outcome and the stage that stopped.
 
@@ -629,7 +629,7 @@ To help operators and AI agents (`Galadriel` and sibling nodes) understand *why*
 
 ### Provisioning (`create-instance.sh`, `am-ctl create`)
 
-`create-instance.sh` is a wrapper around `python -m amctl.provision`. It renders `agent0-N`, starts the Agent Zero, Continuwuity, and Caddy triplet, registers the Matrix user, installs `matrix-mcp-server-r2` 0.4.0, and leaves `run_bot` stopped. On success it inserts `fleet_ops.agents` so `am-ctl status` can see the new instance. `am-ctl create` runs that plug sequence on the Docker host and leaves the fleet insert to the wrapper. Instance numbers are explicit. There is no default `agent0-1`.
+`am-ctl create`, `create-instance.sh`, and `python -m amctl.provision` share one plug sequence. It renders `agent0-N`, starts the Agent Zero, Continuwuity, and Caddy triplet, registers the Matrix user, installs `matrix-mcp-server-r2` 0.4.0, and leaves `run_bot` stopped. A successful plug inserts `fleet_ops.agents` so `am-ctl status` can see the new instance. `--render-only` skips that insert. Instance numbers are explicit. There is no default `agent0-1`.
 
 ### Operational runs (`am-ctl runs`)
 

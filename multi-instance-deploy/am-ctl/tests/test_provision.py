@@ -277,3 +277,37 @@ def test_am_ctl_create_render_only(tmp_path: Path):
     )
     assert result.exit_code == 0, result.output
     assert (tmp_path / "agent0-6" / "usr/workdir/matrix-mcp-server/.env").is_file()
+
+
+def test_am_ctl_create_registers_the_fleet_row(monkeypatch, tmp_path: Path):
+    from amctl.provision import register_in_fleet
+
+    seen = {}
+
+    def fake_provision(instance_num, **kwargs):
+        seen["instance_num"] = instance_num
+        seen.update(kwargs)
+        return tmp_path
+
+    monkeypatch.setattr("amctl.provision.provision_agent", fake_provision)
+    result = CliRunner().invoke(cli_main, ["create", "6", "--base-dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert seen["instance_num"] == 6
+    assert seen["register"] is register_in_fleet
+    assert seen["render_only"] is False
+
+
+def test_am_ctl_create_render_only_skips_the_fleet_row(monkeypatch, tmp_path: Path):
+    seen = {}
+
+    def fake_provision(instance_num, **kwargs):
+        seen.update(kwargs)
+        return tmp_path
+
+    monkeypatch.setattr("amctl.provision.provision_agent", fake_provision)
+    result = CliRunner().invoke(
+        cli_main,
+        ["create", "6", "--render-only", "--base-dir", str(tmp_path)],
+    )
+    assert result.exit_code == 0, result.output
+    assert seen["register"] is None

@@ -838,7 +838,7 @@ def create_cmd(instance_num, profile, render_only, plug_only, base_dir, force, m
     """Provision a plugged agent0-N on this Docker host."""
     from pathlib import Path
 
-    from amctl.provision import ProvisionError, provision_agent
+    from amctl.provision import ProvisionError, provision_agent, register_in_fleet
 
     try:
         provision_agent(
@@ -849,6 +849,7 @@ def create_cmd(instance_num, profile, render_only, plug_only, base_dir, force, m
             plug_only=plug_only,
             force=force,
             tag=mms_tag,
+            register=None if render_only else register_in_fleet,
         )
     except ProvisionError as exc:
         console.print(f"[red]{exc}[/red]")
